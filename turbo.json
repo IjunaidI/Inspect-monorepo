@@ -1,0 +1,55 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [".env", ".env.example"],
+  "globalEnv": [
+    "NODE_ENV",
+    "REDIS_URL",
+    "REDIS_PASSWORD",
+    "REDIS_PUBLIC_URL",
+    "REDISHOST",
+    "REDISPORT",
+    "REDISUSER",
+    "DATABASE_URL",
+    "DATABASE_PUBLIC_URL",
+    "PGHOST",
+    "PGPORT",
+    "PGUSER",
+    "PGPASSWORD",
+    "PGDATABASE",
+    "PGDATA",
+    "POSTGRES_URL",
+    "POSTGRES_DB",
+    "POSTGRES_USER",
+    "POSTGRES_PASSWORD",
+    "SSL_CERT_DAYS",
+    "NEXTAUTH_URL",
+    "AUTH_SECRET",
+    "AUTH_GITHUB_ID",
+    "AUTH_GITHUB_SECRET",
+    "API_PORT",
+    "WEB_PORT"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
+    "type-check": {
+      "outputs": []
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}
