@@ -5,7 +5,9 @@
       "Bash(npx pnpm@9.12.0 --filter @inspect/api type-check)",
       "Bash(npx pnpm@9.12.0 --filter @inspect/web type-check)",
       "Bash(npx pnpm@9.12.0 --filter @inspect/api build)",
-      "Bash(npx pnpm@9.12.0 --filter @inspect/web build)"
+      "Bash(npx pnpm@9.12.0 --filter @inspect/web build)",
+      "Bash(pnpm install:*)",
+      "Bash(npx pnpm@9.12.0 build)"
     ]
   }
 }
