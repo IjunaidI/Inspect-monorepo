@@ -35,7 +35,7 @@ Inspect-monorepo/
     api/                @inspect/api — NestJS, port 3000 (env: API_PORT)
       .dockerignore
       .eslintrc.js
-      Dockerfile        pnpm + turbo prune multi-stage; build context = repo root
+      Dockerfile        multi-stage pnpm build; build context = repo root
       nest-cli.json
       package.json
       tsconfig.json     extends ../../tsconfig.base.json
@@ -53,8 +53,9 @@ Inspect-monorepo/
       .vscode/
       app/, components/, lib/, public/
       components.json
+      Dockerfile        multi-stage pnpm build; standalone output
       middleware.ts
-      next.config.ts    REWRITTEN — outputFileTracingRoot + dotenv from root .env
+      next.config.ts    output: 'standalone' + outputFileTracingRoot + dotenv from root .env
       package.json
       postcss.config.js
       tailwind.config.ts
@@ -71,13 +72,18 @@ Inspect-monorepo/
 `.example.env` originally had **duplicated and conflicting** entries. The user clarified that the top blocks (lines 1–7 Redis, 9–20 Postgres) were authoritative and the bottom blocks (lines 22–31) were duplicates to discard. The backend code was reading the **wrong** (duplicate-block) names.
 
 ### Authoritative names (kept)
-- **Redis**: `REDIS_PASSWORD`, `REDIS_PUBLIC_URL`, `REDIS_URL`, `REDISHOST`, `REDISPASSWORD`, `REDISPORT`, `REDISUSER`
-- **Postgres**: `DATABASE_PUBLIC_URL`, `DATABASE_URL`, `PGDATA`, `PGDATABASE`, `PGHOST`, `PGPASSWORD`, `PGPORT`, `PGUSER`, `POSTGRES_DB`, `POSTGRES_PASSWORD`, `POSTGRES_USER`, `SSL_CERT_DAYS`
+- **Redis**: `REDIS_URL`, `REDIS_PUBLIC_URL`, `REDIS_PASSWORD`
+- **Postgres**: `DATABASE_URL`, `DATABASE_PUBLIC_URL`, `POSTGRES_URL`, `PGDATA`, `PGDATABASE`, `PGHOST`, `PGPASSWORD`, `PGPORT`, `PGUSER`, `POSTGRES_DB`, `POSTGRES_PASSWORD`, `POSTGRES_USER`, `SSL_CERT_DAYS`
 
-### Discarded duplicates
+### Discarded duplicates (removed from `.env.example` and `turbo.json`)
 - `POSTGRESDB`, `POSTGRESHOST`, `POSTGRESPASSWORD`, `POSTGRESPORT`, `POSTGRESUSER` (no-underscore variant)
-- Re-definitions of `REDIS_PASSWORD`, `REDISHOST`, `REDISPASSWORD`, `REDISPORT`
+- `REDISPASSWORD`, `REDISHOST`, `REDISPORT`, `REDISUSER` (individual component vars — code uses `REDIS_URL` directly)
 - `REDISURL` (typo for `REDIS_URL`)
+
+### Deleted legacy files
+- `.example.env` — fully superseded by root `.env.example`
+- `frontend/.env.example` — superseded by root `.env.example`
+- `frontend/` directory — duplicate of `apps/web/`, had its own nested `.git`
 
 ### Code changes in `apps/api/src/app.module.ts`
 
@@ -213,19 +219,87 @@ The web build needs `POSTGRES_URL` set at build time because `apps/web/lib/db.ts
 - `apps/web/package.json`, `apps/web/tsconfig.json`, `apps/web/next.config.ts`, `apps/web/.eslintrc.json` (new)
 - `.env.example` (final populated version in commit `7e8dc57`)
 
+## Railway Deployment
+
+Both services deploy from the same repo using per-service Dockerfiles.
+
+### Configuration per service
+
+| Setting | API Service | Web Service |
+|---|---|---|
+| Root Directory | `/` (monorepo root) | `/` (monorepo root) |
+| `RAILWAY_DOCKERFILE_PATH` | `apps/api/Dockerfile` | `apps/web/Dockerfile` |
+
+### Required env vars (Railway dashboard)
+
+| Var | API | Web | Notes |
+|---|---|---|---|
+| `DATABASE_URL` | ✅ | — | Private network Postgres URL |
+| `REDIS_URL` | ✅ | — | Private network Redis URL |
+| `POSTGRES_URL` | — | ✅ | Same as `DATABASE_URL` (or public URL) |
+| `NEXTAUTH_URL` | — | ✅ | Must match actual public domain (not localhost) |
+| `AUTH_SECRET` | — | ✅ | 32+ char secret |
+| `HOSTNAME` | — | ✅ | Set to `0.0.0.0` (required for Next.js standalone to accept connections) |
+
+### Known runtime issues (current state)
+
+1. **Auth `UntrustedHost`** — `NEXTAUTH_URL` must be set to the actual Railway public domain, not `http://localhost:3001`.
+2. **Neon DB `ENOTFOUND api.railway.internal`** — The web service connects directly to Postgres via Neon. If using Railway's private domain, private networking must be enabled on the web service. Alternatively, use `DATABASE_PUBLIC_URL` for `POSTGRES_URL`. This issue goes away once the frontend is migrated to use the backend API instead of direct DB access.
+
+## Frontend → API Migration (completed)
+
+The frontend no longer queries Postgres directly. All data fetching goes through the NestJS API.
+
+### What changed
+
+**New backend files (`apps/api/src/products/`):**
+- `product.entity.ts` — TypeORM entity mapping to existing `products` table (no migration needed)
+- `products.service.ts` — replicates the exact query logic from the old `db.ts` (search, pagination, delete, seed)
+- `products.controller.ts` — `GET /products?search=&offset=`, `DELETE /products/:id`, `POST /products/seed`
+- `products.module.ts` — feature module registered in `AppModule`
+
+**New frontend file:**
+- `apps/web/lib/api.ts` — server-only fetch client calling the NestJS API
+
+**Modified frontend files:**
+- `app/(dashboard)/page.tsx` — imports `getProducts` from `@/lib/api`
+- `app/(dashboard)/product.tsx` — uses `Product` type from `@/lib/api`, wraps `availableAt` in `new Date()` (JSON returns ISO string)
+- `app/(dashboard)/products-table.tsx` — uses `Product` type from `@/lib/api`
+- `app/(dashboard)/actions.ts` — delete action uncommented and rewired to API
+- `app/api/seed/route.ts` — proxies to `POST ${API_URL}/products/seed`
+
+**Deleted:**
+- `apps/web/lib/db.ts` (Drizzle/Neon direct DB client)
+
+**Removed dependencies from `apps/web/package.json`:**
+- `@neondatabase/serverless`, `drizzle-orm`, `drizzle-zod`, `zod`, `drizzle-kit`
+
+**New env var:**
+- `API_URL` — added to `.env.example` and `turbo.json`. Set to `http://localhost:3000` for local dev; on Railway set to the API service's internal/public URL.
+
+**Other:**
+- `app.enableCors()` added in `apps/api/src/main.ts`
+- `.env.example` comment updated (frontend no longer reads `POSTGRES_URL`)
+
+### Railway deployment update
+
+| Var | API | Web | Notes |
+|---|---|---|---|
+| `API_URL` | — | ✅ | Internal URL of the API service (e.g. `http://api.railway.internal:3000`) |
+| `POSTGRES_URL` | — | — | **No longer needed by web** |
+
+The `ENOTFOUND api.railway.internal` issue documented earlier is now resolved — the frontend no longer connects to Postgres at all.
+
 ## What you need to do next
 
-1. **Review the worktree**: `cd E:\Inspect-monorepo\.claude\worktrees\monorepo-restructure` and inspect, or use your editor's git tooling on the branch.
-2. **Merge back**: from `E:\Inspect-monorepo`, `git merge worktree-monorepo-restructure` (resolves cleanly — no conflicts expected since the original `frontend/` and `.example.env` were both untracked). Then delete the now-stale `frontend/` and `package-lock.json` from the outer working tree if they reappear.
-3. **Set up `.env`**: `cp .env.example .env` and verify the populated values still match your Railway dashboard. Generate `AUTH_SECRET` (32+ chars) and fill in `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`.
-4. **Install pnpm globally** so you don't need `npx`: `npm i -g pnpm@9.12.0`.
-5. **Run locally**: `pnpm install` → `pnpm dev` (api on `:3000`, web on `:3001`).
-6. **Verify health**: `curl http://localhost:3000/health` should return `{"status":"ok","info":{"database":{"status":"up"},"redis":{"status":"up"}}}` once `.env` is populated.
-7. **Rotate the passwords** in Railway (and update the new `.env`) at your convenience.
+1. **Set up `.env`**: `cp .env.example .env` and verify the populated values still match your Railway dashboard. Generate `AUTH_SECRET` (32+ chars) and fill in `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`. Add `API_URL=http://localhost:3000`.
+2. **Run locally**: `pnpm install` → `pnpm dev` (api on `:3000`, web on `:3001`).
+3. **Verify health**: `curl http://localhost:3000/health` should return `{"status":"ok","info":{"database":{"status":"up"},"redis":{"status":"up"}}}` once `.env` is populated.
+4. **Verify products**: `curl http://localhost:3000/products` should return product data from the DB.
+5. **Seed data** (if empty): `curl http://localhost:3001/api/seed` to populate 10 sample products via the API.
+6. **Rotate the passwords** in Railway (and update the new `.env`) at your convenience.
 
 ## Out of scope (deferred)
-- Replacing TypeORM with Drizzle (or vice versa) to unify on one ORM.
-- Moving frontend off direct DB access onto NestJS REST/GraphQL endpoints.
 - Adding `packages/shared-types`, `packages/eslint-config`, `packages/tsconfig`.
 - Migrating root ESLint from legacy `.eslintrc.js` to flat config.
 - CI workflow (GitHub Actions / Railway deploy pipeline).

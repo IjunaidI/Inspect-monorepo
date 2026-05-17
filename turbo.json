@@ -23,6 +23,7 @@
     "AUTH_SECRET",
     "AUTH_GITHUB_ID",
     "AUTH_GITHUB_SECRET",
+    "API_URL",
     "API_PORT",
     "WEB_PORT"
   ],

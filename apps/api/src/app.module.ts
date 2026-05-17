@@ -9,6 +9,7 @@ import { KeyvCacheableMemory } from 'cacheable';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './health/health.module';
+import { ProductsModule } from './products/products.module';
 import * as path from 'path';
 
 @Module({
@@ -52,6 +53,7 @@ import * as path from 'path';
     }),
     ScheduleModule.forRoot(),
     HealthModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
