@@ -1,40 +1,28 @@
-# syntax=docker/dockerfile:1
-# Build context MUST be the monorepo root:
-#   docker build -f apps/api/Dockerfile -t inspect-api .
-
-# ---- base ----
-FROM node:22-alpine AS base
+FROM node:20-slim AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 
-# ---- pruner: produce a minimal subtree containing only what @inspect/api needs ----
-FROM base AS pruner
-RUN npm i -g turbo@2.3.0
-COPY . .
-RUN turbo prune @inspect/api --docker
+# Copy workspace root files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 
-# ---- installer/builder ----
-FROM base AS installer
-COPY --from=pruner /app/out/json/ ./
-COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-RUN pnpm install --frozen-lockfile
-COPY --from=pruner /app/out/full/ ./
+# Copy the API package
+COPY apps/api ./apps/api
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile --filter @inspect/api...
+
+# Build
 RUN pnpm --filter @inspect/api build
 
-# ---- production runtime ----
-FROM base AS production
-ENV NODE_ENV=production
+# Production
+FROM node:20-slim AS runner
+RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 
-COPY --from=pruner /app/out/json/ ./
-COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
-RUN pnpm install --frozen-lockfile --prod
-
-COPY --from=installer /app/apps/api/dist ./apps/api/dist
-
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
+COPY --from=base /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=base /app/apps/api ./apps/api
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/apps/api/node_modules ./apps/api/node_modules
 
 EXPOSE 3000
-
-CMD ["node", "apps/api/dist/main"]
+CMD ["node", "apps/api/dist/main.js"]

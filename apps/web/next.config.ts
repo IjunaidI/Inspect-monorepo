@@ -5,6 +5,7 @@ import type { NextConfig } from 'next';
 loadEnv({ path: path.resolve(__dirname, '../../.env') });
 
 const config: NextConfig = {
+  output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '../../'),
   images: {
     remotePatterns: [
