@@ -6,10 +6,9 @@ import { CacheModule } from '@nestjs/cache-manager';
 import KeyvRedis from '@keyv/redis';
 import { Keyv } from 'keyv';
 import { KeyvCacheableMemory } from 'cacheable';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './health/health.module';
-import { ProductsModule } from './products/products.module';
+import { PrismaModule } from './prisma/prisma.module';
 import * as path from 'path';
 
 @Module({
@@ -42,18 +41,9 @@ import * as path from 'path';
         };
       },
     }),
-    TypeOrmModule.forRootAsync({
-      useFactory: () => ({
-        type: 'postgres',
-        url: process.env.DATABASE_URL,
-        synchronize: false,
-        autoLoadEntities: true,
-        entities: [],
-      }),
-    }),
+    PrismaModule,
     ScheduleModule.forRoot(),
     HealthModule,
-    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
