@@ -19,6 +19,9 @@ import { ProductsModule } from './products/products.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { LoopPresetsModule } from './loop-presets/loop-presets.module';
 import { InspectionsModule } from './inspections/inspections.module';
+import { StorageModule } from './storage/storage.module';
+import { DefectCatalogModule } from './defect-catalog/defect-catalog.module';
+import { PopulateModule } from './populate/populate.module';
 import * as path from 'path';
 
 @Module({
@@ -61,6 +64,9 @@ import * as path from 'path';
     PurchaseOrdersModule,
     LoopPresetsModule,
     InspectionsModule,
+    StorageModule,
+    DefectCatalogModule,
+    PopulateModule,
   ],
   controllers: [AppController],
   providers: [
