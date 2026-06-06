@@ -51,3 +51,4 @@ pids
 
 # Worktrees (managed by Claude Code)
 .claude/worktrees/
+.design-ref/

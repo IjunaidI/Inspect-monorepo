@@ -4,6 +4,10 @@
 
 @layer base {
   :root {
+    /* Inspect console fonts (loaded via <link> in the root layout). */
+    --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
 
@@ -72,6 +76,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
   }
 }
 
