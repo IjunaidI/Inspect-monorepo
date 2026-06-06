@@ -13,6 +13,10 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
+import { BuyersModule } from './buyers/buyers.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { ProductsModule } from './products/products.module';
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import * as path from 'path';
 
 @Module({
@@ -49,6 +53,10 @@ import * as path from 'path';
     ScheduleModule.forRoot(),
     HealthModule,
     AuthModule,
+    BuyersModule,
+    SuppliersModule,
+    ProductsModule,
+    PurchaseOrdersModule,
   ],
   controllers: [AppController],
   providers: [
