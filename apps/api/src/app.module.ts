@@ -18,6 +18,7 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { ProductsModule } from './products/products.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { LoopPresetsModule } from './loop-presets/loop-presets.module';
+import { InspectionsModule } from './inspections/inspections.module';
 import * as path from 'path';
 
 @Module({
@@ -59,6 +60,7 @@ import * as path from 'path';
     ProductsModule,
     PurchaseOrdersModule,
     LoopPresetsModule,
+    InspectionsModule,
   ],
   controllers: [AppController],
   providers: [
