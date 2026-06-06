@@ -1,0 +1,85 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from '../auth/auth-user';
+import { hasAtLeast, Role } from '../auth/rbac';
+
+const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const SAFE_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  status: true,
+  lastLoginAt: true,
+  createdAt: true,
+} as const;
+
+export interface InviteUserInput {
+  email: string;
+  role: Role;
+}
+
+/** Org Owner user management within their own org (spec §4). */
+@Injectable()
+export class UsersService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  list(orgId: string) {
+    return this.prisma.user.findMany({
+      where: { orgId },
+      orderBy: { createdAt: 'asc' },
+      select: SAFE_SELECT,
+    });
+  }
+
+  invite(orgId: string, inviter: AuthUser, input: InviteUserInput) {
+    if (!input?.email?.trim()) throw new BadRequestException('email is required');
+    const role = input.role ?? 'INSPECTOR';
+    if (role === 'PLATFORM_ADMIN') {
+      throw new ForbiddenException('Cannot invite a platform admin');
+    }
+    if (!hasAtLeast(inviter.role, role)) {
+      throw new ForbiddenException('Cannot invite a role above your own');
+    }
+    return this.prisma.invitation.create({
+      data: {
+        orgId,
+        email: input.email.trim().toLowerCase(),
+        role,
+        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+        invitedById: inviter.userId,
+      },
+    });
+  }
+
+  async updateRole(orgId: string, actor: AuthUser, userId: string, role: Role) {
+    if (role === 'PLATFORM_ADMIN') {
+      throw new ForbiddenException('Cannot assign platform admin');
+    }
+    if (!hasAtLeast(actor.role, role)) {
+      throw new ForbiddenException('Cannot assign a role above your own');
+    }
+    const user = await this.prisma.user.findFirst({ where: { id: userId, orgId } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { role },
+      select: SAFE_SELECT,
+    });
+  }
+
+  async deactivate(orgId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, orgId } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { status: 'DEACTIVATED' },
+      select: SAFE_SELECT,
+    });
+  }
+}

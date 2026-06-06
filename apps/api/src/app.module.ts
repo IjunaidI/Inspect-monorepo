@@ -25,6 +25,10 @@ import { PopulateModule } from './populate/populate.module';
 import { AuditModule } from './audit/audit.module';
 import { ReportsModule } from './reports/reports.module';
 import { GuestModule } from './guest/guest.module';
+import { OrgsModule } from './orgs/orgs.module';
+import { InvitationsModule } from './invitations/invitations.module';
+import { UsersModule } from './users/users.module';
+import { BuyerGuestsModule } from './buyer-guests/buyer-guests.module';
 import * as path from 'path';
 
 @Module({
@@ -73,6 +77,10 @@ import * as path from 'path';
     AuditModule,
     ReportsModule,
     GuestModule,
+    OrgsModule,
+    InvitationsModule,
+    UsersModule,
+    BuyerGuestsModule,
   ],
   controllers: [AppController],
   providers: [
