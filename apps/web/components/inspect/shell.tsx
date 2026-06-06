@@ -11,6 +11,7 @@ import {
   Repeat,
   Search,
   Settings,
+  Upload,
   Users,
 } from 'lucide-react';
 import { mono as monoStyle, roles, severity, ui, type RoleKey, type SeverityKey } from './tokens';
@@ -154,6 +155,30 @@ export function Avatar({ initials, size = 28, bg = ui.ink }: { initials: string;
     >
       {initials}
     </div>
+  );
+}
+
+/** Every MVP photo is an Admin desktop upload — badged unverified (spec §9). */
+export function UnverifiedBadge({ style }: { style?: CSSProperties }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        height: 22,
+        padding: '0 8px',
+        borderRadius: 5,
+        fontSize: 11,
+        fontWeight: 600,
+        background: '#FAF1E2',
+        color: '#B5791A',
+        ...style,
+      }}
+    >
+      <Upload size={11} />
+      Manually uploaded · unverified
+    </span>
   );
 }
 
