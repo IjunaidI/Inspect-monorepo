@@ -3,6 +3,7 @@ import { HealthCheck, HealthCheckService, HealthIndicatorResult } from '@nestjs/
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('health')
 export class HealthController {
@@ -12,6 +13,7 @@ export class HealthController {
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
+  @Public()
   @Get()
   @HealthCheck()
   check() {

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -9,6 +10,9 @@ import { KeyvCacheableMemory } from 'cacheable';
 import { ScheduleModule } from '@nestjs/schedule';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { RolesGuard } from './auth/roles.guard';
 import * as path from 'path';
 
 @Module({
@@ -44,8 +48,14 @@ import * as path from 'path';
     PrismaModule,
     ScheduleModule.forRoot(),
     HealthModule,
+    AuthModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Global auth: JwtAuthGuard first (populates request.user), then RolesGuard.
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
+  ],
 })
 export class AppModule {}
