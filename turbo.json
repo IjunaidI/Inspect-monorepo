@@ -20,6 +20,7 @@
     "SSL_CERT_DAYS",
     "NEXTAUTH_URL",
     "AUTH_SECRET",
+    "INSPECT_API_URL",
     "AUTH_GITHUB_ID",
     "AUTH_GITHUB_SECRET",
     "API_PORT",

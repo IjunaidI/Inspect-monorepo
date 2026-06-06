@@ -2,9 +2,14 @@ import type { CSSProperties } from 'react';
 import { ChevronDown, Lock, MoreVertical, Plus, Search } from 'lucide-react';
 import { Avatar, Btn, Mono, PageHead, RoleBadge } from '@/components/inspect/shell';
 import { severity, ui, type RoleKey } from '@/components/inspect/tokens';
+import { loadOrFallback, type ApiUser } from '@/lib/api';
+
+export const dynamic = 'force-dynamic';
 
 type StatusKey = 'active' | 'invited' | 'crosstenant';
-const orgUsers: { initials: string; bg: string; name: string; email: string; role: RoleKey; status: StatusKey; last: string; you?: boolean }[] = [
+interface UserRow { initials: string; bg: string; name: string; email: string; role: RoleKey; status: StatusKey; last: string; you?: boolean }
+
+const DEMO_USERS: UserRow[] = [
   { initials: 'RS', bg: '#0B1220', name: 'Riya Saraf', email: 'riya@asha-inspect.com', role: 'owner', status: 'active', last: '12 min ago', you: true },
   { initials: 'AK', bg: '#1457A3', name: 'Aisha Khan', email: 'aisha@asha-inspect.com', role: 'qa', status: 'active', last: '1 hour ago' },
   { initials: 'DM', bg: '#0B7D6B', name: 'Deepak Menon', email: 'deepak@asha-inspect.com', role: 'inspector', status: 'active', last: '4 hours ago' },
@@ -12,16 +17,37 @@ const orgUsers: { initials: string; bg: string; name: string; email: string; rol
   { initials: 'MN', bg: '#B5791A', name: 'Meera Nair', email: 'meera@asha-inspect.com', role: 'inspector', status: 'invited', last: 'Invite sent 2d ago' },
   { initials: 'IP', bg: '#475467', name: 'Inspect Support', email: 'support@inspect.io', role: 'platform', status: 'crosstenant', last: '—' },
 ];
+
 const statusStyle: Record<StatusKey, { label: string; fg: string; bg: string; dot: string }> = {
   active: { label: 'Active', fg: '#1F6B43', bg: '#EAF6F0', dot: '#1F8A4C' },
   invited: { label: 'Invited', fg: severity.major.fg, bg: severity.major.bg, dot: severity.major.dot },
   crosstenant: { label: 'Cross-tenant', fg: '#475467', bg: '#EFF2F6', dot: '#8A93A1' },
 };
+const BG_PALETTE = ['#0B1220', '#1457A3', '#0B7D6B', '#7C3AED', '#B5791A', '#475467'];
+const ROLE_MAP: Record<ApiUser['role'], RoleKey> = { INSPECTOR: 'inspector', QA_MANAGER: 'qa', ORG_OWNER: 'owner', PLATFORM_ADMIN: 'platform' };
+
+function initialsOf(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '??';
+}
+function mapUser(u: ApiUser, i: number): UserRow {
+  return {
+    initials: initialsOf(u.name || u.email),
+    bg: BG_PALETTE[i % BG_PALETTE.length],
+    name: u.name || u.email,
+    email: u.email,
+    role: ROLE_MAP[u.role] ?? 'inspector',
+    status: u.status === 'ACTIVE' ? 'active' : u.status === 'INVITED' ? 'invited' : 'crosstenant',
+    last: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
+  };
+}
 
 const th: CSSProperties = { fontSize: 11, fontWeight: 550, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, padding: '13px 20px', textAlign: 'left', borderBottom: `1px solid ${ui.line}`, background: ui.fill };
 const td: CSSProperties = { padding: '14px 20px', fontSize: 13, color: ui.ink, borderBottom: `1px solid ${ui.lineSoft}`, verticalAlign: 'middle' };
 
-export default function UsersPage() {
+export default async function UsersPage() {
+  const { data, live } = await loadOrFallback<ApiUser[]>('/users', []);
+  const rows: UserRow[] = live ? data.map(mapUser) : DEMO_USERS;
+
   return (
     <div style={{ padding: '28px 32px' }}>
       <PageHead
@@ -49,13 +75,7 @@ export default function UsersPage() {
           <Search size={15} color={ui.faint} style={{ position: 'absolute', left: 12, top: 10.5 }} />
           <input style={{ width: 320, height: 36, padding: '0 12px 0 36px', fontSize: 13, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', outline: 'none' }} placeholder="Search by name or email…" />
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {([['All', 6, true], ['Active', 4, false], ['Invited', 1, false]] as const).map(([l, n, a]) => (
-            <div key={l} style={{ height: 30, padding: '0 14px', display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${a ? ui.ink : ui.line}`, background: a ? ui.ink : '#fff', color: a ? '#fff' : ui.sub, borderRadius: 999, fontSize: 12, fontWeight: 500 }}>
-              {l} <Mono style={{ opacity: 0.7 }}>{n}</Mono>
-            </div>
-          ))}
-        </div>
+        <div style={{ marginLeft: 'auto', fontSize: 11.5, color: ui.faint }}>{live ? 'Live · from API' : 'Demo data · API offline'}</div>
       </div>
 
       <div style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -70,7 +90,7 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {orgUsers.map((u) => {
+            {rows.map((u) => {
               const ss = statusStyle[u.status];
               const locked = u.role === 'platform';
               return (
