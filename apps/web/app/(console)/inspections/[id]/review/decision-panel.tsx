@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Lock } from 'lucide-react';
 import { severity, ui } from '@/components/inspect/tokens';
 import { decideInspection, submitInspection } from '../../actions';
@@ -14,6 +15,7 @@ const options = [
 export function SubmitForReview({ id }: { id: string }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string>();
+  const router = useRouter();
   return (
     <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 13, color: ui.sub }}>
@@ -22,7 +24,7 @@ export function SubmitForReview({ id }: { id: string }) {
       {error && <div style={{ fontSize: 12.5, color: severity.critical.fg }}>{error}</div>}
       <button
         disabled={pending}
-        onClick={() => start(async () => { const r = await submitInspection(id); if (r.error) setError(r.error); })}
+        onClick={() => start(async () => { const r = await submitInspection(id); if (r.error) setError(r.error); else router.refresh(); })}
         style={{ height: 44, background: ui.accent, color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.7 : 1 }}
       >
         {pending ? 'Submitting…' : 'Submit for review'}
@@ -57,7 +59,7 @@ export function DecisionForm({ id }: { id: string }) {
         <textarea name="remarks" required style={{ width: '100%', height: 76, padding: 12, fontSize: 13, lineHeight: 1.5, resize: 'none', boxSizing: 'border-box', background: ui.fill, border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', color: ui.ink, outline: 'none' }} />
       </div>
       {state?.error && <div style={{ fontSize: 12.5, color: severity.critical.fg }}>{state.error}</div>}
-      <button type="submit" disabled={pending} style={{ height: 44, background: ui.accent, color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, marginTop: 4, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.7 : 1 }}>
+      <button type="submit" disabled={!decision || pending} style={{ height: 44, background: ui.accent, color: '#fff', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, marginTop: 4, cursor: (!decision || pending) ? 'default' : 'pointer', opacity: (!decision || pending) ? 0.7 : 1 }}>
         {pending ? 'Submitting…' : 'Submit decision'}
       </button>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 11.5, color: ui.faint, lineHeight: 1.45 }}>
