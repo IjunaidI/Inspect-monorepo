@@ -38,6 +38,61 @@ export async function loadOrFallback<T>(path: string, fallback: T): Promise<{ da
   }
 }
 
+/** Thrown by the write helpers on a non-2xx response; carries the API's message + status. */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly path: string,
+    message: string,
+    public readonly body?: unknown,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+type WriteMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+/**
+ * Server-side mutation against the NestJS API with the session bearer token.
+ * Use from Server Actions / route handlers (relies on `auth()`, which is server-only).
+ * Sends `body` as JSON when provided; surfaces the API's error message via `ApiError`;
+ * returns `undefined` for an empty/204 response.
+ */
+async function apiSend<T>(method: WriteMethod, path: string, body?: unknown): Promise<T> {
+  const token = await apiToken();
+  const hasBody = body !== undefined;
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+    },
+    body: hasBody ? JSON.stringify(body) : undefined,
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    let parsed: unknown;
+    let detail = '';
+    try {
+      parsed = await res.json();
+      const m = (parsed as { message?: unknown })?.message;
+      detail = Array.isArray(m) ? m.join(', ') : typeof m === 'string' ? m : '';
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, path, detail || `API ${method} ${path} failed: ${res.status}`, parsed);
+  }
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? (JSON.parse(text) as T) : (undefined as T));
+}
+
+export const apiPost = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('POST', path, body);
+export const apiPut = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('PUT', path, body);
+export const apiPatch = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('PATCH', path, body);
+export const apiDelete = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('DELETE', path, body);
+
 // ── Response shapes (subset of the Prisma models the screens read) ──
 export interface ApiBuyer {
   id: string;
