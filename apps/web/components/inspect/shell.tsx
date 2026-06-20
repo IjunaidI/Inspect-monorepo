@@ -8,6 +8,7 @@ import {
   Building2,
   ChevronDown,
   ClipboardList,
+  LogOut,
   Repeat,
   Search,
   Settings,
@@ -15,6 +16,8 @@ import {
   Users,
 } from 'lucide-react';
 import { mono as monoStyle, roles, severity, ui, type RoleKey, type SeverityKey } from './tokens';
+import { initialsFrom } from '@/lib/roles';
+import { signOutAction } from '@/app/(console)/actions';
 
 // ─── Primitives ──────────────────────────────────────────────
 export function Mono({ children, style }: { children: ReactNode; style?: CSSProperties }) {
@@ -206,7 +209,7 @@ const NAV = [
 const DEFAULT_USER = { name: 'Riya Saraf', initials: 'RS', role: 'owner' as RoleKey };
 const DEFAULT_ORG = 'Asha Inspection Services';
 
-function Sidebar({ org }: { org: string }) {
+function Sidebar({ org, user }: { org: string; user: typeof DEFAULT_USER }) {
   const pathname = usePathname();
   return (
     <aside
@@ -289,11 +292,11 @@ function Sidebar({ org }: { org: string }) {
       })}
 
       <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: `1px solid ${ui.line}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Avatar initials={DEFAULT_USER.initials} />
+        <Avatar initials={user.initials} />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 550, lineHeight: 1.3 }}>{DEFAULT_USER.name}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 550, lineHeight: 1.3 }}>{user.name}</div>
           <div style={{ marginTop: 2 }}>
-            <RoleBadge role={DEFAULT_USER.role} />
+            <RoleBadge role={user.role} />
           </div>
         </div>
       </div>
@@ -301,7 +304,7 @@ function Sidebar({ org }: { org: string }) {
   );
 }
 
-function Topbar({ org, search }: { org: string; search: string }) {
+function Topbar({ org, search, user }: { org: string; search: string; user: typeof DEFAULT_USER }) {
   return (
     <header
       style={{
@@ -339,14 +342,22 @@ function Topbar({ org, search }: { org: string; search: string }) {
         </div>
         <div style={{ width: 1, height: 22, background: ui.line }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <Avatar initials={DEFAULT_USER.initials} size={30} />
+          <Avatar initials={user.initials} size={30} />
           <div style={{ lineHeight: 1.2 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{DEFAULT_USER.name}</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600 }}>{user.name}</div>
             <div style={{ fontSize: 10.5, color: ui.faint, marginTop: 1 }}>
-              {roles[DEFAULT_USER.role].label} · {org.split(' ')[0]}
+              {roles[user.role].label} · {org.split(' ')[0]}
             </div>
           </div>
-          <ChevronDown size={14} color={ui.faint} />
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              title="Sign out"
+              style={{ display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', cursor: 'pointer', padding: 6, color: ui.sub }}
+            >
+              <LogOut size={16} />
+            </button>
+          </form>
         </div>
       </div>
     </header>
@@ -358,11 +369,18 @@ export function ConsoleShell({
   children,
   org = DEFAULT_ORG,
   search = 'Search inspections, buyers, suppliers, POs…',
+  userName,
+  role,
 }: {
   children: ReactNode;
   org?: string;
   search?: string;
+  userName?: string;
+  role?: RoleKey;
 }) {
+  const user = userName
+    ? { name: userName, initials: initialsFrom(userName), role: role ?? 'inspector' as RoleKey }
+    : DEFAULT_USER;
   return (
     <div
       style={{
@@ -375,9 +393,9 @@ export function ConsoleShell({
         fontFeatureSettings: '"cv11", "ss01"',
       }}
     >
-      <Sidebar org={org} />
+      <Sidebar org={org} user={user} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Topbar org={org} search={search} />
+        <Topbar org={org} search={search} user={user} />
         <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
       </div>
     </div>
