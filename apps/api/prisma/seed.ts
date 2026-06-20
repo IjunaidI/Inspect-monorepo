@@ -7,13 +7,19 @@
  *
  * Idempotent: re-running only inserts globals that are missing (matched by name).
  *
+ * Also (optional) bootstraps the FIRST Platform Admin when BOOTSTRAP_ADMIN_EMAIL +
+ * BOOTSTRAP_ADMIN_PASSWORD are set — there is no in-app path to create one
+ * (org creation is admin-only and users.service forbids assigning PLATFORM_ADMIN),
+ * so the very first principal must be seeded. Idempotent (upsert by email).
+ *
  * Run with:  pnpm --filter @inspect/api exec prisma db seed
  *
  * NOTE: ISO 2859-1 Table I (code letters) and Table II-A (single-sampling Ac/Re)
  * are NOT seeded — they live as code/seed lookup constants in the AQL engine
  * (spec §8), not as database rows.
  */
-import { PrismaClient, DefectScope, DefectSeverity } from '@prisma/client';
+import { PrismaClient, DefectScope, DefectSeverity, UserRole, UserStatus } from '@prisma/client';
+import { hashPassword } from '../src/auth/password';
 
 const prisma = new PrismaClient();
 
@@ -39,6 +45,45 @@ const GLOBAL_DEFECTS: Array<{ name: string; defaultSeverity: DefectSeverity }> =
   { name: 'Minor puckering', defaultSeverity: DefectSeverity.MINOR },
   { name: 'Light surface marks', defaultSeverity: DefectSeverity.MINOR },
 ];
+
+/**
+ * Optional first-Platform-Admin bootstrap. No-op unless BOTH env vars are set.
+ * Upsert by email → converges to a usable ACTIVE PLATFORM_ADMIN (orgId = null),
+ * so re-running with a new password resets it. Reuses the tested scrypt hasher.
+ */
+async function seedBootstrapAdmin(): Promise<void> {
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim();
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  if (!email && !password) return; // not requested (normal for prod seeds)
+  if (!email || !password) {
+    console.warn(
+      'Bootstrap admin skipped: set BOTH BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD.',
+    );
+    return;
+  }
+  const name = process.env.BOOTSTRAP_ADMIN_NAME?.trim() || 'Platform Admin';
+  const passwordHash = await hashPassword(password);
+  await prisma.user.upsert({
+    where: { email },
+    update: {
+      name,
+      role: UserRole.PLATFORM_ADMIN,
+      status: UserStatus.ACTIVE,
+      orgId: null,
+      passwordHash,
+    },
+    create: {
+      email,
+      name,
+      role: UserRole.PLATFORM_ADMIN,
+      status: UserStatus.ACTIVE,
+      orgId: null,
+      passwordHash,
+    },
+  });
+  // eslint-disable-next-line no-console
+  console.log(`Bootstrap Platform Admin ready: ${email} (PLATFORM_ADMIN, ACTIVE).`);
+}
 
 async function main(): Promise<void> {
   let created = 0;
@@ -67,6 +112,8 @@ async function main(): Promise<void> {
     `Seed complete: ${created} global defect(s) created, ` +
       `${GLOBAL_DEFECTS.length - created} already present.`,
   );
+
+  await seedBootstrapAdmin();
 }
 
 main()

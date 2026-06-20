@@ -66,7 +66,7 @@
     "typescript": "^5.7.2"
   },
   "prisma": {
-    "seed": "ts-node --transpile-only prisma/seed.ts"
+    "seed": "node -r ts-node/register/transpile-only prisma/seed.ts"
   },
   "jest": {
     "moduleFileExtensions": ["js", "json", "ts"],
