@@ -122,3 +122,33 @@ export interface ApiUser {
   status: 'ACTIVE' | 'INVITED' | 'SUSPENDED' | 'DEACTIVATED';
   lastLoginAt?: string | null;
 }
+export interface ApiAqlResult {
+  systemRecommendation: 'PASS' | 'FAIL';
+  perClass: Record<'critical' | 'major' | 'minor', { found: number; ac: number; re: number; outcome: 'PASS' | 'FAIL' }>;
+  qaDecision?: 'PASS' | 'FAIL' | 'HOLD' | null;
+  qaRemarks?: string | null;
+}
+export interface ApiInspection {
+  id: string;
+  status: string;
+  lotSize?: number | null;
+  computedSampling?: { sampleSizeCodeLetter: string; sampleSize: number; perClass: Record<string, { aql: number; ac: number; re: number }> } | null;
+  aqlResult?: ApiAqlResult | null;
+  buyer?: { id: string; name: string } | null;
+  supplier?: { id: string; name: string } | null;
+  product?: { id: string; styleNumber: string } | null;
+  purchaseOrder?: { id: string; poNumber: string } | null;
+  createdAt?: string;
+}
+export interface ApiPurchaseOrder {
+  id: string;
+  poNumber: string;
+  buyer?: { id: string; name: string } | null;
+  supplier?: { id: string; name: string } | null;
+  product?: { id: string; styleNumber: string } | null;
+}
+export interface AqlPreview {
+  sampleSizeCodeLetter: string;
+  sampleSize: number;
+  perClass: Record<'critical' | 'major' | 'minor', { aql: number; ac: number; re: number }>;
+}
