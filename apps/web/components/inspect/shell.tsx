@@ -200,7 +200,7 @@ export function PageHead({ title, sub, actions }: { title: string; sub?: string;
 // ─── Shell ───────────────────────────────────────────────────
 const NAV = [
   { key: 'directory', label: 'Buyers & Suppliers', icon: Building2, href: '/dashboard' },
-  { key: 'inspections', label: 'Inspections', icon: ClipboardList, href: '/inspections/new' },
+  { key: 'inspections', label: 'Inspections', icon: ClipboardList, href: '/inspections' },
   { key: 'presets', label: 'Loop Presets', icon: Repeat, href: '/presets' },
   { key: 'users', label: 'Users & Roles', icon: Users, href: '/users' },
   { key: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
