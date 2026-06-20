@@ -1,10 +1,12 @@
 # Inspect MVP — Build Index (master plan)
 
-> **For agentic workers:** This is the master index. Each phase below is its own plan file under `docs/superpowers/plans/`. Implement a phase with `superpowers:subagent-driven-development` or `superpowers:executing-plans`, task-by-task, TDD.
+> **Living reference** — moved 2026-06-20 from `docs/superpowers/plans/`. The cross-phase router + standing tech defaults. **Last verified: 2026-06-20.** Per-phase status now lives in [STATUS.md](../STATUS.md); the work queue is [future/BACKLOG.md](../future/BACKLOG.md).
+>
+> **For agentic workers:** This is the master index. Phase plans live under `docs/{done,in-progress,future}/plans/` (Phase 1 → `done/`, Phase 2 → `in-progress/`, Phases 3–7 drafted just-in-time into `in-progress/` when reached). Implement a phase with `superpowers:subagent-driven-development` or `superpowers:executing-plans`, task-by-task, TDD.
 
 **Goal:** Build the Inspect MVP (spec §15) on top of the committed Prisma schema — a web-first, multi-tenant QC inspection platform with an Admin populate console and signed PDF reporting.
 
-**Source of truth:** [requirements](../specs/2026-06-06-inspect-mvp-requirements.md) · [schema design](../specs/2026-06-06-inspect-schema-design.md) · [schema](../../../apps/api/prisma/schema.prisma).
+**Source of truth:** [requirements](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) · [schema design](./inspect-schema.md) · [schema](../../apps/api/prisma/schema.prisma).
 
 ---
 
@@ -39,8 +41,8 @@ A `docker-compose.dev.yml` (Postgres + Redis + MinIO) is itself a Phase-2 task s
 
 | Phase | Plan file | Produces | DB needed? |
 |---|---|---|---|
-| **1. Foundation & domain core** | `2026-06-06-inspect-phase1-foundation-domain-core.md` | `@inspect/shared-types`; AQL engine (ISO 2859-1); tamper-proof crypto; audit hash-chain — all unit-tested | **No** |
-| 2. Auth & tenancy | `…-phase2-auth-tenancy.md` (TBW) | login, JWT, multi-tenant RBAC guards, invite-only onboarding, `docker-compose.dev.yml`, Prisma migrate/seed run | Yes |
+| **1. Foundation & domain core** ✅ | `done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md` | `@inspect/shared-types`; AQL engine (ISO 2859-1); tamper-proof crypto; audit hash-chain — all unit-tested | **No** |
+| 2. Auth & tenancy 🟡 | `in-progress/plans/2026-06-06-inspect-phase2-auth-tenancy.md` | login, JWT, multi-tenant RBAC guards, invite-only onboarding, `docker-compose.dev.yml`, Prisma migrate/seed run — *Tasks 1–4 done; 5–7 DB-bound, unverified (INS-001)* | Yes |
 | 3. Workspace | `…-phase3-workspace.md` (TBW) | Buyer/Supplier/PO/Product CRUD + loop-preset builder (API + console) | Yes |
 | 4. Inspection setup | `…-phase4-inspection-setup.md` (TBW) | create/assign-inspection flow; wire AQL engine; snapshot preset; locked tamper-proof block | Yes |
 | 5. Admin populate console | `…-phase5-populate-console.md` (TBW) | presigned S3 upload, drag photos into loops, defect tagging, measurements | Yes |

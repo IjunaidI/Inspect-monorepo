@@ -3,8 +3,8 @@
 // Stack: NestJS (apps/api) · Next.js (apps/web) · PostgreSQL · Prisma
 // ------------------------------------------------------------
 // Derived from:
-//   docs/superpowers/specs/2026-06-06-inspect-mvp-requirements.md  (requirements)
-//   docs/superpowers/specs/2026-06-06-inspect-schema-design.md     (design + rationale)
+//   docs/done/specs/2026-06-06-inspect-mvp-requirements-design.md  (requirements)
+//   docs/reference/inspect-schema.md                               (design + rationale)
 //
 // Conventions (see design doc §A):
 //   • Multi-tenant isolation: every tenant-scoped row carries orgId (incl. the

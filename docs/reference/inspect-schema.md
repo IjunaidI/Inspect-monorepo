@@ -1,8 +1,10 @@
 # Inspect — Domain Schema Design (Prisma)
 
+> **Living reference** — moved 2026-06-20 from `docs/superpowers/specs/`. The enduring architecture rationale + the app-layer invariants future phases must honor. **Last verified: 2026-06-20.** Current state: [STATUS.md](../STATUS.md) · open schema-invariant work: [future/BACKLOG.md](../future/BACKLOG.md) (INS-010, INS-011, INS-012, INS-014, INS-015, INS-018).
+>
 > Design record for reconciling the draft `LoopQC_schema.prisma` with the **Inspect MVP Requirements Spec v1.0**.
-> **Status:** approved 2026-06-06. **Canonical schema:** [apps/api/prisma/schema.prisma](../../../apps/api/prisma/schema.prisma).
-> **Requirements:** [2026-06-06-inspect-mvp-requirements.md](./2026-06-06-inspect-mvp-requirements.md).
+> **Status:** approved 2026-06-06. **Canonical schema:** [apps/api/prisma/schema.prisma](../../apps/api/prisma/schema.prisma).
+> **Requirements:** [done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md).
 
 ---
 
@@ -65,7 +67,7 @@ The design was driven by a multi-agent gap analysis (8 domain analysts + a compl
 - `apps/api/prisma/schema.prisma` — canonical schema (validated, formatted).
 - `apps/api/prisma/migrations/00000000000000_init/migration.sql` — initial migration (+ the two partial unique indexes) and `migration_lock.toml`.
 - `apps/api/prisma/seed.ts` — idempotent global defect library seed; wired via `package.json` → `prisma.seed` (`ts-node --transpile-only`).
-- `LoopQC_schema.prisma` (root) — non-authoritative mirror.
+- `LoopQC_schema.prisma` (root) — non-authoritative mirror. *(Removed 2026-06-20; `apps/api/prisma/schema.prisma` is now the single schema.)*
 
 ## 6. Out of scope here / follow-ups (for the implementation plan)
 

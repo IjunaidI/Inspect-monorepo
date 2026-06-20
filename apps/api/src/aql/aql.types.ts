@@ -1,6 +1,6 @@
 /**
  * Types for the AQL engine (ISO 2859-1 / ANSI-ASQ Z1.4 single sampling).
- * Pure domain — no NestJS, no Prisma. See docs/superpowers/plans Phase 1.
+ * Pure domain — no NestJS, no Prisma. See docs/done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md.
  */
 
 export type DefectClass = 'critical' | 'major' | 'minor';

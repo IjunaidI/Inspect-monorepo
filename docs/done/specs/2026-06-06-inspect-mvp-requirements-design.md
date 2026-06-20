@@ -1,10 +1,12 @@
 # Inspect — MVP Requirements Specification
 
+> **Frozen requirements contract (Final v1.0)** — archived to `docs/done/specs/` 2026-06-20 from `docs/superpowers/specs/`. The authoritative "what the MVP must be"; corrected in place only. Current build state: [STATUS.md](../../STATUS.md) · open work: [future/BACKLOG.md](../../future/BACKLOG.md).
+>
 > Mobile-first quality-control inspection platform for the textile & garment industry.
 > **This MVP ships web-first**: backend + desktop console now, mobile (React Native) later reusing the same REST API.
 > **Status: Final v1.0** · Scope: **pre-shipment inspection only** · Date: June 6, 2026 · Owner: Platform Admin.
 
-> NOTE: This file is the verbatim requirements input captured from the user. The derived schema design lives in `2026-06-06-inspect-schema-design.md`.
+> NOTE: This file is the verbatim requirements input captured from the user. The derived schema design lives in [`docs/reference/inspect-schema.md`](../../reference/inspect-schema.md).
 > NOTE: §13 references "Real TypeORM entities + migrations" but the repo has already migrated OFF TypeORM to **Prisma** (commit de6a2e0). Prisma is the real stack; read that section as "real Prisma models + migrations, synchronize off equivalent (no db push in prod)".
 
 ---

@@ -1,5 +1,7 @@
 # Inspect Phase 1 — Foundation & Domain Core — Implementation Plan
 
+> **✅ Shipped — archived to `docs/done/plans/` 2026-06-20.** AQL engine, tamper-proof crypto, audit hash-chain, and `@inspect/shared-types` built and unit-tested (part of the 97 API unit tests). Caveat: the shared-types package exists but is **not yet linked** into `apps/api`/`apps/web` — see [BACKLOG INS-008](../../future/BACKLOG.md). Current state: [STATUS.md](../../STATUS.md).
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans. Steps use checkbox (`- [ ]`) syntax. TDD throughout.
 
 **Goal:** Build the pure-logic, DB-free core of Inspect — the AQL engine (ISO 2859-1), the tamper-proof crypto (canonicalize + content hash + Ed25519), the audit hash-chain, and the `@inspect/shared-types` contract package — all fully unit-tested with jest, no database required.

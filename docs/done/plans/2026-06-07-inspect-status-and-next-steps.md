@@ -1,8 +1,10 @@
 # Inspect MVP — Status & Next-Steps Plan
 
+> **⚠️ Superseded 2026-06-20 — historical handoff snapshot.** The living "where we are / what's next" now lives in [STATUS.md](../../STATUS.md) + [future/BACKLOG.md](../../future/BACKLOG.md) (stable `INS-NNN` ids). This dated 2026-06-07 snapshot is kept as the historical record and is **no longer maintained**.
+>
 > **Handoff doc.** Snapshot of what's built and a phased plan to continue. Start a fresh conversation from any phase below.
 > **As of:** 2026-06-07 · **Branch:** `main` @ `34fa0f5` · **Stack:** pnpm + Turborepo · NestJS 11 + Prisma 6 (`apps/api`) · Next.js 15 + shadcn + Tailwind + NextAuth (`apps/web`).
-> **Source of truth:** [requirements](../specs/2026-06-06-inspect-mvp-requirements.md) · [schema design](../specs/2026-06-06-inspect-schema-design.md) · [build index](./2026-06-06-inspect-mvp-build-index.md).
+> **Source of truth:** [requirements](../specs/2026-06-06-inspect-mvp-requirements-design.md) · [schema design](../../reference/inspect-schema.md) · [build index](../../reference/inspect-build-index.md).
 
 ---
 

@@ -1,6 +1,6 @@
 /**
  * ISO 2859-1 / ANSI-ASQ Z1.4 lookup data (General Inspection Level II, single
- * sampling, normal severity). See docs/superpowers/plans Phase 1 for provenance.
+ * sampling, normal severity). See docs/done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md for provenance.
  *
  * The acceptance grid below is the VERIFIED MVP band, derived from the canonical
  * code-letter-L (n=200) column and Z1.4's diagonal-repetition structure. Cells

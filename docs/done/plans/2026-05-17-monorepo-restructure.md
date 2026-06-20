@@ -1,5 +1,7 @@
 # Monorepo Restructure — Implementation Summary
 
+> **✅ Done — archived to `docs/done/plans/` 2026-06-20 (work landed 2026-05-17).** Correction: this predates the **TypeORM → Prisma** migration (commit `de6a2e0`); any TypeORM / Drizzle / Neon DB details below are **historical and superseded** — Prisma is the real stack. Current state: [STATUS.md](../../STATUS.md).
+>
 > Branch: `worktree-monorepo-restructure` · Commits: `01e4d4e`, `7e8dc57`
 > Worktree path: `E:\Inspect-monorepo\.claude\worktrees\monorepo-restructure`
 
@@ -134,9 +136,9 @@ TypeOrmModule.forRootAsync({
 
 ### Root `.env.example` (final, populated with real Railway values)
 
-Vars preserved verbatim from the original `.example.env` (passwords inlined per user instruction — they'll rotate later):
-- `POSTGRES_PASSWORD="gIqPIoiylMEwQQsmyggyfmQSHmLcifya"`
-- `REDIS_PASSWORD="uuDWRzMqjIaFXKrEkKASWXBmZndtWVcq"`
+Vars preserved from the original `.example.env`:
+- `POSTGRES_PASSWORD="<redacted 2026-06-20 — INS-002>"`  *(the real value was scrubbed from this doc; rotate the live Railway credential)*
+- `REDIS_PASSWORD="<redacted 2026-06-20 — INS-002>"`  *(scrubbed; rotate)*
 - `POSTGRES_USER="postgres"`, `POSTGRES_DB="railway"`, `PGPORT="5432"`, `REDISPORT="6379"`, `REDISUSER="default"`, `PGDATA="/var/lib/postgresql/data/pgdata"`, `SSL_CERT_DAYS="820"`
 
 Vars added (frontend, not in original `.example.env`):

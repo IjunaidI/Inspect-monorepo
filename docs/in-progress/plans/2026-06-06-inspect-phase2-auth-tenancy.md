@@ -1,5 +1,7 @@
 # Inspect Phase 2 — Auth & Tenancy — Implementation Plan
 
+> **🟡 In progress.** Tasks 1–4 (DB-free primitives: `rbac`/`password`/`jwt` + `docker-compose.dev.yml`) are shipped and unit-tested. Tasks 5–7 (AuthModule, guards, invite-only onboarding) are **coded but have never run against a real Postgres/Redis** — verifying them end-to-end is [BACKLOG INS-001](../../future/BACKLOG.md). Current state: [STATUS.md](../../STATUS.md).
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development or executing-plans. TDD throughout. Checkbox steps.
 
 **Goal:** Authentication (JWT), multi-tenant RBAC enforcement, and invite-only onboarding (Platform → Org → users/guests), on top of the Phase 1 schema.

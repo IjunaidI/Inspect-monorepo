@@ -130,7 +130,7 @@ Legend: ✅ done & verified · 🟡 built, integration pending a live DB · ⬜ 
 - [ ] CI/CD + deploy (Railway)
 - [ ] **Phase 2 — mobile app** with camera‑only verified capture (signed EXIF/GPS/device)
 
-> Full breakdown: [`docs/superpowers/plans/2026-06-07-inspect-status-and-next-steps.md`](docs/superpowers/plans/2026-06-07-inspect-status-and-next-steps.md).
+> Live status & full breakdown: [`docs/STATUS.md`](docs/STATUS.md) (dashboard) · [`docs/future/BACKLOG.md`](docs/future/BACKLOG.md) (`INS-NNN` items).
 
 ---
 
@@ -195,7 +195,7 @@ Inspect-monorepo/
 │       ├── components/inspect/      tokens · shell · branded-report
 │       └── lib/                     auth.ts (NextAuth) · api.ts (typed client)
 ├── packages/shared-types/           @inspect/shared-types — shared contracts
-├── docs/superpowers/                requirements, schema design & build plans
+├── docs/                            STATUS.md · future/BACKLOG.md · {done,in-progress,future}/ · reference/
 └── docker-compose.dev.yml           Postgres + Redis + MinIO
 ```
 
@@ -203,9 +203,9 @@ Inspect-monorepo/
 
 ## 📚 Documentation
 
-- **Requirements spec** — [`docs/superpowers/specs/2026-06-06-inspect-mvp-requirements.md`](docs/superpowers/specs/2026-06-06-inspect-mvp-requirements.md)
-- **Schema design & rationale** — [`docs/superpowers/specs/2026-06-06-inspect-schema-design.md`](docs/superpowers/specs/2026-06-06-inspect-schema-design.md)
-- **Build plans & status** — [`docs/superpowers/plans/`](docs/superpowers/plans/)
+- **Status dashboard** (start here) — [`docs/STATUS.md`](docs/STATUS.md) · **Backlog** (`INS-NNN`) — [`docs/future/BACKLOG.md`](docs/future/BACKLOG.md) · **How the docs folder works** — [`docs/README.md`](docs/README.md)
+- **Requirements spec** (frozen v1.0) — [`docs/done/specs/2026-06-06-inspect-mvp-requirements-design.md`](docs/done/specs/2026-06-06-inspect-mvp-requirements-design.md)
+- **Schema design & rationale** — [`docs/reference/inspect-schema.md`](docs/reference/inspect-schema.md) · **Build index** — [`docs/reference/inspect-build-index.md`](docs/reference/inspect-build-index.md)
 
 ---
 
