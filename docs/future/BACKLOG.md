@@ -154,7 +154,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§10)
 
 ### INS-026 · Create-inspection screen static (no dropdown reads, no create)   [HIGH]
-- status: todo
+- status: done            # 2026-06-20: PO-driven create wired — selectors from /purchase-orders + /loop-presets + /users; lot size drives a live AQL plan via a new read-only GET /inspections/aql-preview (TDD, reuses computeSampling); a Server Action creates the inspection (snapshot + computedSampling) and redirects to its review page. A minimal inspections list was added too. Verified live (authed render shows seeded PO/preset + computed AQL panel).
 - area: Web console
 - evidence: `apps/web/app/(console)/inspections/new/page.tsx:31-32` buttons no handler; `:44-133` all selectors are static divs with hardcoded values; AQL plan from a static token.
 - problem: The QA Manager cannot create or assign an inspection — buyer/supplier/product/preset/inspector selectors are hardcoded and Create & assign / Save draft do nothing — so the core loop cannot start from the UI.
@@ -163,7 +163,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§11)
 
 ### INS-027 · QA decision (Pass/Fail/Hold) never persisted   [HIGH]
-- status: todo
+- status: done            # 2026-06-20: id-routed /inspections/[id]/review wired — Submit-for-review (POST /:id/submit) + controlled Pass/Fail/Hold radios + required note -> POST /:id/decision via Server Actions; render is state-driven by inspection status (submittable / decidable / final). NOTE: the submit affordance lives in the QA console for this slice; it migrates to the admin populate screen when INS-023 lands.
 - area: Web console
 - evidence: `apps/web/app/(console)/review/page.tsx:129-154` — decision radios are `<label>` with no `onChange`, note is a `defaultValue` textarea, Submit decision has no `onClick`; `decision` is a hardcoded const "fail" (line 12).
 - problem: The binding QA pass/fail/hold decision and decision note do not POST anywhere, so the human verdict — a required step in the loop — cannot be recorded from the web.
@@ -275,7 +275,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§5/§8)
 
 ### INS-028 · Console shell user hardcoded; no session/sign-out   [MEDIUM]
-- status: todo
+- status: done            # 2026-06-20: the (console) layout reads auth() and passes the real {userName, role} into ConsoleShell (DEFAULT_USER kept only as offline fallback); sign-out wired via a Server Action calling NextAuth signOut. Verified live — authed shell renders the real Org-Owner identity, not "Riya Saraf".
 - area: Web console
 - evidence: `apps/web/components/inspect/shell.tsx:206,292-298` — `DEFAULT_USER = {name:'Riya Saraf', role:'owner'}` not from the NextAuth session; no `signOut` import/usage.
 - problem: The logged-in identity and role are never reflected in the UI (always "Riya Saraf/owner") and there is no sign-out, so the app misrepresents the session and traps the user.
