@@ -20,6 +20,21 @@ export class InspectionsController {
     return this.inspections.list(requireOrgId(user), status);
   }
 
+  @Get('aql-preview')
+  preview(
+    @Query('lotSize') lotSize?: string,
+    @Query('critical') critical?: string,
+    @Query('major') major?: string,
+    @Query('minor') minor?: string,
+  ) {
+    const num = (v?: string) => (v === undefined || v === '' ? undefined : Number(v));
+    return this.inspections.aqlPreview(Number(lotSize), {
+      critical: num(critical),
+      major: num(major),
+      minor: num(minor),
+    });
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.inspections.get(requireOrgId(user), id);

@@ -135,6 +135,18 @@ export class InspectionsService {
     });
   }
 
+  /** Read-only AQL plan preview for the create screen (spec §8). Reuses computeSampling. */
+  aqlPreview(lotSize: number, plan: { critical?: number; major?: number; minor?: number }) {
+    if (!Number.isInteger(lotSize) || lotSize < 2) {
+      throw new BadRequestException('lotSize must be an integer >= 2');
+    }
+    try {
+      return computeSampling(lotSize, plan as AqlPlanInput);
+    } catch (e) {
+      throw new BadRequestException(e instanceof Error ? e.message : 'AQL plan not available');
+    }
+  }
+
   /** Lock the inspection, compute the AQL result, record the billable event (spec §8/§9/§14#16). */
   async submit(orgId: string, userId: string, id: string, tamper: TamperProofInput) {
     const inspection = await this.prisma.inspection.findFirst({ where: { id, orgId } });
