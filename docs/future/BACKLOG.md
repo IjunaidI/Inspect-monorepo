@@ -24,7 +24,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 ## Blockers
 
 ### INS-001 · Stack has never run against a real Postgres/Redis   [BLOCKER]
-- status: in-progress    # 2026-06-20: stack now runs end-to-end against the Railway server DB+Redis — migrate+seed applied (25 tables, 14 defects, bootstrap admin); API boots, /health green (db+redis up), login/me/tenant-guard verified live. Remaining: full create→submit→AQL→report loop (needs an Org Owner + MinIO for photos) + a CI integration test (INS-009). See runbook.
+- status: in-progress    # 2026-06-20: FULL LOOP VERIFIED LIVE end-to-end (acceptance a+b met). A committed smoke driver (apps/api/scripts/smoke-loop.mjs) drives admin login → create org → accept owner invite → workspace CRUD → create inspection → (Platform-Admin cross-tenant) populate presign/photo/defect/measure → submit (AQL→PASS, code J) → QA decision → Ed25519-signed report → public verify (valid+hashMatches+signatureValid) → buyer-guest magic-link fetch — all 25 steps 2xx against the Railway Postgres+Redis. Remaining for closure: containerized CI integration test (INS-009) + real photo byte upload to MinIO/S3 (INS-023). See runbook.
 - area: Infra & CI
 - evidence: `prisma/migrations/` has only `00000000000000_init` (never applied); API testCount is "compiles, type-checks; logic unit-tested"; only `apps/api/test/app.e2e-spec.ts` (1 test) exists.
 - problem: The entire DB-bound surface (auth login/me, guards, onboarding, all CRUD, inspection lifecycle, populate, reports, audit) is coded but has **never executed against a real database**. Correctness, migrations, FK policies, and the seven app-layer invariants are all unproven.
@@ -100,7 +100,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md](../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md) (Task 7)
 
 ### INS-009 · No integration/e2e suite against a real DB; CI absent   [HIGH]
-- status: todo
+- status: todo            # 2026-06-20: a framework-free full-loop smoke driver now exists (apps/api/scripts/smoke-loop.mjs, proven green against the Railway DB) — fold its assertions into a testcontainers-backed Jest e2e + a CI workflow, and add the negative RBAC matrix (401/403/cross-org).
 - area: Infra & CI
 - evidence: only `apps/api/test/app.e2e-spec.ts` (1 test); all 97 passing tests are pure-unit; no CI workflow in the repo.
 - problem: Nothing exercises Prisma, guards, RBAC-by-`orgId`, or the inspection lifecycle against a database, and there is no CI gate, so DB-layer regressions are invisible.

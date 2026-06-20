@@ -1,7 +1,7 @@
 # INS-001 + INS-002 — Stand up the stack & verify the core loop end-to-end
 
-> **🟡 In progress (started 2026-06-20).** Backlog: [INS-001](../../future/BACKLOG.md) (stand up + verify) + [INS-002](../../future/BACKLOG.md) (secret hygiene). Dashboard: [../../STATUS.md](../../STATUS.md).
-> The DB-free half is done; the live end-to-end loop is **blocked on the absence of a local database** (see Blockers).
+> **🟢 Core loop verified (2026-06-20).** Backlog: [INS-001](../../future/BACKLOG.md) (stand up + verify) + [INS-002](../../future/BACKLOG.md) (secret hygiene). Dashboard: [../../STATUS.md](../../STATUS.md).
+> The full `login → org → invite/accept → workspace CRUD → inspection → populate → submit → AQL → decision → signed report → verify` loop now runs **2xx end-to-end against the Railway Postgres+Redis** via a committed smoke driver (acceptance (a)+(b) met). Only the containerized CI integration test ([INS-009](../../future/BACKLOG.md)) and real photo-byte upload to MinIO/S3 ([INS-023](../../future/BACKLOG.md)) remain.
 
 **Goal:** prove that everything DB-bound — Prisma migrations, the auth round-trip, the inspection lifecycle,
 populate, AQL evaluation, and signed-report generation — actually runs against a real Postgres/Redis, by driving
@@ -21,7 +21,21 @@ Switched `.env` DB+Redis to the **Railway managed services** via their public TC
 - **API boots on :3000.** `GET /health` → `200 {database: up, redis: up}`. `POST /auth/login` (bootstrap admin) → JWT; `GET /auth/me` → `{role: PLATFORM_ADMIN, orgId: null}`. `GET /defect-catalog` → `403 "requires an organization context"` — **correct** tenant-scoping (admin has no org), not a bug.
 - **Web console runs on :3001.**
 - **Fix applied during the run:** `package.json` `prisma.seed` changed `ts-node …` → `node -r ts-node/register/transpile-only …` (bare `ts-node` isn't on PATH when Prisma spawns the seed on Windows). Finding #2 (Prisma env discovery) was handled by passing `DATABASE_URL` inline to the CLI.
-- **Still to drive:** create Org → invite/accept Org Owner → workspace CRUD → create inspection → **populate (needs MinIO/S3, not up)** → submit → AQL → QA decide → report → verify; plus a CI integration test (INS-009).
+- **Now driven (see next section):** the create Org → invite/accept → workspace CRUD → inspection → populate → submit → AQL → decide → report → verify loop runs green end-to-end.
+
+## Full loop verified end-to-end — 2026-06-20 ✅
+A committed, framework-free smoke driver — [`apps/api/scripts/smoke-loop.mjs`](../../../apps/api/scripts/smoke-loop.mjs) (run with `node apps/api/scripts/smoke-loop.mjs` against a booted API) — walked the **entire loop in 25 steps, all 2xx**, against the live Railway Postgres+Redis. Key results:
+- **Two principals, as designed.** Org-scoped steps run as the invited **Org Owner**; the populate step runs as the cross-tenant **Platform Admin** (`orgId=null`). The riskiest never-run path — `PopulateService` deriving `orgId` from the *target inspection* rather than the caller — **works correctly** (presign + register photo + assign-to-loop + tag defect + measurement all succeed under the admin token).
+- **Onboarding (phase-2 Task 7):** `POST /admin/orgs` → invitation token → `POST /invitations/accept` (sets scrypt password, activates `ORG_OWNER`) → owner `POST /auth/login`. Verified live.
+- **Auth + guards (phase-2 Tasks 5–6):** login → JWT → `/auth/me` (`PLATFORM_ADMIN`, `orgId=null`); `JwtAuthGuard` + `RolesGuard` admit the admin-only and org-owner routes; tenant scoping holds.
+- **Workspace CRUD + presets:** buyer/supplier/product/PO + a versioned loop preset (allowing a global MINOR defect) all persist.
+- **AQL engine, live:** `lotSize=1000` → code letter **J** (n=80); 1 MINOR defect ⇒ `systemRecommendation=PASS` (minor found 1 < Re 8). Submit creates the `AqlResult` + `BillableEvent` and locks the inspection.
+- **Tamper-proof report:** QA decision PASS → `APPROVED` → `POST /inspections/:id/report` produces an Ed25519-signed report; **public** `GET /reports/verify/:token` returns `valid=true, hashMatches=true, signatureValid=true`.
+- **Guest portal backend:** buyer-guest magic-link issuance + `GET /guest/reports?token=…` returns the buyer-scoped report. Verified live.
+
+**Boot note:** local Docker is still unavailable; the API was run via `pnpm --filter @inspect/api exec nest start` against the Railway managed services (`/health` → db+redis up). The smoke driver loads the bootstrap-admin creds from the repo-root `.env` (no secret is committed in the script).
+
+**Still open for full INS-001 closure:** the containerized/CI integration test ([INS-009](../../future/BACKLOG.md)) and real photo **byte** upload to MinIO/S3 ([INS-023](../../future/BACKLOG.md)) — the populate API persists photo *metadata + content hash* without needing object storage, so the byte path is the only loop step not exercised here.
 
 ## Blockers / findings (the original INS-001 surprises)
 1. **No database available on this machine.** `docker` is not installed/running (not on PATH, no Docker Desktop) and ports 5432/6379/9000 are free (no native Postgres/Redis/MinIO). The stack cannot be brought up here — a DB must be provided (start Docker Desktop, or point at a disposable managed Postgres + Redis).

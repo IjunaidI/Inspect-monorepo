@@ -1,6 +1,6 @@
 # Inspect Phase 2 — Auth & Tenancy — Implementation Plan
 
-> **🟡 In progress.** Tasks 1–4 (DB-free primitives: `rbac`/`password`/`jwt` + `docker-compose.dev.yml`) are shipped and unit-tested. Tasks 5–7 (AuthModule, guards, invite-only onboarding) are **coded but have never run against a real Postgres/Redis** — verifying them end-to-end is [BACKLOG INS-001](../../future/BACKLOG.md). Current state: [STATUS.md](../../STATUS.md).
+> **🟢 Tasks 1–6 verified live; Task 7 (onboarding) happy-path verified (2026-06-20).** Tasks 1–4 (DB-free primitives: `rbac`/`password`/`jwt` + `docker-compose.dev.yml`) are shipped and unit-tested. Tasks 5–7 (AuthModule login, guards, invite-only onboarding) — previously coded-but-unrun — are now **driven end-to-end against the live Railway DB** by the INS-001 smoke loop (`apps/api/scripts/smoke-loop.mjs`): login → JWT → `/auth/me`, `JwtAuthGuard`+`RolesGuard` across `PLATFORM_ADMIN`/`ORG_OWNER`, tenant scoping, and create-org → invite → accept → login. **Still pending:** token **refresh**, the **negative** RBAC matrix (401/403/cross-org) — [INS-009](../../future/BACKLOG.md) — and invite/magic-link **email** delivery — [INS-004](../../future/BACKLOG.md). Current state: [STATUS.md](../../STATUS.md).
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development or executing-plans. TDD throughout. Checkbox steps.
 
