@@ -14,9 +14,9 @@ const lbl: CSSProperties = { fontSize: 12, fontWeight: 550, color: ui.ink, displ
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; invited?: string; expired?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, invited, expired } = await searchParams;
 
   async function login(formData: FormData) {
     'use server';
@@ -45,6 +45,16 @@ export default async function LoginPage({
         </div>
 
         <form action={login} style={{ padding: '22px 28px' }}>
+          {expired && (
+            <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 8, background: '#FFF7ED', color: '#92400E', fontSize: 12.5, fontWeight: 500 }}>
+              Your session expired. Please sign in again.
+            </div>
+          )}
+          {invited && (
+            <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 8, background: '#F0FDF4', color: '#16A34A', fontSize: 12.5, fontWeight: 500 }}>
+              Account activated! Sign in with your new password.
+            </div>
+          )}
           {error && (
             <div style={{ marginBottom: 16, padding: '10px 12px', borderRadius: 8, background: '#FBEAEA', color: '#B42318', fontSize: 12.5, fontWeight: 500 }}>
               Invalid email or password.

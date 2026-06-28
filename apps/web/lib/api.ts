@@ -2,43 +2,7 @@ import { auth } from './auth';
 
 const API_URL = process.env.INSPECT_API_URL ?? 'http://localhost:3000';
 
-/** Current session's API access token (server-side only). */
-export async function apiToken(): Promise<string | null> {
-  const session = (await auth()) as unknown as { accessToken?: string } | null;
-  return session?.accessToken ?? null;
-}
-
-/**
- * Server-side GET against the NestJS API with the session bearer token.
- * Always no-store (live data) — pages that use it are dynamic.
- */
-export async function apiGet<T>(path: string): Promise<T> {
-  const token = await apiToken();
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    cache: 'no-store'
-  });
-  if (!res.ok) {
-    throw new Error(`API GET ${path} failed: ${res.status}`);
-  }
-  return (await res.json()) as T;
-}
-
-/**
- * Load live data from the API, falling back to design demo data when the API is
- * unreachable or the caller is unauthenticated (keeps previews working offline).
- * Returns `{ data, live }` so the UI can badge the source if it wants.
- */
-export async function loadOrFallback<T>(path: string, fallback: T): Promise<{ data: T; live: boolean }> {
-  try {
-    const data = await apiGet<T>(path);
-    return { data, live: true };
-  } catch {
-    return { data: fallback, live: false };
-  }
-}
-
-/** Thrown by the write helpers on a non-2xx response; carries the API's message + status. */
+/** Thrown by all API helpers on a non-2xx response; carries the HTTP status. */
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -48,6 +12,85 @@ export class ApiError extends Error {
   ) {
     super(message);
     this.name = 'ApiError';
+  }
+}
+
+/** Current session's API access token (server-side only). */
+export async function apiToken(): Promise<string | null> {
+  const session = (await auth()) as unknown as { accessToken?: string } | null;
+  return session?.accessToken ?? null;
+}
+
+/**
+ * Unauthenticated GET — for public endpoints (guest portal, verify).
+ * Does NOT call auth(); safe to use from pages with no session.
+ */
+export async function apiGetPublic<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`API GET ${path} failed: ${res.status}`);
+  return (await res.json()) as T;
+}
+
+/**
+ * Unauthenticated POST — for public endpoints (accept invitation).
+ */
+export async function apiPostPublic<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const parsed = await res.json() as { message?: unknown };
+      const m = parsed.message;
+      detail = Array.isArray(m) ? m.join(', ') : typeof m === 'string' ? m : '';
+    } catch { /* non-JSON */ }
+    throw new Error(detail || `API POST ${path} failed: ${res.status}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+/**
+ * Server-side GET against the NestJS API with the session bearer token.
+ * Always no-store (live data) — pages that use it are dynamic.
+ * Throws ApiError on non-2xx so callers can distinguish 401 from network errors.
+ */
+export async function apiGet<T>(path: string): Promise<T> {
+  const token = await apiToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    cache: 'no-store'
+  });
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const parsed = await res.json() as { message?: unknown };
+      const m = parsed.message;
+      detail = Array.isArray(m) ? m.join(', ') : typeof m === 'string' ? m : '';
+    } catch { /* non-JSON */ }
+    throw new ApiError(res.status, path, detail || `API GET ${path} failed: ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+/**
+ * Load live data from the API, falling back to design demo data when the API is
+ * unreachable or the caller is unauthenticated (keeps previews working offline).
+ * Returns `{ data, live }` so the UI can badge the source if it wants.
+ * Re-throws 401/403 — those are auth failures, not "API offline"; the layout
+ * intercepts these before any page renders (see ConsoleLayout).
+ */
+export async function loadOrFallback<T>(path: string, fallback: T): Promise<{ data: T; live: boolean }> {
+  try {
+    const data = await apiGet<T>(path);
+    return { data, live: true };
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) throw e;
+    return { data: fallback, live: false };
   }
 }
 
@@ -309,4 +352,24 @@ export interface ApiVerifyResult {
   reportId?: string | null;
   inspectionId?: string | null;
   generatedAt?: string | null;
+}
+
+export interface ApiGuestReport {
+  id: string;
+  reportNo?: string | null;
+  generatedAt: string;
+  contentHash?: string | null;
+  pdfStorageKey?: string | null;
+  verificationToken?: string | null;
+  canonicalSnapshot?: Record<string, unknown> | null;
+  brandingSnapshot?: { logoUrl?: string | null; primaryColor?: string | null } | null;
+}
+
+export interface ApiInvitation {
+  id: string;
+  token: string;
+  email: string;
+  role: 'INSPECTOR' | 'QA_MANAGER' | 'ORG_OWNER';
+  expiresAt: string;
+  orgId: string;
 }

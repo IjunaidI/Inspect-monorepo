@@ -145,7 +145,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§6/§11)
 
 ### INS-025 · Buyer guest portal fully static (no token auth, no real fetch/download)   [HIGH]
-- status: todo
+- status: done            # 2026-06-28: `/portal?token=TOKEN` wired — server component reads token, calls GET /guest/reports?token=… (unauthenticated via apiGetPublic), maps canonicalSnapshot+brandingSnapshot → BrandedReportData; PortalClient renders sidebar list + BrandedReport panel; error cards for missing/expired tokens; Verify link to /r/:verificationToken; Download PDF enabled when pdfStorageKey set.
 - area: Guest portal
 - evidence: `apps/web/app/portal/page.tsx:8-13,88` — `reports[]` hardcoded, Download PDF has no `onClick`, guest identity hardcoded, no token/searchParams.
 - problem: The read-only buyer portal does not authenticate via magic-link token, does not fetch a buyer-scoped report list, and cannot download a real PDF, so the buyer-facing deliverable is non-functional.
@@ -284,7 +284,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md)
 
 ### INS-029 · Invite-user and accept-invitation flows unwired on web   [MEDIUM]
-- status: todo
+- status: done            # 2026-06-28: Invite user button on /users opens inline form → POST /users/invite → shows copyable link (email delivery pending INS-004). /invite?token=...&email=...&role=... accept page reads params, AcceptForm client component POSTs to /invitations/accept via server action, redirects to /login?invited=1 with success banner.
 - area: Tenancy & onboarding
 - evidence: `apps/web/app/(console)/users/page.tsx:56` Invite user button no `onClick`; `apps/web/app/invite/page.tsx:45` Accept invitation raw button no `onClick`, no token from `searchParams`, inputs `defaultValue`.
 - problem: Org Owners cannot invite users and invitees cannot accept (set name/password, activate account) from the web, so invite-only onboarding cannot complete through the UI.
@@ -293,7 +293,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../in-progress/plans/2026-06-06-inspect-phase2-auth-tenancy.md](../in-progress/plans/2026-06-06-inspect-phase2-auth-tenancy.md) (Task 7)
 
 ### INS-030 · Change-user-role and Add/Import workspace actions unwired   [MEDIUM]
-- status: todo
+- status: done            # 2026-06-28: Per-row role <select> on /users live-patches via PATCH /users/:id/role. Deactivate action wired via MoreVertical menu. Add Buyer/Supplier now wired (done in workspace directory plan, 2026-06-28). CSV import remains out-of-scope for MVP.
 - area: Web console
 - evidence: `apps/web/app/(console)/users/page.tsx:116-121` role "dropdown" is a static div (no PATCH); `apps/web/app/(console)/dashboard/page.tsx:53-54,137` Add Buyer/Add Supplier/Import CSV buttons no `onClick`.
 - problem: Per-row role changes and creating buyers/suppliers (and CSV import) do nothing, so the workspace cannot be administered from the UI even though the CRUD endpoints exist.
