@@ -1,0 +1,66 @@
+'use server';
+
+import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
+import { apiPost, apiDelete, ApiError } from '@/lib/api';
+
+export interface PresetStepInput {
+  zoneName: string;
+  description?: string;
+  referenceImageUrls?: string[];
+  requiredShotCount?: number;
+  measurementFields?: { label: string; unit?: string }[];
+  allowedDefectCatalogIds?: string[];
+}
+
+export interface CreatePresetInput {
+  name: string;
+  description?: string;
+  aqlLevel?: string;
+  steps: PresetStepInput[];
+}
+
+const msg = (e: unknown, fb: string) =>
+  e instanceof ApiError || e instanceof Error ? e.message : fb;
+
+export async function createPreset(
+  input: CreatePresetInput,
+): Promise<{ error?: string }> {
+  if (!input.name.trim()) return { error: 'Preset name is required' };
+  if (!input.steps.length) return { error: 'Add at least one loop' };
+  for (const s of input.steps) {
+    if (!s.zoneName.trim()) return { error: 'Each loop must have a name' };
+  }
+  try {
+    await apiPost<{ id: string }>('/loop-presets', input);
+  } catch (e) {
+    return { error: msg(e, 'create failed') };
+  }
+  redirect('/presets');
+}
+
+export async function archivePreset(id: string): Promise<{ error?: string }> {
+  try {
+    await apiDelete(`/loop-presets/${id}`);
+    revalidatePath('/presets');
+    return {};
+  } catch (e) {
+    return { error: msg(e, 'archive failed') };
+  }
+}
+
+export async function createDefect(
+  name: string,
+  defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR',
+): Promise<{ data?: { id: string; name: string; defaultSeverity: string }; error?: string }> {
+  if (!name.trim()) return { error: 'Defect name is required' };
+  try {
+    const d = await apiPost<{ id: string; name: string; defaultSeverity: string }>(
+      '/defect-catalog',
+      { name: name.trim(), defaultSeverity },
+    );
+    return { data: d };
+  } catch (e) {
+    return { error: msg(e, 'create defect failed') };
+  }
+}

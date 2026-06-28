@@ -99,20 +99,74 @@ export interface ApiBuyer {
   name: string;
   logoUrl?: string | null;
   primaryColor?: string | null;
+  branding?: Record<string, unknown> | null;
+  defaultLoopPresetId?: string | null;
 }
 export interface ApiSupplier {
   id: string;
   name: string;
   address?: string | null;
-  gps?: unknown;
+  gps?: { lat: number; lng: number } | null;
+}
+export interface ApiProduct {
+  id: string;
+  styleNumber: string;
+  description?: string | null;
+}
+export interface ApiBuyerGuest {
+  id: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
 }
 export interface ApiLoopPreset {
   id: string;
   name: string;
   version: number;
   description?: string | null;
+  aqlLevel?: string | null;
   isArchived: boolean;
+  updatedAt?: string;
   _count?: { steps: number };
+}
+
+export interface ApiMeasurementField {
+  id: string;
+  label: string;
+  unit?: string | null;
+  position: number;
+}
+
+export interface ApiAllowedDefect {
+  id: string;
+  defectCatalog: {
+    id: string;
+    name: string;
+    defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  };
+}
+
+export interface ApiPresetStep {
+  id: string;
+  zoneName: string;
+  description?: string | null;
+  referenceImageUrls: string[];
+  requiredShotCount: number;
+  position: number;
+  measurementFields: ApiMeasurementField[];
+  allowedDefects: ApiAllowedDefect[];
+}
+
+export interface ApiLoopPresetDetail extends ApiLoopPreset {
+  steps: ApiPresetStep[];
+}
+
+export interface ApiDefectCatalog {
+  id: string;
+  name: string;
+  defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  scope: 'GLOBAL' | 'ORG';
+  isArchived: boolean;
 }
 export interface ApiUser {
   id: string;
@@ -139,10 +193,14 @@ export interface ApiInspection {
   product?: { id: string; styleNumber: string } | null;
   purchaseOrder?: { id: string; poNumber: string } | null;
   createdAt?: string;
+  loops?: ApiInspectionLoop[];
+  inspectorId?: string | null;
+  supersedesInspectionId?: string | null;
 }
 export interface ApiPurchaseOrder {
   id: string;
   poNumber: string;
+  totalQuantity?: number | null;
   buyer?: { id: string; name: string } | null;
   supplier?: { id: string; name: string } | null;
   product?: { id: string; styleNumber: string } | null;
@@ -151,4 +209,104 @@ export interface AqlPreview {
   sampleSizeCodeLetter: string;
   sampleSize: number;
   perClass: Record<'critical' | 'major' | 'minor', { aql: number; ac: number; re: number }>;
+}
+
+// ── Populate API shapes ──
+export interface PresignResult {
+  storageKey: string;
+  uploadUrl: string;
+  method: 'PUT';
+}
+
+export interface RegisterPhotoInput {
+  storageKey: string;
+  contentHash: string;
+  inspectionLoopId?: string;
+  thumbnailKey?: string;
+  capturedAt?: string;
+  deviceId?: string;
+  gps?: string;
+  exif?: Record<string, unknown>;
+  clientRequestId?: string;
+}
+
+export interface AddDefectInput {
+  defectCatalogId?: string;
+  customText?: string;
+  severity?: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  inspectionLoopId?: string;
+  notes?: string;
+  photoIds?: string[];
+}
+
+export interface AddMeasurementInput {
+  inspectionLoopId: string;
+  label: string;
+  recordedValue?: string;
+  unit?: string;
+  notes?: string;
+}
+
+export interface ApiPhoto {
+  id: string;
+  storageKey: string;
+  contentHash?: string | null;
+  inspectionLoopId?: string | null;
+  capturedAt?: string | null;
+  clientRequestId?: string | null;
+}
+
+export interface ApiDefectCatalogItem {
+  id: string;
+  name: string;
+  severity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  category?: string | null;
+}
+
+export interface ApiDefectInstance {
+  id: string;
+  severity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  defectCatalog?: { id: string; name: string } | null;
+  customText?: string | null;
+  inspectionLoopId?: string | null;
+  notes?: string | null;
+}
+
+export interface ApiMeasurement {
+  id: string;
+  label: string;
+  recordedValue?: string | null;
+  unit?: string | null;
+  inspectionLoopId?: string | null;
+}
+
+export interface ApiInspectionLoop {
+  id: string;
+  name: string;
+  orderIndex: number;
+  requiredPhotoCount?: number | null;
+  photos?: ApiPhoto[];
+  defects?: ApiDefectInstance[];
+  measurements?: ApiMeasurement[];
+}
+
+export interface ApiReport {
+  id: string;
+  inspectionId: string;
+  reportNo?: string | null;
+  canonicalSnapshot?: Record<string, unknown> | null;
+  contentHash?: string | null;
+  signatureHex?: string | null;
+  pdfStorageKey?: string | null;
+  generatedAt: string;
+  generatedBy?: { id: string; name: string } | null;
+}
+
+export interface ApiVerifyResult {
+  valid: boolean;
+  hashMatches: boolean;
+  signatureValid: boolean;
+  reportId?: string | null;
+  inspectionId?: string | null;
+  generatedAt?: string | null;
 }

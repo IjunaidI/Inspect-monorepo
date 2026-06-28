@@ -8,7 +8,9 @@ import {
   Building2,
   ChevronDown,
   ClipboardList,
+  FileText,
   LogOut,
+  Package,
   Repeat,
   Search,
   Settings,
@@ -202,6 +204,8 @@ const NAV = [
   { key: 'directory', label: 'Buyers & Suppliers', icon: Building2, href: '/dashboard' },
   { key: 'inspections', label: 'Inspections', icon: ClipboardList, href: '/inspections' },
   { key: 'presets', label: 'Loop Presets', icon: Repeat, href: '/presets' },
+  { key: 'products', label: 'Products', icon: Package, href: '/products' },
+  { key: 'purchase-orders', label: 'Purchase Orders', icon: FileText, href: '/purchase-orders' },
   { key: 'users', label: 'Users & Roles', icon: Users, href: '/users' },
   { key: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ] as const;

@@ -127,7 +127,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md) (Phase B) — **prerequisite for INS-023/024/026/027/029/030.**
 
 ### INS-023 · Populate screen fully static (no upload/tag/measure/submit)   [HIGH]
-- status: todo
+- status: done            # 2026-06-28: parameterized `/inspections/[id]/populate` wired — PLATFORM_ADMIN-gated server page loads inspection + defect catalog; `populate-workspace.tsx` client component drives loop sidebar, photo presign+register, defect tag (catalog + custom), measurement save, and submit-for-review via Server Actions; photo byte PUT to MinIO gated on MinIO running (INS-023 MinIO infra). DB-side (presign metadata + defect + measurement) works without MinIO. `pnpm type-check` clean, 100 API tests green.
 - area: Web console
 - evidence: `apps/web/app/(console)/populate/page.tsx:57-58,104` — Save / Submit / Upload buttons have no handlers; all loop/shot/tag/measurement data is hardcoded.
 - problem: The Platform-Admin populate flow — the one role that owns photo upload, defect tagging, measurements, and submit-for-review — does nothing on the web; the backend populate service is unreachable from the UI.
@@ -136,7 +136,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§6/§11)
 
 ### INS-024 · Loop-preset builder static (no persistence)   [HIGH]
-- status: todo
+- status: done    # 2026-06-28: Full builder client component wired — useState/useTransition, loop sidebar, +/− shot counter, togglable defect chips (grouped by severity from live catalog), measurement fields, custom defect creation, createPreset server action with redirect on success. /presets/new?from=:id seeds builder from existing preset (new-version flow). /presets/[id] detail page shows read-only step view. List page has search (client-side) + sort + MoreVertical menu (archive + duplicate).
 - area: Web console
 - evidence: `apps/web/app/(console)/presets/new/page.tsx:66-67,139,175,193` — Cancel/Save/Add buttons have no `onClick`; inputs are `defaultValue`; "Saved 2 min ago" is mock.
 - problem: The preset builder cannot create/update presets or add loops/shots/defects/measurements, so the versioned loop-preset feature has no usable UI despite a working backend service.
@@ -230,7 +230,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§7)
 
 ### INS-017 · Public report verification page UI missing   [MEDIUM]
-- status: todo
+- status: done            # 2026-06-28: public `app/r/[token]/page.tsx` built outside `(console)` route group — no auth header, plain fetch to `/reports/verify/:token`; renders verification badge (all-green / red), sub-checks (record found, hash matches, signature valid), provenance block; error state for invalid tokens. `pnpm type-check` clean.
 - area: Reports & verification
 - evidence: `apps/web` has no `/reports/verify` route; `reports.service` signs but there is no public token-verify surface in the console (backend `/reports/verify/:token` exists).
 - problem: A buyer is supposed to verify a report via a public token without trusting the portal, but there is no public page that re-hashes the PDF and checks the Ed25519 signature.
@@ -315,7 +315,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md) — depends on INS-005.
 
 ### INS-032 · Search inputs and filter chips inert across console   [LOW]
-- status: todo
+- status: in-progress     # 2026-06-28: `?status=` filter wired on inspections list; presets list now has live search+sort (client-side in PresetsList). Remaining: search on dashboard/users/portal pages.
 - area: Web console
 - evidence: `dashboard/page.tsx:74,77-78`; `presets/page.tsx:67,72`; `users/page.tsx:76`; `portal/page.tsx:58` — inputs/chips/sort dropdowns have no `value`/`onChange`.
 - problem: Search boxes, All/Active chips, sort dropdowns, tabs, and pagination across the console have no handlers, so users cannot filter or navigate large lists.
@@ -324,7 +324,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md)
 
 ### INS-033 · Branded-report console preview uses static data   [LOW]
-- status: todo
+- status: done            # 2026-06-28: `BrandedReport` refactored to accept `BrandedReportData` typed prop (hardcoded consts removed); `/inspections/[id]/report` page POSTs to generate (idempotent), maps live inspection+report to `BrandedReportData`, renders with real buyer/PO/AQL/tamper-proof fields. PDF download gated on INS-003. Old `/report` stub updated to pass inline static data prop. `pnpm type-check` clean.
 - area: Reports & verification
 - evidence: `apps/web/app/(console)/report/page.tsx:1-11` renders `<BrandedReport>` from static `reportData`, no API import, no inspection id.
 - problem: The console report preview shows hardcoded content rather than a real inspection's data, so it cannot be used to review an actual report.

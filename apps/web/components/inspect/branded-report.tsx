@@ -2,29 +2,56 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Check, Lock, X } from 'lucide-react';
 import { Mono, SeverityTag, UnverifiedBadge } from './shell';
 import { aqlPlan, mono, severity, ui, type SeverityKey } from './tokens';
+import type { ApiPhoto, ApiMeasurement } from '@/lib/api';
 
-export const reportData = {
-  buyer: { name: 'Nordvik Retail Group', initials: 'NV', color: '#1457A3', loc: 'Oslo, Norway' },
+export interface BrandedReportData {
+  buyer: {
+    name: string;
+    initials: string;
+    color: string;
+    loc?: string | null;
+  };
   meta: {
-    reportNo: 'IR-2026-04812-F',
-    po: 'PO-2026-04812',
-    product: "Men's Knit Polo Shirt",
-    sku: 'NV-KP-2241',
-    supplier: 'Tirupur Knits Unit-3',
-    supplierLoc: 'Tirupur, India',
-    inspector: 'Deepak Menon',
-    type: 'Pre-shipment (FRI)',
-    date: '2026-05-09',
-    gps: '11.1085° N, 77.3411° E',
-  },
-  conclusion: 'fail' as 'fail' | 'pass',
-};
-
-const reportClasses: { sev: SeverityKey; found: number; ac: number; re: number }[] = [
-  { sev: 'critical', found: 0, ac: 0, re: 1 },
-  { sev: 'major', found: 9, ac: 7, re: 8 },
-  { sev: 'minor', found: 6, ac: 10, re: 11 },
-];
+    reportNo?: string | null;
+    po: string;
+    product: string;
+    sku?: string | null;
+    supplier: string;
+    supplierLoc?: string | null;
+    inspector?: string | null;
+    type: string;
+    date: string;
+    gps?: string | null;
+  };
+  conclusion: 'pass' | 'fail' | 'hold';
+  qaRemarks?: string | null;
+  samplingPlan?: {
+    sampleSize: number;
+    codeLetter: string;
+    lotSize: number;
+  } | null;
+  classes: {
+    sev: 'critical' | 'major' | 'minor';
+    aql: number | string;
+    found: number;
+    ac: number;
+    re: number;
+  }[];
+  photos?: {
+    loop: string;
+    shots: ApiPhoto[];
+    flaggedCount: number;
+  }[];
+  measurements?: {
+    loop: string;
+    items: ApiMeasurement[];
+  }[];
+  tamperProof?: {
+    contentHash?: string | null;
+    signedBy?: string | null;
+    signedAt?: string | null;
+  } | null;
+}
 
 function ReportSection({ no, title, color, children, right }: { no: number; title: string; color: string; children: ReactNode; right?: ReactNode }) {
   return (
@@ -39,21 +66,28 @@ function ReportSection({ no, title, color, children, right }: { no: number; titl
   );
 }
 
-export function BrandedReport({ width = 900 }: { width?: number | string }) {
-  const b = reportData.buyer;
-  const m = reportData.meta;
+export function BrandedReport({
+  data,
+  width = 900,
+}: {
+  data: BrandedReportData;
+  width?: number | string;
+}) {
+  const b = data.buyer;
+  const m = data.meta;
   const C = b.color;
-  const fail = reportData.conclusion === 'fail';
+  const fail = data.conclusion === 'fail';
+  const hold = data.conclusion === 'hold';
 
   const metaPairs: [string, string, boolean][] = [
     ['Purchase order', m.po, true],
     ['Product', m.product, false],
-    ['Style / SKU', m.sku, true],
-    ['Supplier', `${m.supplier} · ${m.supplierLoc}`, false],
-    ['Inspector', m.inspector, false],
+    ['Style / SKU', m.sku ?? '—', true],
+    ['Supplier', [m.supplier, m.supplierLoc].filter(Boolean).join(' · ') || '—', false],
+    ['Inspector', m.inspector ?? '—', false],
     ['Inspection type', m.type, false],
     ['Date', m.date, true],
-    ['Location (GPS)', m.gps, true],
+    ['Location (GPS)', m.gps ?? '—', true],
   ];
 
   const kv = (k: string, v: string, isMono: boolean) => (
@@ -62,6 +96,13 @@ export function BrandedReport({ width = 900 }: { width?: number | string }) {
       <span style={{ fontSize: 13, color: ui.ink, fontWeight: 500, ...(isMono ? mono : {}) }}>{v}</span>
     </div>
   );
+
+  const conclusionColor = fail ? severity.critical.fg : hold ? '#B5791A' : '#1F6B43';
+  const conclusionBg = fail ? severity.critical.bg : hold ? '#FAF1E2' : '#EAF6F0';
+  const conclusionBorder = fail ? '#F1C9C5' : hold ? '#EBD9B4' : '#BEE3CD';
+  const conclusionLabel = fail ? 'REJECTED' : hold ? 'HOLD' : 'ACCEPTED';
+  const conclusionIcon = fail || hold ? <X size={17} color="#fff" /> : <Check size={17} color="#fff" />;
+  const conclusionDot = fail ? severity.critical.dot : hold ? '#B5791A' : '#1F8A4C';
 
   return (
     <div style={{ width, background: '#fff', fontFamily: ui.font, color: ui.ink, boxSizing: 'border-box', fontFeatureSettings: '"cv11", "ss01"' }}>
@@ -76,22 +117,24 @@ export function BrandedReport({ width = 900 }: { width?: number | string }) {
           </div>
           <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
             <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Report no.</div>
-            <div style={{ ...mono, fontSize: 14, fontWeight: 600, marginTop: 2 }}>{m.reportNo}</div>
+            <div style={{ ...mono, fontSize: 14, fontWeight: 600, marginTop: 2 }}>{m.reportNo ?? '—'}</div>
           </div>
         </div>
       </div>
 
-      <div style={{ padding: '14px 48px', display: 'flex', alignItems: 'center', gap: 14, background: fail ? severity.critical.bg : '#EAF6F0', borderBottom: `1px solid ${fail ? '#F1C9C5' : '#BEE3CD'}` }}>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: fail ? severity.critical.dot : '#1F8A4C', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {fail ? <X size={17} color="#fff" /> : <Check size={17} color="#fff" />}
+      <div style={{ padding: '14px 48px', display: 'flex', alignItems: 'center', gap: 14, background: conclusionBg, borderBottom: `1px solid ${conclusionBorder}` }}>
+        <div style={{ width: 30, height: 30, borderRadius: 8, background: conclusionDot, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {conclusionIcon}
         </div>
         <div>
-          <span style={{ fontSize: 10.5, fontWeight: 600, color: fail ? severity.critical.fg : '#1F6B43', textTransform: 'uppercase', letterSpacing: 0.6 }}>QA conclusion</span>
-          <div style={{ fontSize: 17, fontWeight: 700, color: fail ? severity.critical.fg : '#1F6B43', letterSpacing: -0.2 }}>{fail ? 'REJECTED' : 'ACCEPTED'}</div>
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: conclusionColor, textTransform: 'uppercase', letterSpacing: 0.6 }}>QA conclusion</span>
+          <div style={{ fontSize: 17, fontWeight: 700, color: conclusionColor, letterSpacing: -0.2 }}>{conclusionLabel}</div>
         </div>
-        <div style={{ marginLeft: 'auto', fontSize: 12, color: ui.sub, textAlign: 'right', maxWidth: 320 }}>
-          Major defect count reaches the reject point. Re-work and re-inspection required.
-        </div>
+        {data.qaRemarks && (
+          <div style={{ marginLeft: 'auto', fontSize: 12, color: ui.sub, textAlign: 'right', maxWidth: 320 }}>
+            {data.qaRemarks}
+          </div>
+        )}
       </div>
 
       <div style={{ padding: '8px 48px 40px' }}>
@@ -101,7 +144,12 @@ export function BrandedReport({ width = 900 }: { width?: number | string }) {
 
         <ReportSection no={1} title="Sampling plan (AQL)" color={C} right={<span style={{ fontSize: 11, color: ui.faint }}>ANSI/ASQ Z1.4 · single, normal</span>}>
           <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-            {([['Level', aqlPlan.level], ['Code letter', aqlPlan.codeLetter], ['Lot size', '3,200'], ['Sample size', aqlPlan.sampleSize]] as const).map(([k, v]) => (
+            {([
+              ['Level', aqlPlan.level],
+              ['Code letter', data.samplingPlan?.codeLetter ?? aqlPlan.codeLetter],
+              ['Lot size', data.samplingPlan?.lotSize != null ? String(data.samplingPlan.lotSize) : '—'],
+              ['Sample size', data.samplingPlan?.sampleSize != null ? String(data.samplingPlan.sampleSize) : aqlPlan.sampleSize],
+            ] as const).map(([k, v]) => (
               <div key={k} style={{ flex: 1, background: ui.fill, border: `1px solid ${ui.line}`, borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: ui.faint, textTransform: 'uppercase', letterSpacing: 0.5 }}>{k}</div>
                 <div style={{ ...mono, fontSize: 17, fontWeight: 600, marginTop: 3 }}>{v}</div>
@@ -112,12 +160,12 @@ export function BrandedReport({ width = 900 }: { width?: number | string }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr 1fr 1.1fr', padding: '9px 14px', fontSize: 10.5, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, background: ui.fill }}>
               <span>Class</span><span style={{ textAlign: 'right' }}>AQL</span><span style={{ textAlign: 'right' }}>Found</span><span style={{ textAlign: 'right' }}>Ac</span><span style={{ textAlign: 'right' }}>Re</span><span style={{ textAlign: 'right' }}>Result</span>
             </div>
-            {reportClasses.map((c, i) => {
+            {data.classes.map((c) => {
               const rej = c.found >= c.re;
               return (
                 <div key={c.sev} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr 1fr 1.1fr', alignItems: 'center', padding: '11px 14px', borderTop: `1px solid ${ui.lineSoft}` }}>
                   <span><SeverityTag sev={c.sev} /></span>
-                  <Mono style={{ textAlign: 'right', fontSize: 12.5, color: ui.sub }}>{aqlPlan.classes[i].aql}</Mono>
+                  <Mono style={{ textAlign: 'right', fontSize: 12.5, color: ui.sub }}>{String(c.aql)}</Mono>
                   <Mono style={{ textAlign: 'right', fontSize: 13.5, fontWeight: 700, color: rej ? severity.critical.fg : ui.ink }}>{c.found}</Mono>
                   <Mono style={{ textAlign: 'right', fontSize: 12.5, color: ui.sub }}>{c.ac}</Mono>
                   <Mono style={{ textAlign: 'right', fontSize: 12.5, color: ui.sub }}>{c.re}</Mono>
@@ -130,70 +178,76 @@ export function BrandedReport({ width = 900 }: { width?: number | string }) {
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28 }}>
           <ReportSection no={2} title="Quantity & carton check" color={C}>
-            {([['Cartons presented', '128'], ['Cartons opened', '13'], ['Quantity verified', '3,200 pcs'], ['Result', 'Matches PO']] as const).map(([k, v], i) => (
-              <div key={k} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: i < 3 ? `1px solid ${ui.lineSoft}` : 'none', fontSize: 13 }}>
+            {(['Quantity verified', 'Result'] as const).map((k, i) => (
+              <div key={k} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: i < 1 ? `1px solid ${ui.lineSoft}` : 'none', fontSize: 13 }}>
                 <span style={{ color: ui.sub, flex: 1 }}>{k}</span>
-                <span style={{ fontWeight: 600, ...(i < 3 ? mono : {}), color: i === 3 ? '#1F8A4C' : ui.ink } as CSSProperties}>{v}</span>
+                <span style={{ fontWeight: 600, ...(i < 1 ? mono : {}), color: i === 1 ? '#1F8A4C' : ui.ink } as CSSProperties}>
+                  {i === 0 ? (data.samplingPlan?.lotSize != null ? `${data.samplingPlan.lotSize} pcs` : '—') : 'See AQL'}
+                </span>
               </div>
             ))}
           </ReportSection>
 
           <ReportSection no={3} title="Defect summary" color={C}>
-            {reportClasses.map((c, i) => (
+            {data.classes.map((c, i) => (
               <div key={c.sev} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: i < 2 ? `1px solid ${ui.lineSoft}` : 'none' }}>
                 <SeverityTag sev={c.sev} />
                 <Mono style={{ marginLeft: 'auto', fontSize: 15, fontWeight: 700, color: c.found >= c.re ? severity.critical.fg : ui.ink }}>{c.found}</Mono>
               </div>
             ))}
-            <div style={{ marginTop: 8, fontSize: 11.5, color: ui.faint }}>Defects found within the 200-pc sample.</div>
+            <div style={{ marginTop: 8, fontSize: 11.5, color: ui.faint }}>Defects found within the sample.</div>
           </ReportSection>
         </div>
 
-        <ReportSection no={4} title="Photo evidence" color={C} right={<UnverifiedBadge />}>
-          {[
-            { loop: 'Loop 01 · Fabric inspection', shots: ['#C8D0DA,#8C95A3', '#D2C9BE,#9A8E7E', '#BFC8D2,#7E8794', '#CBD2C5,#8B9483'], flagged: 0 },
-            { loop: 'Loop 03 · Collar & neckline', shots: ['#C8D0DA,#8C95A3', '#D2C9BE,#9A8E7E', '#C4B7AA,#94806C'], flagged: 2 },
-          ].map((row, ri) => (
-            <div key={row.loop} style={{ marginBottom: ri === 0 ? 18 : 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600 }}>{row.loop}</span>
-                {row.flagged > 0 && <SeverityTag sev="major" dot={false}>{row.flagged} major flagged</SeverityTag>}
-              </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                {row.shots.map((g, i) => (
-                  <div key={i} style={{ flex: 1, borderRadius: 8, overflow: 'hidden', border: `1px solid ${ui.line}` }}>
-                    <div style={{ position: 'relative', height: 96, background: `linear-gradient(135deg, ${g})` }}>
-                      <div style={{ position: 'absolute', top: 6, left: 6 }}><UnverifiedBadge /></div>
-                    </div>
-                    <div style={{ padding: '6px 8px', fontSize: 10.5, color: ui.sub, ...mono }}>{String(i + 1).padStart(2, '0')} · {(96 + i).toString(16).toUpperCase()}KB</div>
+        {/* Photo evidence */}
+        {data.photos && data.photos.length > 0 && (
+          <ReportSection no={4} title="Photo evidence" color={C} right={<UnverifiedBadge />}>
+            {data.photos.map((row, ri) => (
+              <div key={row.loop} style={{ marginBottom: ri < data.photos!.length - 1 ? 18 : 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600 }}>{row.loop}</span>
+                  {row.flaggedCount > 0 && <SeverityTag sev="major" dot={false}>{row.flaggedCount} major flagged</SeverityTag>}
+                </div>
+                {row.shots.length === 0 ? (
+                  <div style={{ fontSize: 12, color: ui.faint, fontStyle: 'italic' }}>No photos uploaded yet (MinIO/INS-023 pending).</div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    {row.shots.map((photo, i) => (
+                      <div key={photo.id} style={{ flex: 1, borderRadius: 8, overflow: 'hidden', border: `1px solid ${ui.line}` }}>
+                        <div style={{ position: 'relative', height: 96, background: 'linear-gradient(135deg,#BFC8D2,#7E8794)' }}>
+                          <div style={{ position: 'absolute', top: 6, left: 6 }}><UnverifiedBadge /></div>
+                        </div>
+                        <div style={{ padding: '6px 8px', fontSize: 10.5, color: ui.sub, ...mono }}>{String(i + 1).padStart(2, '0')} · {photo.storageKey.slice(-8)}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </ReportSection>
-
-        <ReportSection no={5} title="Measurement sheet" color={C} right={<span style={{ fontSize: 11, color: ui.faint }}>Free-form · as recorded</span>}>
-          <div style={{ border: `1px solid ${ui.line}`, borderRadius: 8, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', padding: '9px 14px', fontSize: 10.5, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, background: ui.fill }}>
-              <span>Point</span><span style={{ textAlign: 'right' }}>Recorded</span><span style={{ textAlign: 'right' }}>Unit</span>
-            </div>
-            {([['Collar point length', '7.4', 'in'], ['Collar spread', '11.3', 'in'], ['Stitch density', '8', 'spi'], ['Sleeve length', '23.1', 'in'], ['Fabric weight', '182', 'GSM']] as [string, string, string][]).map((m) => (
-              <div key={m[0]} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', alignItems: 'center', padding: '10px 14px', borderTop: `1px solid ${ui.lineSoft}`, fontSize: 12.5 }}>
-                <span>{m[0]}</span>
-                <Mono style={{ textAlign: 'right', fontWeight: 600, color: ui.ink }}>{m[1]}</Mono>
-                <Mono style={{ textAlign: 'right', color: ui.sub }}>{m[2]}</Mono>
+                )}
               </div>
             ))}
-          </div>
-        </ReportSection>
+          </ReportSection>
+        )}
 
-        <ReportSection no={6} title="Workmanship & packaging notes" color={C}>
-          <div style={{ fontSize: 13, color: '#344054', lineHeight: 1.6 }}>
-            Collar alignment inconsistent across cartons 4–7; three units show visibly skewed collars. Stitch density on the placket measured below spec (8 spi vs 10). Packaging, polybags, and carton markings conform to buyer specification. Care labels present and correct.
-          </div>
-        </ReportSection>
+        {/* Measurement sheet */}
+        {data.measurements && data.measurements.length > 0 && (
+          <ReportSection no={5} title="Measurement sheet" color={C} right={<span style={{ fontSize: 11, color: ui.faint }}>Free-form · as recorded</span>}>
+            <div style={{ border: `1px solid ${ui.line}`, borderRadius: 8, overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', padding: '9px 14px', fontSize: 10.5, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, background: ui.fill }}>
+                <span>Point</span><span style={{ textAlign: 'right' }}>Recorded</span><span style={{ textAlign: 'right' }}>Unit</span>
+              </div>
+              {data.measurements.flatMap((row) =>
+                row.items.map((m) => (
+                  <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', alignItems: 'center', padding: '10px 14px', borderTop: `1px solid ${ui.lineSoft}`, fontSize: 12.5 }}>
+                    <span>{m.label}</span>
+                    <Mono style={{ textAlign: 'right', fontWeight: 600, color: ui.ink }}>{m.recordedValue ?? '—'}</Mono>
+                    <Mono style={{ textAlign: 'right', color: ui.sub }}>{m.unit ?? '—'}</Mono>
+                  </div>
+                ))
+              )}
+            </div>
+          </ReportSection>
+        )}
 
+        {/* Tamper-proof footer */}
         <div style={{ marginTop: 30, background: ui.lineSoft, border: `1px solid ${ui.line}`, borderRadius: 10, padding: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
           <Lock size={18} color={ui.sub} />
           <div style={{ flex: 1 }}>
@@ -201,11 +255,13 @@ export function BrandedReport({ width = 900 }: { width?: number | string }) {
             <div style={{ display: 'flex', gap: 20, marginTop: 6 }}>
               <div>
                 <span style={{ fontSize: 10.5, color: ui.faint }}>Content hash (SHA-256)</span>
-                <div style={{ ...mono, fontSize: 11.5, color: ui.ink, marginTop: 1 }}>a27f9c11·84e0·d3b6·5f02·c9a1</div>
+                <div style={{ ...mono, fontSize: 11.5, color: ui.ink, marginTop: 1 }}>{data.tamperProof?.contentHash ?? '—'}</div>
               </div>
               <div>
                 <span style={{ fontSize: 10.5, color: ui.faint }}>Signed by (Ed25519)</span>
-                <div style={{ fontSize: 11.5, color: ui.ink, marginTop: 1 }}>Aisha Khan, QA Manager · {m.date}</div>
+                <div style={{ fontSize: 11.5, color: ui.ink, marginTop: 1 }}>
+                  {data.tamperProof?.signedBy ?? '—'}{data.tamperProof?.signedAt ? ` · ${data.tamperProof.signedAt.slice(0, 10)}` : ''}
+                </div>
               </div>
             </div>
           </div>
@@ -215,7 +271,7 @@ export function BrandedReport({ width = 900 }: { width?: number | string }) {
           </div>
         </div>
         <div style={{ marginTop: 12, fontSize: 10.5, color: ui.faint, textAlign: 'center' }}>
-          Generated by Inspect · {reportData.buyer.name} · This report is read-only. Corrections are issued as a new linked re-inspection.
+          Generated by Inspect · {data.buyer.name} · This report is read-only. Corrections are issued as a new linked re-inspection.
         </div>
       </div>
     </div>

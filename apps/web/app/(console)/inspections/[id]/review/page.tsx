@@ -1,11 +1,15 @@
 import { ChevronRight, ClipboardList } from 'lucide-react';
 import { apiGet, type ApiInspection } from '@/lib/api';
-import { Mono, PageHead, SeverityTag } from '@/components/inspect/shell';
+import { Btn, Mono, PageHead, SeverityTag } from '@/components/inspect/shell';
 import { severity, ui, type SeverityKey } from '@/components/inspect/tokens';
 import { DecisionForm, SubmitForReview } from './decision-panel';
+import { ReInspectButton } from './re-inspect-button';
 
 const SUBMITTABLE = new Set(['DRAFT', 'ASSIGNED', 'IN_PROGRESS']);
 const DECIDABLE = new Set(['SUBMITTED', 'UNDER_REVIEW', 'HOLD']);
+const POPULATABLE = new Set(['DRAFT', 'ASSIGNED', 'IN_PROGRESS']);
+const REPORTABLE = new Set(['APPROVED', 'REPORT_ISSUED']);
+const REINSPECTABLE = new Set(['REJECTED', 'HOLD']);
 const CLASSES: SeverityKey[] = ['critical', 'major', 'minor'];
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
@@ -85,6 +89,23 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
               {r?.qaRemarks ? <div style={{ marginTop: 8, color: ui.ink }}>{r.qaRemarks}</div> : null}
             </div>
           )}
+
+          {/* Contextual action links */}
+          <div style={{ padding: '12px 20px', borderTop: `1px solid ${ui.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {POPULATABLE.has(inspection.status) && (
+              <Btn kind="ghost" href={`/inspections/${id}/populate`}>
+                Populate photos &amp; defects
+              </Btn>
+            )}
+            {REPORTABLE.has(inspection.status) && (
+              <Btn kind="ghost" href={`/inspections/${id}/report`}>
+                View / generate report
+              </Btn>
+            )}
+            {REINSPECTABLE.has(inspection.status) && (
+              <ReInspectButton id={id} />
+            )}
+          </div>
         </div>
       </div>
     </div>

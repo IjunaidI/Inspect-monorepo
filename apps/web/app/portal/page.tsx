@@ -1,8 +1,33 @@
 import type { CSSProperties } from 'react';
 import { Download, Eye, Lock, Search } from 'lucide-react';
 import { Mono } from '@/components/inspect/shell';
-import { BrandedReport, reportData } from '@/components/inspect/branded-report';
+import { BrandedReport, type BrandedReportData } from '@/components/inspect/branded-report';
 import { severity, ui } from '@/components/inspect/tokens';
+
+const portalBuyer = { name: 'Nordvik Retail Group', initials: 'NV', color: '#1457A3' };
+const portalReportNo = 'IR-2026-04812-F';
+
+const previewData: BrandedReportData = {
+  buyer: { ...portalBuyer, loc: 'Oslo, Norway' },
+  meta: {
+    reportNo: portalReportNo,
+    po: 'PO-2026-04812',
+    product: "Men's Knit Polo Shirt",
+    sku: 'NV-KP-2241',
+    supplier: 'Tirupur Knits Unit-3',
+    supplierLoc: 'Tirupur, India',
+    inspector: 'Deepak Menon',
+    type: 'Pre-shipment (FRI)',
+    date: '2026-05-09',
+    gps: '11.1085° N, 77.3411° E',
+  },
+  conclusion: 'fail',
+  classes: [
+    { sev: 'critical', aql: 0, found: 0, ac: 0, re: 1 },
+    { sev: 'major', aql: 2.5, found: 9, ac: 7, re: 8 },
+    { sev: 'minor', aql: 4.0, found: 6, ac: 10, re: 11 },
+  ],
+};
 
 type PortalStatus = 'pass' | 'fail' | 'hold';
 const reports: { no: string; po: string; product: string; type: string; date: string; status: PortalStatus; active?: boolean }[] = [
@@ -22,7 +47,7 @@ const chipStyle = (sc: { fg: string; bg: string }): CSSProperties => ({
 });
 
 export default function GuestPortalPage() {
-  const b = reportData.buyer;
+  const b = portalBuyer;
   const C = b.color;
   return (
     <div style={{ height: '100vh', background: '#EEF1F5', fontFamily: ui.font, fontSize: 13, color: ui.ink, display: 'flex', flexDirection: 'column' }}>
@@ -82,7 +107,7 @@ export default function GuestPortalPage() {
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ height: 52, background: '#fff', borderBottom: `1px solid ${ui.line}`, display: 'flex', alignItems: 'center', padding: '0 24px', gap: 12, flexShrink: 0 }}>
-            <Mono style={{ fontSize: 12.5, fontWeight: 600 }}>{reportData.meta.reportNo}</Mono>
+            <Mono style={{ fontSize: 12.5, fontWeight: 600 }}>{portalReportNo}</Mono>
             <span style={chipStyle(statusChip.fail)}>Rejected</span>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <button style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 11px', borderRadius: 8, fontWeight: 550, fontSize: 12.5, cursor: 'pointer', background: '#fff', color: ui.ink, border: `1px solid ${ui.line}`, fontFamily: 'inherit' }}>
@@ -92,7 +117,7 @@ export default function GuestPortalPage() {
           </div>
           <div style={{ flex: 1, overflow: 'auto', padding: 28, display: 'flex', justifyContent: 'center' }}>
             <div style={{ width: 760, maxWidth: '100%', boxShadow: '0 4px 24px rgba(11,18,32,0.12)', borderRadius: 8, overflow: 'hidden', height: 'fit-content', flexShrink: 0 }}>
-              <BrandedReport width="100%" />
+              <BrandedReport data={previewData} width="100%" />
             </div>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { apiGet, apiPost, ApiError, type AqlPreview } from '@/lib/api';
+import { apiGet, apiPost, ApiError, type AqlPreview, type ApiInspection } from '@/lib/api';
 
 const msg = (e: unknown, fallback: string) => (e instanceof ApiError || e instanceof Error ? e.message : fallback);
 
@@ -61,4 +61,31 @@ export async function decideInspection(_prev: unknown, formData: FormData): Prom
   } catch (e) {
     return { error: msg(e, 'decision failed') };
   }
+}
+
+export async function reInspection(id: string): Promise<{ error?: string }> {
+  let orig: ApiInspection;
+  try {
+    orig = await apiGet<ApiInspection>(`/inspections/${id}`);
+  } catch (e) {
+    return { error: msg(e, 'could not load original inspection') };
+  }
+  const poId = orig.purchaseOrder?.id;
+  if (!poId) return { error: 'No purchase order on original inspection' };
+  const snapshot = (orig as unknown as Record<string, unknown>);
+  const loopPresetId = (snapshot.loopPresetId as string | undefined) ??
+    ((snapshot.loopPresetSnapshot as Record<string, unknown> | null)?.id as string | undefined);
+  let newId: string;
+  try {
+    const created = await apiPost<{ id: string }>('/inspections', {
+      poId,
+      ...(loopPresetId ? { loopPresetId } : {}),
+      lotSize: orig.lotSize,
+      supersedesInspectionId: id,
+    });
+    newId = created.id;
+  } catch (e) {
+    return { error: msg(e, 're-inspection create failed') };
+  }
+  redirect(`/inspections/${newId}/review`);
 }
