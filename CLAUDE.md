@@ -24,10 +24,12 @@ single `pnpm install` at the root installs everything):
 
 Node ≥ 20, pnpm 9.12.0 (declared in root `package.json`).
 
-> **Maturity reality (2026-06-20):** the pure domain core (AQL, tamper-proof crypto, audit-chain, auth
-> primitives) is unit-tested and solid (97 tests). Everything DB-bound — auth round-trip, all CRUD, the
-> inspection lifecycle, populate, reports — **compiles and type-checks but has never run against a real
-> Postgres/Redis** ([INS-001](docs/future/BACKLOG.md)). Treat "it's implemented" as "the logic exists," not "it works." See STATUS.md.
+> **Maturity reality (2026-07-11):** the pure domain core (AQL, tamper-proof crypto, audit-chain, auth
+> primitives) is unit-tested and solid (135 unit tests). The DB-bound surface — auth round-trip incl. refresh,
+> CRUD create paths, the full inspection lifecycle, populate (incl. the S3 byte path), signed reports + public
+> verify — is **verified live**: a 36-test integration suite (`pnpm api test:integration`) runs green against a
+> real Postgres/Redis, locally and in CI ([INS-001](docs/future/BACKLOG.md)/INS-009 closed). Update/delete paths
+> and several service internals still lack specs (INS-034/INS-007/INS-019/INS-021). See STATUS.md.
 
 ## Common commands
 
@@ -36,15 +38,15 @@ Run from the **repo root** unless noted — Turbo fans tasks out across both app
 ### Root (Turbo)
 - `pnpm dev` — run API (`:3000`) + web (`:3001`) in watch mode together.
 - `pnpm build` — `nest build` + `next build` across the workspace.
-- `pnpm test` — runs each app's `test` (only `@inspect/api` has one: 97 Jest unit tests, no DB).
+- `pnpm test` — runs each app's `test` (only `@inspect/api` has one: 135 Jest unit tests, no DB).
 - `pnpm type-check` — strict `tsc --noEmit` across both apps.
-- `pnpm lint` — ESLint across both apps. `pnpm format` — Prettier write.
+- `pnpm lint` — **currently broken repo-wide** ([INS-048](docs/future/BACKLOG.md): ESLint 9 without a flat config; `next lint` deprecated). `pnpm format` — Prettier write.
 - `pnpm api <script>` / `pnpm web <script>` — shorthand for `pnpm --filter @inspect/api` / `@inspect/web`.
 
 ### API (`pnpm api <script>`, or `cd apps/api`)
 - `pnpm api dev` — `nest start --watch`. **Requires `DATABASE_URL` + `REDIS_URL`** or it throws on boot (see Gotchas).
-- `pnpm api test` — Jest unit tests (`src/**/*.spec.ts`, `testEnvironment: node`, **no DB**). 97 passing.
-- `pnpm api test:e2e` — Jest e2e (`test/jest-e2e.json`); currently one trivial spec ([INS-009](docs/future/BACKLOG.md)).
+- `pnpm api test` — Jest unit tests (`src/**/*.spec.ts`, `testEnvironment: node`, **no DB**). 135 passing.
+- `pnpm api test:integration` — 36-test DB-backed integration suite (`test/integration/`: negative RBAC matrix, token refresh, full core loop, tamper-evidence, byte upload). Needs a migrated+seeded `DATABASE_URL`+`REDIS_URL` (repo-root `.env` locally; service containers in CI — `.github/workflows/ci.yml`). The byte-upload spec self-skips without MinIO unless `REQUIRE_STORAGE=1`.
 - `pnpm api prisma:migrate` — `prisma migrate dev` (apply/author migrations against `DATABASE_URL`).
 - `pnpm api prisma:generate` — regenerate the Prisma client (also runs on `postinstall`).
 - `pnpm api prisma:studio` — Prisma Studio.
@@ -54,7 +56,7 @@ Run from the **repo root** unless noted — Turbo fans tasks out across both app
 - `pnpm web dev` — `next dev --turbopack -p 3001`. Talks to the API at `INSPECT_API_URL`; falls back to design demo data when the API is unreachable.
 - `pnpm web build` / `pnpm web lint` / `pnpm web type-check`. No unit-test runner on the web side.
 
-### First-run (once a DB exists — this is [INS-001](docs/future/BACKLOG.md))
+### First-run (local stack; the dev DB to date has been the Railway-managed one via the root `.env`)
 ```
 cp .env.example .env            # then ROTATE the committed secrets — see INS-002
 docker compose -f docker-compose.dev.yml up -d      # Postgres 16 + Redis 7 + MinIO
@@ -98,7 +100,7 @@ The correctness-critical logic lives as plain TypeScript under `src/`, consumed 
 
 - **Routing:** screens under `app/(console)/` (dashboard, inspections/new, presets, populate, review, report, users) and `app/{login,invite,portal,report}/`. `(console)` is a route group (shared shell layout), not a URL segment.
 - **Auth:** NextAuth v5 **Credentials** (`lib/auth.ts`) POSTs to the API `/auth/login`, then GETs `/auth/me`; the session carries the API-issued JWT + role + orgId. The API stays the canonical RBAC authority.
-- **Data layer:** `lib/api.ts` currently exposes **only `apiGet` + `loadOrFallback`** (live read with a hardcoded demo fallback). **There is no `apiPost/Put/Patch/Delete` helper yet** — adding it is [INS-022](docs/future/BACKLOG.md) and unblocks every write screen. Today **only the Login screen performs a live mutation**; ~8 screens are static design placeholders.
+- **Data layer:** `lib/api.ts` exposes `apiGet`/`loadOrFallback` (live read with demo fallback), the write helpers `apiPost/Put/Patch/Delete` + `ApiError` ([INS-022](docs/future/BACKLOG.md) done), and unauthenticated `apiGetPublic`/`apiPostPublic`. All major screens are wired live via Server Components (reads) + Server Actions (writes); the JWT stays server-side (but leaks via the session — [INS-045](docs/future/BACKLOG.md)).
 - **Design system:** `components/inspect/` (`tokens.ts`, `shell.tsx`, `branded-report.tsx`) — Inter + JetBrains Mono, `#037BF4` accent, hairline UI. `components/ui/` is shadcn/Radix. Don't introduce a second component vocabulary.
 
 ## Domain invariants (uphold these in every new write path)
@@ -117,11 +119,10 @@ back them yet — tracked as [INS-010..INS-018](docs/future/BACKLOG.md)); when y
 ## Gotchas
 
 - **The API won't boot without `DATABASE_URL` + `REDIS_URL`.** `CacheModule` throws `REDIS_URL is required`; Prisma needs `DATABASE_URL`. There is no dev-mode silent fallback — bring up `docker-compose.dev.yml` first.
-- **Nothing DB-bound has ever run** ([INS-001](docs/future/BACKLOG.md)). When you touch a DB-bound path, you are likely the first to execute it — verify against a real DB, don't assume "compiles" means "works."
+- **Verify DB-bound changes with the integration suite.** The core paths are proven live (INS-001 closed), but update/delete paths and service internals are thinner — run `pnpm api test:integration` (and extend it) rather than assuming "compiles" means "works." The bootstrap-admin password converges to `BOOTSTRAP_ADMIN_*` on every `prisma db seed` (by design — re-seed if login 401s after regenerating `.env`).
 - **One canonical schema.** `apps/api/prisma/schema.prisma` is the only Prisma schema. (The old root `LoopQC_schema.prisma` mirror was removed 2026-06-20 — don't recreate it.)
 - **`@inspect/shared-types` is built but unlinked** ([INS-008](docs/future/BACKLOG.md)) — both apps currently redeclare their own enums/DTOs, so the client/server contract can drift.
-- **The web client cannot write yet** ([INS-022](docs/future/BACKLOG.md)) — `lib/api.ts` is read-only. Don't assume a console button posts; most are inert placeholders.
-- **The console shell shows a hardcoded user** (`Riya Saraf/owner`) and has no sign-out ([INS-028](docs/future/BACKLOG.md)) — it does not yet reflect the real session.
+- **Local MinIO/Docker is still unavailable on this machine** — the byte-upload integration spec self-skips locally and runs for real in CI; local `docker-compose.dev.yml` requires Docker Desktop.
 - **Windows + pnpm:** if `pnpm` isn't on PATH, use `npx -y pnpm@9.12.0 <cmd>` or `apps/api/node_modules/.bin`. The API reads the **repo-root** `.env` (`../../.env`), not just `apps/api/.env`.
 
 ## Documentation workflow
