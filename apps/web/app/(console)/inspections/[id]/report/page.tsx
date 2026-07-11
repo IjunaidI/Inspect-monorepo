@@ -51,7 +51,8 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
       loc: null,
     },
     meta: {
-      reportNo: report?.reportNo,
+      // Synthetic display id — no reportNo column exists (documented as synthetic).
+      reportNo: report ? `IR-${report.id.slice(0, 8).toUpperCase()}` : undefined,
       po: inspection.purchaseOrder?.poNumber ?? '—',
       product: inspection.product?.styleNumber ?? '—',
       supplier: inspection.supplier?.name ?? '—',

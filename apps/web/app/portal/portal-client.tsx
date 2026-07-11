@@ -30,6 +30,8 @@ function mapToReportData(
   type Snap = {
     poNumber?: string | null;
     lotSize?: number | null;
+    product?: { styleNumber?: string | null; description?: string | null } | null;
+    supplier?: { name?: string | null } | null;
     aqlResult?: {
       qaDecision?: string | null;
       qaRemarks?: string | null;
@@ -61,10 +63,11 @@ function mapToReportData(
   return {
     buyer: { name: buyer.name, initials: initialsOf(buyer.name), color: buyer.color },
     meta: {
-      reportNo: r.reportNo ?? `IR-${r.id.slice(0, 8).toUpperCase()}`,
+      // Synthetic display id — no reportNo column exists (documented as synthetic).
+      reportNo: `IR-${r.id.slice(0, 8).toUpperCase()}`,
       po: snap.poNumber ?? '—',
-      product: '—',
-      supplier: '—',
+      product: snap.product?.styleNumber ?? snap.product?.description ?? '—',
+      supplier: snap.supplier?.name ?? '—',
       type: 'Pre-shipment',
       date: r.generatedAt.split('T')[0],
     },

@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useTransition, useEffect, useRef } from 'react';
-import { ArrowRight, ChevronDown, MoreVertical, Search } from 'lucide-react';
+import { ArrowRight, MoreVertical, Search } from 'lucide-react';
 import { Mono } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
 import { archivePreset } from './actions';
-import { industryTag, type PresetRow } from './page';
+import type { PresetRow } from './page';
 
 const card = { background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, padding: 18, display: 'flex', flexDirection: 'column' as const, gap: 12 };
 const monoChip = { fontSize: 11.5 };
@@ -42,7 +42,11 @@ export function PresetsList({ presets: initial, live }: { presets: PresetRow[]; 
 
   const filtered = presets
     .filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
-    .sort(sort === 'name' ? (a, b) => a.name.localeCompare(b.name) : () => 0);
+    .sort(
+      sort === 'name'
+        ? (a, b) => a.name.localeCompare(b.name)
+        : (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+    );
 
   function handleArchive(id: string) {
     startTransition(async () => {
@@ -88,7 +92,6 @@ export function PresetsList({ presets: initial, live }: { presets: PresetRow[]; 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                  <span style={industryTag(p.industry)}>{p.industry}</span>
                   <span style={{ fontSize: 11.5, color: ui.faint }}>{p.desc}</span>
                 </div>
               </div>

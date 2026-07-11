@@ -4,16 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { CSSProperties, ReactNode } from 'react';
 import {
-  Bell,
   Building2,
-  ChevronDown,
   ClipboardList,
   FileText,
   LogOut,
   Package,
   Repeat,
   Search,
-  Settings,
   Upload,
   Users,
 } from 'lucide-react';
@@ -207,7 +204,6 @@ const NAV = [
   { key: 'products', label: 'Products', icon: Package, href: '/products' },
   { key: 'purchase-orders', label: 'Purchase Orders', icon: FileText, href: '/purchase-orders' },
   { key: 'users', label: 'Users & Roles', icon: Users, href: '/users' },
-  { key: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ] as const;
 
 const DEFAULT_USER = { name: 'Riya Saraf', initials: 'RS', role: 'owner' as RoleKey };
@@ -261,7 +257,6 @@ function Sidebar({ org, user }: { org: string; user: typeof DEFAULT_USER }) {
           </div>
           <div style={{ fontSize: 10.5, color: ui.faint }}>Inspect workspace</div>
         </div>
-        <ChevronDown size={14} color={ui.faint} />
       </div>
 
       {NAV.map((n) => {
@@ -322,6 +317,7 @@ function Topbar({ org, search, user }: { org: string; search: string; user: type
         flexShrink: 0,
       }}
     >
+      {/* becomes CommandPalette trigger — Task 15 */}
       <div
         style={{
           flex: 1,
@@ -340,11 +336,6 @@ function Topbar({ org, search, user }: { org: string; search: string; user: type
         <Mono style={{ fontSize: 11, color: ui.faint, border: `1px solid ${ui.line}`, borderRadius: 4, padding: '1px 6px' }}>⌘K</Mono>
       </div>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ position: 'relative', width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Bell size={17} color={ui.sub} />
-          <span style={{ position: 'absolute', top: 6, right: 6, width: 7, height: 7, borderRadius: 999, background: '#D14343', border: '1.5px solid #fff' }} />
-        </div>
-        <div style={{ width: 1, height: 22, background: ui.line }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <Avatar initials={user.initials} size={30} />
           <div style={{ lineHeight: 1.2 }}>

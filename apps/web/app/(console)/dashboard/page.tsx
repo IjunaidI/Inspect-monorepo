@@ -1,5 +1,5 @@
 import { apiGet, loadOrFallback, type ApiBuyer, type ApiLoopPreset, type ApiSupplier } from '@/lib/api';
-import { Btn, PageHead } from '@/components/inspect/shell';
+import { PageHead } from '@/components/inspect/shell';
 import { DirectoryClient } from './directory-client';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,6 @@ export default async function DashboardPage() {
       <PageHead
         title="Buyers & Suppliers"
         sub="Buyers receive branded reports. Suppliers are the factories you inspect. Linked by POs and products."
-        actions={<Btn kind="ghost">Import CSV {/* TODO: wire upload */}</Btn>}
       />
       <DirectoryClient
         buyers={buyersRes.data}

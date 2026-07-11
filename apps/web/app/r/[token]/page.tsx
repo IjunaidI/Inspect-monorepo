@@ -1,12 +1,4 @@
-import type { ApiVerifyResult } from '@/lib/api';
-
-const API_URL = process.env.INSPECT_API_URL ?? 'http://localhost:3000';
-
-async function verifyToken(token: string): Promise<ApiVerifyResult> {
-  const res = await fetch(`${API_URL}/reports/verify/${token}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Token not found or expired (${res.status})`);
-  return res.json() as Promise<ApiVerifyResult>;
-}
+import { apiGetPublic, type ApiVerifyResult } from '@/lib/api';
 
 function CheckIcon({ ok }: { ok: boolean }) {
   return (
@@ -27,11 +19,13 @@ export default async function VerifyPage({
 }) {
   const { token } = await params;
   let result: ApiVerifyResult | null = null;
-  let fetchError: string | null = null;
+  let unreachable = false;
   try {
-    result = await verifyToken(token);
+    result = await apiGetPublic<ApiVerifyResult>(`/reports/verify/${encodeURIComponent(token)}`);
   } catch (e) {
-    fetchError = String(e);
+    // apiGetPublic throws a plain Error on a non-2xx response; a network
+    // failure surfaces as fetch's TypeError — distinct from "not found".
+    unreachable = e instanceof TypeError;
   }
 
   const allGood = result?.valid && result?.hashMatches && result?.signatureValid;
@@ -53,15 +47,19 @@ export default async function VerifyPage({
       {/* Content */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '48px 24px' }}>
         <div style={{ width: '100%', maxWidth: 480 }}>
-          {fetchError || !result ? (
+          {!result ? (
             /* Error state */
             <div style={{ background: '#fff', border: '1px solid #F1C9C5', borderRadius: 12, padding: '32px 28px', textAlign: 'center' }}>
               <div style={{ width: 56, height: 56, borderRadius: 999, background: '#FEF2F0', border: '2px solid #F1C9C5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6l-12 12" stroke="#B42318" strokeWidth="2" strokeLinecap="round" /></svg>
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: '#B42318' }}>Token not found or expired</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#B42318' }}>
+                {unreachable ? 'Could not reach the verification service' : 'Token not found or expired'}
+              </div>
               <div style={{ marginTop: 8, fontSize: 13, color: '#8A95A3', lineHeight: 1.5 }}>
-                {fetchError ?? 'The verification token is invalid or no longer available.'}
+                {unreachable
+                  ? 'The verification service did not respond. Please try again shortly.'
+                  : 'The verification token is invalid or no longer available.'}
               </div>
             </div>
           ) : (

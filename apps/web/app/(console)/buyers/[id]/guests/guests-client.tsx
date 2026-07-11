@@ -21,27 +21,40 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+const guestStatusStyle: Record<string, { label: string; fg: string; dot: string }> = {
+  ACTIVE: { label: 'Active', fg: '#1F6B43', dot: '#1F8A4C' },
+  SUSPENDED: { label: 'Revoked', fg: '#DC2626', dot: '#DC2626' },
+};
+
 function GuestRow({ guest, buyerId }: { guest: ApiBuyerGuest; buyerId: string }) {
   const [pending, start] = useTransition();
-  const expired = new Date(guest.expiresAt) < new Date();
+  const expired = new Date(guest.tokenExpiresAt) < new Date();
+  const ss = guestStatusStyle[guest.status] ?? { label: guest.status, fg: ui.sub, dot: ui.faint };
 
   return (
     <tr style={{ borderBottom: `1px solid ${ui.lineSoft}` }}>
       <td style={{ padding: '12px 20px', fontSize: 13 }}>{guest.email}</td>
+      <td style={{ padding: '12px 20px', fontSize: 12 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: ss.fg, fontWeight: 500 }}>
+          <span style={{ width: 7, height: 7, borderRadius: 999, background: ss.dot }} /> {ss.label}
+        </span>
+      </td>
       <td style={{ padding: '12px 20px', fontSize: 12, color: expired ? '#DC2626' : ui.sub }}>
-        {expired ? 'Expired' : `Expires ${new Date(guest.expiresAt).toLocaleDateString()}`}
+        {expired ? 'Expired' : `Expires ${new Date(guest.tokenExpiresAt).toLocaleDateString()}`}
+      </td>
+      <td style={{ padding: '12px 20px', fontSize: 12, color: ui.sub }}>
+        {guest.lastAccessAt ? new Date(guest.lastAccessAt).toLocaleDateString() : '—'}
       </td>
       <td style={{ padding: '12px 20px', fontSize: 12, color: ui.faint }}>
         {new Date(guest.createdAt).toLocaleDateString()}
       </td>
       <td style={{ padding: '12px 20px', textAlign: 'right' }}>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-          {!expired && <CopyButton text={`${typeof window !== 'undefined' ? window.location.origin : ''}/portal?token=${(guest as { token?: string }).token ?? guest.id}`} />}
-          <button onClick={() => start(async () => { await revokeBuyerGuest(buyerId, guest.id); })} disabled={pending}
-            style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FECACA', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', cursor: pending ? 'default' : 'pointer', fontFamily: 'inherit', opacity: pending ? 0.6 : 1 }}>
-            {pending ? '…' : 'Revoke'}
-          </button>
-        </div>
+        {/* No per-row magic-link copy: the list endpoint deliberately never returns
+            the token — a fresh link exists only in the invite-success state above. */}
+        <button onClick={() => start(async () => { await revokeBuyerGuest(buyerId, guest.id); })} disabled={pending}
+          style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FECACA', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', cursor: pending ? 'default' : 'pointer', fontFamily: 'inherit', opacity: pending ? 0.6 : 1 }}>
+          {pending ? '…' : 'Revoke'}
+        </button>
       </td>
     </tr>
   );
@@ -62,7 +75,11 @@ export function GuestsClient({ buyerId, initialGuests }: { buyerId: string; init
           )}
           {state.data && (
             <div style={{ marginBottom: 12, padding: '10px 14px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8 }}>
-              <div style={{ fontSize: 12.5, color: '#16A34A', marginBottom: 6 }}>Invitation created. Share this link:</div>
+              <div style={{ fontSize: 12.5, color: '#16A34A', marginBottom: 6 }}>
+                {state.data.emailSent
+                  ? 'Magic link emailed — link below as backup.'
+                  : 'Email could not be sent — share this link manually:'}
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Mono style={{ fontSize: 11.5, wordBreak: 'break-all', flex: 1, color: ui.ink }}>{`/portal?token=${state.data.token}`}</Mono>
                 <CopyButton text={`${typeof window !== 'undefined' ? window.location.origin : ''}/portal?token=${state.data.token}`} />
@@ -95,7 +112,7 @@ export function GuestsClient({ buyerId, initialGuests }: { buyerId: string; init
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                {['Email', 'Expires', 'Created', ''].map((h) => (
+                {['Email', 'Status', 'Expires', 'Last access', 'Created', ''].map((h) => (
                   <th key={h} style={{ fontSize: 11, fontWeight: 550, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, padding: '11px 20px', textAlign: h === '' ? 'right' : 'left', borderBottom: `1px solid ${ui.line}`, background: ui.fill }}>{h}</th>
                 ))}
               </tr>

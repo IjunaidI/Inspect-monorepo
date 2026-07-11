@@ -159,8 +159,10 @@ export interface ApiProduct {
 export interface ApiBuyerGuest {
   id: string;
   email: string;
+  status: string;
+  lastAccessAt: string | null;
+  tokenExpiresAt: string;
   createdAt: string;
-  expiresAt: string;
 }
 export interface ApiLoopPreset {
   id: string;
@@ -336,10 +338,9 @@ export interface ApiInspectionLoop {
 export interface ApiReport {
   id: string;
   inspectionId: string;
-  reportNo?: string | null;
   canonicalSnapshot?: Record<string, unknown> | null;
   contentHash?: string | null;
-  signatureHex?: string | null;
+  signature?: string | null;
   pdfStorageKey?: string | null;
   generatedAt: string;
   generatedBy?: { id: string; name: string } | null;
@@ -356,7 +357,6 @@ export interface ApiVerifyResult {
 
 export interface ApiGuestReport {
   id: string;
-  reportNo?: string | null;
   generatedAt: string;
   contentHash?: string | null;
   pdfStorageKey?: string | null;
@@ -370,6 +370,8 @@ export interface ApiInvitation {
   token: string;
   email: string;
   role: 'INSPECTOR' | 'QA_MANAGER' | 'ORG_OWNER';
-  expiresAt: string;
+  expiresAt?: string;
   orgId: string;
+  /** Whether the invitation email was actually delivered (MailService result). */
+  emailSent?: boolean;
 }

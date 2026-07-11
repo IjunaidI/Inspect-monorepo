@@ -189,9 +189,15 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
 
           {state.data ? (
             <div style={{ padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#16A34A', marginBottom: 8 }}>Invitation created for {state.data.email}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#16A34A', marginBottom: 8 }}>
+                {state.data.emailSent
+                  ? `Invitation emailed to ${state.data.email} — link below as backup.`
+                  : `Invitation created for ${state.data.email}`}
+              </div>
               <div style={{ fontSize: 12, color: ui.sub, marginBottom: 10 }}>
-                Since email delivery isn&apos;t wired yet, share this link manually:
+                {state.data.emailSent
+                  ? 'Share the link below only if the email doesn’t arrive:'
+                  : 'Email could not be sent — share this link manually:'}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, padding: '8px 12px' }}>
                 <Mono style={{ fontSize: 11.5, flex: 1, wordBreak: 'break-all', color: ui.ink }}>

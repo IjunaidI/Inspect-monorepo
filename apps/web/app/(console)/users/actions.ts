@@ -9,7 +9,10 @@ const msg = (e: unknown, fallback: string) =>
 export async function inviteUser(
   _prev: unknown,
   formData: FormData,
-): Promise<{ error?: string; data?: { token: string; email: string; role: string } }> {
+): Promise<{
+  error?: string;
+  data?: { token: string; email: string; role: string; emailSent: boolean; expiresAt?: string };
+}> {
   const email = (formData.get('email') as string)?.trim();
   const role = formData.get('role') as string;
   if (!email) return { error: 'Email is required' };
@@ -17,7 +20,15 @@ export async function inviteUser(
   try {
     const inv = await apiPost<ApiInvitation>('/users/invite', { email, role: role || 'INSPECTOR' });
     revalidatePath('/users');
-    return { data: { token: inv.token, email: inv.email, role: inv.role } };
+    return {
+      data: {
+        token: inv.token,
+        email: inv.email,
+        role: inv.role,
+        emailSent: inv.emailSent ?? false,
+        expiresAt: inv.expiresAt,
+      },
+    };
   } catch (e) {
     return { error: msg(e, 'Failed to send invitation') };
   }

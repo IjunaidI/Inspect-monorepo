@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Check, Lock, X } from 'lucide-react';
 import { Mono, SeverityTag, UnverifiedBadge } from './shell';
-import { aqlPlan, mono, severity, ui, type SeverityKey } from './tokens';
+import { mono, severity, ui, type SeverityKey } from './tokens';
 import type { ApiPhoto, ApiMeasurement } from '@/lib/api';
 
 export interface BrandedReportData {
@@ -144,11 +144,12 @@ export function BrandedReport({
 
         <ReportSection no={1} title="Sampling plan (AQL)" color={C} right={<span style={{ fontSize: 11, color: ui.faint }}>ANSI/ASQ Z1.4 · single, normal</span>}>
           <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+            {/* No demo-token fallback: a missing sampling plan renders an honest "—". */}
             {([
-              ['Level', aqlPlan.level],
-              ['Code letter', data.samplingPlan?.codeLetter ?? aqlPlan.codeLetter],
+              ['Level', data.samplingPlan ? 'II' : '—'],
+              ['Code letter', data.samplingPlan?.codeLetter ?? '—'],
               ['Lot size', data.samplingPlan?.lotSize != null ? String(data.samplingPlan.lotSize) : '—'],
-              ['Sample size', data.samplingPlan?.sampleSize != null ? String(data.samplingPlan.sampleSize) : aqlPlan.sampleSize],
+              ['Sample size', data.samplingPlan?.sampleSize != null ? String(data.samplingPlan.sampleSize) : '—'],
             ] as const).map(([k, v]) => (
               <div key={k} style={{ flex: 1, background: ui.fill, border: `1px solid ${ui.line}`, borderRadius: 8, padding: '10px 12px' }}>
                 <div style={{ fontSize: 10, color: ui.faint, textTransform: 'uppercase', letterSpacing: 0.5 }}>{k}</div>
