@@ -23,6 +23,7 @@ import { StorageModule } from './storage/storage.module';
 import { DefectCatalogModule } from './defect-catalog/defect-catalog.module';
 import { PopulateModule } from './populate/populate.module';
 import { AuditModule } from './audit/audit.module';
+import { MailModule } from './mail/mail.module';
 import { ReportsModule } from './reports/reports.module';
 import { GuestModule } from './guest/guest.module';
 import { OrgsModule } from './orgs/orgs.module';
@@ -75,6 +76,7 @@ import * as path from 'path';
     DefectCatalogModule,
     PopulateModule,
     AuditModule,
+    MailModule,
     ReportsModule,
     GuestModule,
     OrgsModule,

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { AuthUser } from '../auth/auth-user';
 import { hasAtLeast, Role } from '../auth/rbac';
 
@@ -27,7 +28,10 @@ export interface InviteUserInput {
 /** Org Owner user management within their own org (spec §4). */
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   list(orgId: string) {
     return this.prisma.user.findMany({
@@ -37,7 +41,7 @@ export class UsersService {
     });
   }
 
-  invite(orgId: string, inviter: AuthUser, input: InviteUserInput) {
+  async invite(orgId: string, inviter: AuthUser, input: InviteUserInput) {
     if (!input?.email?.trim()) throw new BadRequestException('email is required');
     const role = input.role ?? 'INSPECTOR';
     if (role === 'PLATFORM_ADMIN') {
@@ -46,7 +50,7 @@ export class UsersService {
     if (!hasAtLeast(inviter.role, role)) {
       throw new ForbiddenException('Cannot invite a role above your own');
     }
-    return this.prisma.invitation.create({
+    const invitation = await this.prisma.invitation.create({
       data: {
         orgId,
         email: input.email.trim().toLowerCase(),
@@ -55,6 +59,14 @@ export class UsersService {
         invitedById: inviter.userId,
       },
     });
+    // MailService never throws — a failed send is logged, and the invitation
+    // (with its copyable link in the console) is still returned to the caller.
+    await this.mail.sendUserInvitation({
+      to: invitation.email,
+      token: invitation.token,
+      role: invitation.role,
+    });
+    return invitation;
   }
 
   async updateRole(orgId: string, actor: AuthUser, userId: string, role: Role) {

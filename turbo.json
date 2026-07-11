@@ -24,7 +24,10 @@
     "AUTH_GITHUB_ID",
     "AUTH_GITHUB_SECRET",
     "API_PORT",
-    "WEB_PORT"
+    "WEB_PORT",
+    "SMTP_URL",
+    "MAIL_FROM",
+    "WEB_BASE_URL"
   ],
   "tasks": {
     "build": {

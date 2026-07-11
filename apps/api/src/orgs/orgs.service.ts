@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { MailService } from '../mail/mail.service';
 
 const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -16,6 +17,7 @@ export class OrgsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly mail: MailService,
   ) {}
 
   list() {
@@ -29,7 +31,7 @@ export class OrgsService {
     }
     if (!input?.ownerEmail?.trim()) throw new BadRequestException('ownerEmail is required');
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const org = await tx.organization.create({
         data: { name: input.name.trim(), type: input.type },
       });
@@ -56,5 +58,14 @@ export class OrgsService {
       );
       return { org, invitation };
     });
+    // Email the first Org Owner after the transaction commits. MailService
+    // never throws, so a failed send cannot roll back or fail org creation.
+    await this.mail.sendUserInvitation({
+      to: result.invitation.email,
+      token: result.invitation.token,
+      role: result.invitation.role,
+      orgName: result.org.name,
+    });
+    return result;
   }
 }

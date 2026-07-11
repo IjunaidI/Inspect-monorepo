@@ -55,7 +55,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§9/§10)
 
 ### INS-004 · Email / magic-link delivery not implemented   [HIGH]
-- status: todo
+- status: done            # 2026-07-11: @Global MailModule + MailService (nodemailer — SMTP_URL transport, dev/json fallback when unset, logged once at boot). users.invite, orgs.create (first ORG_OWNER, sent post-commit), and buyer-guests.invite now await sendUserInvitation / sendBuyerGuestMagicLink built on WEB_BASE_URL (/invite?token&email&role, /portal?token — URL-encoded). Sends never throw (failures log + return {sent:false}) so the business write survives; the copyable link stays in each response as fallback. New env SMTP_URL/MAIL_FROM/WEB_BASE_URL in .env.example + turbo.json globalEnv. 19 new unit tests (mail/users/orgs/buyer-guests specs), API suite 119 green; not yet exercised against a real SMTP server. Report-delivery email + ReportDelivery rows remain INS-020 (blocked on INS-003 PDF).
 - area: Tenancy & onboarding
 - evidence: `apps/api/src/buyer-guests/buyer-guests.service.ts:33` comment calls the token "the credential to send them" but `invite()` just returns it to the caller; no `nodemailer`/SMTP in `apps/api/package.json`.
 - problem: Invitations, buyer-guest magic links, and report deliveries generate tokens but nothing emails them, so onboarding and report delivery cannot complete without manually copying tokens.
