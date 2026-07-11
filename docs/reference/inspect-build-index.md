@@ -1,8 +1,8 @@
 # Inspect MVP — Build Index (master plan)
 
-> **Living reference** — moved 2026-06-20 from `docs/superpowers/plans/`. The cross-phase router + standing tech defaults. **Last verified: 2026-06-20.** Per-phase status now lives in [STATUS.md](../STATUS.md); the work queue is [future/BACKLOG.md](../future/BACKLOG.md).
+> **Living reference** — moved 2026-06-20 from `docs/superpowers/plans/`. The cross-phase router + standing tech defaults. **Last verified: 2026-07-12.** Per-phase status now lives in [STATUS.md](../STATUS.md); the work queue is [future/BACKLOG.md](../future/BACKLOG.md).
 >
-> **For agentic workers:** This is the master index. Phase plans live under `docs/{done,in-progress,future}/plans/` (Phase 1 → `done/`, Phase 2 → `in-progress/`, Phases 3–7 drafted just-in-time into `in-progress/` when reached). Implement a phase with `superpowers:subagent-driven-development` or `superpowers:executing-plans`, task-by-task, TDD.
+> **For agentic workers:** This is the master index. Phase plans live under `docs/{done,in-progress,future}/plans/` (Phases 1–2 → `done/`; Phases 3–7 never got dedicated plans — they were delivered incrementally via backlog items, see the annotations in the phase table below). Implement new work with `superpowers:subagent-driven-development` or `superpowers:executing-plans`, task-by-task, TDD.
 
 **Goal:** Build the Inspect MVP (spec §15) on top of the committed Prisma schema — a web-first, multi-tenant QC inspection platform with an Admin populate console and signed PDF reporting.
 
@@ -16,7 +16,9 @@
 
 ## Hard environment constraint (read first)
 
-This workspace has **no Postgres and no Redis**, and the NestJS API refuses to boot without `REDIS_URL` (`apps/api/src/app.module.ts`) and `DATABASE_URL`. Consequences:
+> **Resolved 2026-07-11 (INS-001/INS-009):** the stack now runs against a real Postgres/Redis/MinIO, and a DB-backed integration suite (`apps/api/test/integration/`, `pnpm api test:integration`) plus CI (`.github/workflows/ci.yml`) cover the DB-bound paths. The constraint below is kept as the historical rationale for the phase structure.
+
+This workspace originally had **no Postgres and no Redis**, and the NestJS API refuses to boot without `REDIS_URL` (`apps/api/src/app.module.ts`) and `DATABASE_URL`. Consequences:
 
 - **Phase 1 (foundation + pure-domain core) is fully buildable and unit-testable here** — it is plain TypeScript logic (jest, no DB).
 - **Phases 2–7 are DB/IO-bound.** Their plans can be written and code scaffolded, but **verification requires a running Postgres + Redis** (e.g. a local `docker compose` with Postgres 16 + Redis, or testcontainers for integration tests). Do not claim a DB-bound phase "passes" without running it against a database.
@@ -28,14 +30,14 @@ A `docker-compose.dev.yml` (Postgres + Redis + MinIO) is itself a Phase-2 task s
 | Concern | Choice | Notes |
 |---|---|---|
 | API framework | NestJS 11 (existing) + Prisma 6 | — |
-| API auth | JWT access+refresh via `@nestjs/jwt` + Passport-JWT; passwords hashed with **argon2** | API is the RBAC authority (spec §13). Invite-only; no public signup. |
+| API auth | **As built:** JWT access+refresh via a custom dependency-free HS256 implementation (`src/auth/jwt.ts` + `jwt-auth.guard.ts`) — **not** `@nestjs/jwt`/Passport; passwords hashed with **scrypt** (`node:crypto`) — **not** argon2 | API is the RBAC authority (spec §13). Invite-only; no public signup. |
 | Web auth | Next.js console stores the API-issued JWT (Auth.js/NextAuth optional shell; API remains canonical) | `NEXTAUTH_URL`/`AUTH_SECRET` already in `turbo.json` globalEnv. Finalize in Phase 2 plan. |
-| Validation | `class-validator` + `class-transformer` for DTOs; **Zod** for the `Json`-column contracts (shared-types) | — |
-| Object storage | `@aws-sdk/client-s3` + `s3-request-presigner`; **MinIO** for local dev | Presigned uploads, no base64 through the API (spec §13). |
-| Email | `nodemailer` (dev: stream transport) | Phase 7. |
+| Validation | **As built:** plain TypeScript guards in controllers/services — `class-validator`/`class-transformer` were never installed; **Zod** for the `Json`-column contracts (shared-types) | shared-types is built but unlinked ([INS-008](../future/BACKLOG.md)). |
+| Object storage | **As built:** dependency-free AWS SigV4 presigning (`src/storage/sigv4.ts`) — **not** `@aws-sdk/client-s3`/`s3-request-presigner`; **MinIO** for local dev | Presigned uploads, no base64 through the API (spec §13). |
+| Email | `nodemailer` | Shipped 2026-07-11 ([INS-004](../future/BACKLOG.md)): `MailService` on `SMTP_URL`, dev/json fallback when unset. |
 | PDF | **`pdf-lib`** (pure JS, no headless browser) | Footer carries hash + Ed25519 signature (spec §10/§9). |
 | Ed25519 + hashing | Node built-in `node:crypto` (`ed25519`, `sha256`) | No external crypto dep. |
-| Tests | jest (unit, no DB) + integration tests against a test Postgres (testcontainers) | — |
+| Tests | jest (unit, no DB) + DB-backed integration suite (`apps/api/test/integration/`, `pnpm api test:integration`) against a real Postgres via the root `.env` — **not** testcontainers | Both run in CI (`.github/workflows/ci.yml`), shipped with [INS-009](../future/BACKLOG.md). |
 
 ## Phase sequence
 
@@ -43,13 +45,13 @@ A `docker-compose.dev.yml` (Postgres + Redis + MinIO) is itself a Phase-2 task s
 |---|---|---|---|
 | **1. Foundation & domain core** ✅ | `done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md` | `@inspect/shared-types`; AQL engine (ISO 2859-1); tamper-proof crypto; audit hash-chain — all unit-tested | **No** |
 | 2. Auth & tenancy ✅ | `done/plans/2026-06-06-inspect-phase2-auth-tenancy.md` | login, JWT + refresh, multi-tenant RBAC guards (negative matrix integration-tested), invite-only onboarding + email delivery, `docker-compose.dev.yml`, Prisma migrate/seed — *completed 2026-07-11 (INS-009/INS-004)* | Yes |
-| 3. Workspace | `…-phase3-workspace.md` (TBW) | Buyer/Supplier/PO/Product CRUD + loop-preset builder (API + console) | Yes |
-| 4. Inspection setup | `…-phase4-inspection-setup.md` (TBW) | create/assign-inspection flow; wire AQL engine; snapshot preset; locked tamper-proof block | Yes |
-| 5. Admin populate console | `…-phase5-populate-console.md` (TBW) | presigned S3 upload, drag photos into loops, defect tagging, measurements | Yes |
-| 6. Decisioning | `…-phase6-decisioning.md` (TBW) | AQL auto-flag on submit; QA review approve/reject/hold; write `AqlResult` | Yes |
-| 7. Reporting & guest portal | `…-phase7-reporting.md` (TBW) | branded signed PDF, hash-chained audit writes, email + portal delivery, buyer guest portal, public verification | Yes |
+| 3. Workspace ✅ | *(no dedicated plan — delivered via backlog: INS-022, INS-024, INS-030; list aggregates remain INS-005)* | Buyer/Supplier/PO/Product CRUD + loop-preset builder (API + console) | Yes |
+| 4. Inspection setup ✅ | *(no dedicated plan — delivered via backlog: INS-026)* | create/assign-inspection flow; wire AQL engine; snapshot preset; locked tamper-proof block | Yes |
+| 5. Admin populate console ✅ | *(no dedicated plan — delivered via backlog: INS-023)* | presigned S3 upload, drag photos into loops, defect tagging, measurements | Yes |
+| 6. Decisioning ✅ | *(no dedicated plan — delivered via backlog: INS-027)* | AQL auto-flag on submit; QA review approve/reject/hold; write `AqlResult` | Yes |
+| 7. Reporting & guest portal 🟡 | *(no dedicated plan — partially delivered via backlog: INS-033, INS-017, INS-025, INS-004 done; PDF INS-003, delivery records INS-020, audit-on-write INS-006 remain)* | branded signed PDF, hash-chained audit writes, email + portal delivery, buyer guest portal, public verification | Yes |
 
-(TBW = to be written when the phase is reached; each is brainstormed/planned just-in-time so it reflects what the prior phase actually produced.)
+(Phases 3–7 never received dedicated phase plans — the work was decomposed into `INS-NNN` backlog items instead; the annotations above map each phase to the items that delivered it. See [future/BACKLOG.md](../future/BACKLOG.md).)
 
 ## Cross-phase invariants (enforced in every DB-bound phase)
 

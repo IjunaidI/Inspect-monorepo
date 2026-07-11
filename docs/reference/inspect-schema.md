@@ -37,7 +37,7 @@ The design was driven by a multi-agent gap analysis (8 domain analysts + a compl
 - **Reference data in code, not DB:** ISO 2859-1 Table I (code letters) + Table II-A (single-sampling Ac/Re) are AQL-engine constants (§8). The **global defect library** (§7) is seeded into `DefectCatalog` (`orgId=null`).
 - **Partial unique indexes** (cannot be expressed in `schema.prisma`; added in the migration because Postgres treats NULLs as distinct): unique global defect name `WHERE orgId IS NULL`; single audit `sequence` space `WHERE orgId IS NULL`.
 
-## 3. Model map (~22 models)
+## 3. Model map (25 models)
 
 **Tenancy & identity:** `Organization`, `User`, `Invitation`.
 **Counterparties:** `Buyer`, `BuyerGuest` (magic-link, scoped to one buyer/one org), `Supplier`, `Product`, `PurchaseOrder`.

@@ -114,7 +114,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 ### INS-005 · Aggregation / count / dashboard endpoints absent   [HIGH]
 - status: todo
 - area: Workspace CRUD
-- evidence: grep `count|stats|summary|aggregate|dashboard|metrics` across `*.controller.ts` = zero routes; `inspections.controller.ts` exposes only `GET /`, `GET /:id`, `POST`, `POST /:id/submit`, `POST /:id/decision`.
+- evidence: grep `count|stats|summary|aggregate|dashboard|metrics` across `*.controller.ts` = zero routes; `inspections.controller.ts` exposes only `GET /`, `GET /aql-preview`, `GET /:id`, `POST`, `POST /:id/submit`, `POST /:id/decision`.
 - problem: No endpoints return counts/rollups, so dashboard and list screens cannot show real PO/product/report/last-activity figures; the web list screens collapse those columns to "—" even in live mode.
 - fix: Add aggregation endpoints (`/buyers` with `_count` relations, a dashboard summary, an inspections list with status counts), `@@index`-backed and `orgId`-scoped.
 - verify: GET dashboard/list endpoints return relation counts; the dashboard and presets screens render real numbers instead of "—" when live.
@@ -428,14 +428,14 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 ### INS-031 · Live list screens render lossy data (counts hardcoded to "—")   [LOW]
 - status: todo
 - area: Web console
-- evidence: `apps/web/app/(console)/dashboard/page.tsx:40,43` loc/pos/products/reports/last hardcoded "—" even live; `presets/page.tsx:44-54` drops loops/industry/used/edited; API shapes omit counts.
+- evidence: `apps/web/app/(console)/dashboard/directory-client.tsx:259-262` (buyer rows) and `:341-344` (supplier rows) hardcode the count/last-activity columns to "—" even live; `presets/page.tsx:47,51` fabricate `industry: '—'` / `used: '—'`; API list shapes omit counts.
 - problem: Even on the three wired list screens, most columns show "—" because the consumed API response shapes omit counts/relations, making "live" mode look broken.
 - fix: After INS-005 adds count/relation fields, update the dashboard/presets/users mappers to consume them instead of defaulting to "—"/[].
 - verify: With live data, the list screens render real loc/PO/product/report/last and preset loop/industry/used/edited values.
 - refs: [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md) — depends on INS-005.
 
 ### INS-032 · Search inputs and filter chips inert across console   [LOW]
-- status: in-progress     # 2026-06-28: `?status=` filter wired on inspections list; presets list now has live search+sort (client-side in PresetsList). Remaining: search on dashboard/users/portal pages.
+- status: in-progress     # 2026-07-12: inspections `?status=` filter, presets live search+sort, and the dashboard/users/portal search inputs are all live. Remaining: All/Active chips on the dashboard directory, pagination affordances, and the topbar palette.
 - area: Web console
 - evidence: `dashboard/page.tsx:74,77-78`; `presets/page.tsx:67,72`; `users/page.tsx:76`; `portal/page.tsx:58` — inputs/chips/sort dropdowns have no `value`/`onChange`.
 - problem: Search boxes, All/Active chips, sort dropdowns, tabs, and pagination across the console have no handlers, so users cannot filter or navigate large lists.

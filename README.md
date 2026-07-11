@@ -12,7 +12,9 @@ Guided photo-driven inspections → statistical AQL sampling → a QA-signed, cr
 ![Prisma](https://img.shields.io/badge/Prisma_6-2D3748?logo=prisma&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL_16-4169E1?logo=postgresql&logoColor=white)
 ![Turborepo](https://img.shields.io/badge/Turborepo-EF4444?logo=turborepo&logoColor=white)
-![Tests](https://img.shields.io/badge/unit_tests-97_passing-3fb950)
+![Tests](https://img.shields.io/badge/unit_tests-135_passing-3fb950)
+![Integration](https://img.shields.io/badge/integration_tests-36_passing-3fb950)
+![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
 ![Type-safe](https://img.shields.io/badge/strict_TypeScript-end--to--end-3178C6)
 
 </div>
@@ -43,7 +45,7 @@ These are the parts that make the codebase interesting — each is built test‑
 | 🏢 **Multi‑tenant RBAC** | `orgId`‑scoped on every row, additive role hierarchy (Inspector ⊆ QA Manager ⊆ Org Owner ⊆ Platform Admin) enforced by global NestJS guards; Platform Admin is the only cross‑tenant principal. |
 | 🧾 **Immutability by design** | Submitted inspections and signed reports are frozen; corrections happen via a new linked re‑inspection. Enforced through snapshots + `onDelete: Restrict` + soft‑delete. |
 | 🎨 **Design‑faithful console** | An 11‑screen Next.js console rebuilt pixel‑close from a design handoff (Inter + JetBrains Mono, hairline UI), wired to the live API with graceful offline fallback. |
-| 🧪 **Test‑driven** | The correctness‑critical core (sampling, crypto, audit, auth) is 97 passing unit tests, written RED→GREEN. |
+| 🧪 **Test‑driven** | The correctness‑critical core (sampling, crypto, audit, auth) is covered by 135 passing unit tests written RED→GREEN, plus 36 DB‑backed integration tests (auth/RBAC round‑trip, core inspection loop, storage byte‑path) that run in CI. |
 
 ---
 
@@ -97,37 +99,34 @@ flowchart LR
 
 ## ✅ Implementation status
 
-Legend: ✅ done & verified · 🟡 built, integration pending a live DB · ⬜ planned
+Legend: ✅ done & verified · ⬜ planned
 
 **Foundation & domain core** — ✅
-- [x] Prisma schema — 22 models, multi‑tenant, immutable‑by‑design + initial migration + seed
+- [x] Prisma schema — 25 models, multi‑tenant, immutable‑by‑design + initial migration + seed
 - [x] ISO 2859‑1 AQL engine *(39 unit tests)*
 - [x] Tamper‑proof crypto: canonicalization + SHA‑256 content hash + Ed25519 *(14 tests)*
 - [x] Append‑only hash‑chained audit core *(7 tests)*
 - [x] `@inspect/shared-types` contract package
 
-**Backend API (NestJS)** — 🟡 *compiles, type‑checks & `nest build` clean; logic unit‑tested*
+**Backend API (NestJS)** — ✅ *verified live against Postgres + Redis + MinIO: 36 integration tests across 4 suites, green in CI (GitHub Actions)*
 - [x] JWT auth + additive RBAC guards — scrypt + HS256 *(25 tests)*
 - [x] Workspace CRUD — buyers, suppliers, products, purchase orders
 - [x] Loop‑preset builder (versioned) + defect catalog (global + per‑org)
 - [x] Inspection lifecycle — create→snapshot→AQL sampling, submit→evaluate→result, QA decision
 - [x] Admin populate console API — presigned S3 upload, defect tagging, free‑form measurements
 - [x] Signed report generation + public verification endpoint + audit writes
-- [x] Buyer guest portal (magic‑link) + invite‑only onboarding (orgs / users / guests)
+- [x] Buyer guest portal (magic‑link) + invite‑only onboarding (orgs / users / guests) with email delivery (`nodemailer`)
 
 **Web console (Next.js)** — ✅
 - [x] Design system (tokens, responsive shell, reusable branded report)
 - [x] 11 screens — dashboard, create inspection, presets list + builder, populate, review, report, guest portal, users, invite, login
-- [x] NextAuth Credentials → API; dashboard / presets / users wired to live data with offline fallback
+- [x] NextAuth Credentials → API; console screens wired to live reads + server‑action writes with offline fallback
 
 **Next up** — ⬜
-- [ ] Run migrations + integration/e2e suite against a real Postgres (testcontainers)
-- [ ] Wire remaining console write actions + dropdown reads
 - [ ] Aggregation endpoints (dashboard counts, inspections list)
-- [ ] PDF rendering (`pdf-lib`) + public verification page UI
-- [ ] Email delivery (`nodemailer`)
+- [ ] PDF rendering (`pdf-lib`) for the signed report artifact
 - [ ] App‑layer hardening (audit‑on‑write, immutability guards, idempotency dedupe)
-- [ ] CI/CD + deploy (Railway)
+- [ ] Deploy (Railway) — CI (GitHub Actions) is already green
 - [ ] **Phase 2 — mobile app** with camera‑only verified capture (signed EXIF/GPS/device)
 
 > Live status & full breakdown: [`docs/STATUS.md`](docs/STATUS.md) (dashboard) · [`docs/future/BACKLOG.md`](docs/future/BACKLOG.md) (`INS-NNN` items).
@@ -166,9 +165,10 @@ pnpm dev
 Run the test suite:
 
 ```bash
-pnpm --filter @inspect/api test     # 97 unit tests
-pnpm type-check                     # strict tsc across the workspace
-pnpm build                          # nest build + next build
+pnpm --filter @inspect/api test                # 135 unit tests (no DB needed)
+pnpm --filter @inspect/api test:integration    # 36 DB-backed integration tests (needs the docker stack + .env)
+pnpm type-check                                # strict tsc across the workspace
+pnpm build                                     # nest build + next build
 ```
 
 ---
@@ -210,5 +210,5 @@ Inspect-monorepo/
 ---
 
 <div align="center">
-<sub>Built with a test-first, spec-driven workflow. Domain logic is verified by unit tests; the data layer is modeled for tamper-evidence and multi-tenant isolation from the ground up.</sub>
+<sub>Built with a test-first, spec-driven workflow. Domain logic is verified by unit tests, the DB-bound flows by a live integration suite in CI; the data layer is modeled for tamper-evidence and multi-tenant isolation from the ground up.</sub>
 </div>
