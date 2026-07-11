@@ -29,9 +29,15 @@ export class ReportsService {
       where: { id: inspectionId, orgId },
       include: {
         buyer: true,
+        supplier: true,
+        product: true,
         purchaseOrder: true,
         aqlResult: true,
         loops: { orderBy: { position: 'asc' }, include: { measurements: true } },
+        defects: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          include: { photos: true },
+        },
         photos: { orderBy: { createdAt: 'asc' } },
         report: true,
       },
@@ -43,24 +49,56 @@ export class ReportsService {
     }
 
     const orderedPhotoHashes = inspection.photos.map((p) => p.contentHash);
-    const canonical = {
+    // Everything a buyer can see on the report MUST be inside the signed envelope
+    // (security review): the defect list + its photo evidence, the quantity/carton
+    // verification, workmanship/packaging notes, supplier/product identity, and the
+    // decision author/timestamp — otherwise those fields could be altered after
+    // signing while public verification still returns valid:true.
+    const rawCanonical = {
       inspectionId: inspection.id,
-      poNumber: inspection.purchaseOrder?.poNumber,
-      buyer: { id: inspection.buyerId, name: inspection.buyer?.name },
-      supplierId: inspection.supplierId,
-      productId: inspection.productId,
+      inspectionType: inspection.inspectionType,
+      poNumber: inspection.purchaseOrder?.poNumber ?? null,
+      buyer: { id: inspection.buyerId, name: inspection.buyer?.name ?? null },
+      supplier: { id: inspection.supplierId, name: inspection.supplier?.name ?? null },
+      product: {
+        id: inspection.productId,
+        styleNumber: inspection.product?.styleNumber ?? null,
+        description: inspection.product?.description ?? null,
+      },
       lotSize: inspection.lotSize,
       aqlLevel: inspection.aqlLevel,
       aqlPlan: inspection.aqlPlan,
       computedSampling: inspection.computedSampling,
+      quantity: {
+        cartonsTotal: inspection.cartonsTotal,
+        cartonsInspected: inspection.cartonsInspected,
+        quantityPresented: inspection.quantityPresented,
+        quantityShortfall: inspection.quantityShortfall,
+      },
+      workmanshipNotes: inspection.workmanshipNotes,
+      packagingNotes: inspection.packagingNotes,
       aqlResult: inspection.aqlResult
         ? {
             perClass: inspection.aqlResult.perClass,
             systemRecommendation: inspection.aqlResult.systemRecommendation,
             qaDecision: inspection.aqlResult.qaDecision,
             qaRemarks: inspection.aqlResult.qaRemarks,
+            decidedByUserId: inspection.aqlResult.decidedByUserId,
+            decidedAt: inspection.aqlResult.decidedAt
+              ? inspection.aqlResult.decidedAt.toISOString()
+              : null,
           }
         : null,
+      // Ordered, canonicalized defect narrative + evidence mapping (the core of
+      // a photo-loop QC report). Ordering is fixed by the query (createdAt, id).
+      defects: inspection.defects.map((d) => ({
+        defectCatalogId: d.defectCatalogId ?? null,
+        customText: d.customText ?? null,
+        severity: d.severity,
+        notes: d.notes ?? null,
+        inspectionLoopId: d.inspectionLoopId ?? null,
+        photoIds: d.photos.map((p) => p.photoId).sort(),
+      })),
       tamperProof: inspection.tamperProof,
       loops: inspection.loops.map((l) => ({
         position: l.position,
@@ -74,6 +112,10 @@ export class ReportsService {
       })),
       photoHashes: orderedPhotoHashes,
     };
+    // Hash the exact structure that will be persisted: a jsonb round-trip drops
+    // undefined-valued keys, so normalize first to keep generate-time and
+    // verify-time hashes identical (security review).
+    const canonical = JSON.parse(JSON.stringify(rawCanonical));
 
     const hash = contentHash(canonical, orderedPhotoHashes);
     const signature = sign(hash, this.signingPrivateKey());
@@ -83,37 +125,50 @@ export class ReportsService {
       branding: inspection.buyer?.branding ?? undefined,
     };
 
-    return this.prisma.$transaction(async (tx) => {
-      const report = await tx.report.create({
-        data: {
-          inspectionId: inspection.id,
-          orgId,
-          buyerId: inspection.buyerId,
-          brandingSnapshot: brandingSnapshot as unknown as Prisma.InputJsonValue,
-          canonicalSnapshot: canonical as unknown as Prisma.InputJsonValue,
-          contentHash: hash,
-          signature,
-          status: 'GENERATED',
-          // pdfStorageKey is set when the PDF binary is rendered (pdf-lib, follow-up).
-        },
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const report = await tx.report.create({
+          data: {
+            inspectionId: inspection.id,
+            orgId,
+            buyerId: inspection.buyerId,
+            brandingSnapshot: brandingSnapshot as unknown as Prisma.InputJsonValue,
+            canonicalSnapshot: canonical as unknown as Prisma.InputJsonValue,
+            contentHash: hash,
+            signature,
+            status: 'GENERATED',
+            // pdfStorageKey is set when the PDF binary is rendered (pdf-lib, follow-up).
+          },
+        });
+        await tx.inspection.update({
+          where: { id: inspection.id },
+          data: { status: 'REPORT_ISSUED' },
+        });
+        await this.audit.append(
+          {
+            orgId,
+            actorType: 'USER',
+            action: 'report.generated',
+            entityType: 'Report',
+            entityId: report.id,
+            metadata: { inspectionId: inspection.id, contentHash: hash },
+          },
+          tx,
+        );
+        return report;
       });
-      await tx.inspection.update({
-        where: { id: inspection.id },
-        data: { status: 'REPORT_ISSUED' },
-      });
-      await this.audit.append(
-        {
-          orgId,
-          actorType: 'USER',
-          action: 'report.generated',
-          entityType: 'Report',
-          entityId: report.id,
-          metadata: { inspectionId: inspection.id, contentHash: hash },
-        },
-        tx,
-      );
-      return report;
-    });
+    } catch (e) {
+      // Concurrency-safe idempotency (security review): if a racing generate()
+      // won the Report.inspectionId @unique, return the existing report instead
+      // of surfacing an opaque 500.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        const existing = await this.prisma.report.findFirst({
+          where: { inspectionId, orgId },
+        });
+        if (existing) return existing;
+      }
+      throw e;
+    }
   }
 
   async getForOrg(orgId: string, reportId: string) {

@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -28,6 +29,17 @@ export class OrgsService {
       throw new BadRequestException('type must be INSPECTION_COMPANY or MANUFACTURER');
     }
     if (!input?.ownerEmail?.trim()) throw new BadRequestException('ownerEmail is required');
+    const ownerEmail = input.ownerEmail.trim().toLowerCase();
+
+    // Don't onboard an owner whose email already has an account — accepting the
+    // invite would relocate/reset that existing account (security review).
+    const existing = await this.prisma.user.findUnique({
+      where: { email: ownerEmail },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new ForbiddenException('An account already exists for this email');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const org = await tx.organization.create({
@@ -36,8 +48,10 @@ export class OrgsService {
       const invitation = await tx.invitation.create({
         data: {
           orgId: org.id,
-          email: input.ownerEmail.trim().toLowerCase(),
+          email: ownerEmail,
           role: 'ORG_OWNER',
+          // Security token: CSPRNG value, not the guessable cuid() default.
+          token: randomUUID(),
           expiresAt: new Date(Date.now() + INVITE_TTL_MS),
           invitedById: actorUserId,
         },

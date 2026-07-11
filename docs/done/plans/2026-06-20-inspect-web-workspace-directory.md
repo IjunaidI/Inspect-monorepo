@@ -1,5 +1,9 @@
 # Plan: Buyers & Suppliers Directory — Workspace CRUD (Web)
 
+> **Status: ✅ DONE — shipped 2026-06-28; moved to `done/` 2026-07-11.** Directory (buyers/suppliers tabs, search,
+> add/edit/archive), products, purchase-orders, and buyer-guest management are all wired live. Closes INS-030 and
+> advances INS-032. See [STATUS.md](../../STATUS.md). (Checkbox state below is stale; see STATUS/BACKLOG + code.)
+
 **For agentic workers:** REQUIRED SUB-SKILL: `superpowers:subagent-driven-development` or `superpowers:executing-plans`. Steps use `- [ ]` checkboxes.
 
 ---

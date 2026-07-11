@@ -41,9 +41,57 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - verify: `.env.example` contains only placeholders; a secret scan of tracked files + history finds no live credential; the signing keypair used in any prior commit is rotated/revoked.
 - refs: [../in-progress/plans/2026-06-20-ins-001-stand-up-and-verify.md](../in-progress/plans/2026-06-20-ins-001-stand-up-and-verify.md)
 
+### INS-035 · Invitation accept can take over / relocate a cross-org account   [BLOCKER]
+- status: done            # 2026-07-11 (security review): fixed. accept() now looks up the existing user by (globally-unique) email and throws ForbiddenException if it belongs to a different org; invite-creation paths (users.service.invite, orgs.service.create) also refuse an email already registered in another org. Regression spec: invitations.service.spec.ts (cross-tenant reject + brand-new activate + same-org allow).
+- area: Tenancy & onboarding
+- evidence: `apps/api/src/invitations/invitations.service.ts` `accept()` upserted `tx.user` keyed on `where:{email}` (User.email is `@unique` globally, `schema.prisma:196`) with no org check.
+- problem: Any ORG_OWNER could invite an email that already had an account in another tenant; accepting the invite (public `POST /invitations/accept`) rewrote that user's `orgId`, `role`, `passwordHash` and `status` — a silent cross-tenant account takeover + password reset, orphaning the victim's org if they were its sole owner.
+- fix: Scope the accept to `invitation.orgId`; refuse if an account with that email exists in a different org; block inviting an already-registered foreign email at creation time.
+- verify: Accepting an invite for an email owned by another org is rejected (403) and the foreign account is untouched; a brand-new or same-org invitee still activates. ✅ unit-tested.
+- refs: security review 2026-07-11 · [../reference/inspect-schema.md](../reference/inspect-schema.md) (§2 tenant isolation)
+
 ---
 
 ## High
+
+> **Security review batch (2026-07-11).** INS-036..039 below were surfaced by the multi-agent business-logic
+> review + adversarial-verification pass and fixed in the same session. The AQL engine reviewed clean.
+
+### INS-036 · JWT secret falls back to a source-visible default (forge PLATFORM_ADMIN)   [HIGH]
+- status: done            # 2026-07-11 (security review): fixed. Removed the `?? 'dev-access-secret'`/`'dev-refresh-secret'` fallbacks (new auth/jwt-secret.ts `requireSecret` throws on missing/CHANGE_ME); added a fail-closed ConfigModule `validate` in app.module.ts that refuses to boot without strong JWT_ACCESS_SECRET/JWT_REFRESH_SECRET, mirroring the REDIS_URL hard-fail. type-check + 100 tests green.
+- area: Auth & RBAC
+- evidence: `apps/api/src/auth/jwt-auth.guard.ts:40` + `auth.service.ts:22,25` used `?? 'dev-*-secret'`; no boot-time validation; `.env.example` shipped the secrets as `CHANGE_ME`.
+- problem: If JWT_ACCESS_SECRET is unset (or left as CHANGE_ME) the app booted anyway and both issued and verified tokens under a public constant, so anyone could HMAC-sign a `{role:'PLATFORM_ADMIN', orgId:null}` access token and gain the sole cross-tenant principal — total auth bypass.
+- fix: Fail closed — no default secret; validate at boot; verify at point of use.
+- verify: Booting without a strong JWT_ACCESS_SECRET/JWT_REFRESH_SECRET throws; a forged token signed with any guessed default is rejected.
+- refs: security review 2026-07-11
+
+### INS-037 · Invitation token uses guessable cuid() default instead of a CSPRNG   [HIGH]
+- status: done            # 2026-07-11 (security review): fixed. users.service.invite + orgs.service.create now set `token: randomUUID()` explicitly (mirroring buyer-guests.service). Rate-limiting the public accept route remains a follow-up (see INS-047).
+- area: Tenancy & onboarding
+- evidence: `schema.prisma:227` `token String @unique @default(cuid())`, never overridden; the only credential on the unauthenticated `POST /invitations/accept`.
+- problem: cuid v1 is Math.random-backed (not a CSPRNG); an attacker who observes any same-process cuid (their own invite token, or a public `Report.verificationToken`) can narrow the search space and guess a valid invitation token to activate an account.
+- fix: Generate the token with a CSPRNG (`randomUUID`) on create; add rate limiting to the accept endpoint.
+- verify: Invitation tokens are UUIDv4 (128-bit CSPRNG); grep shows no reliance on the cuid default for security tokens.
+- refs: security review 2026-07-11
+
+### INS-038 · Signed report canonicalSnapshot omits the defect list + quantity/notes   [HIGH]
+- status: done            # 2026-07-11 (security review): fixed. reports.service.generate() now includes defects (with evidence photoIds), supplier/product, and freezes quantity/carton fields, workmanship/packaging notes, inspectionType, and the decision author/timestamp into the Ed25519-signed canonical; payload is normalized via JSON round-trip before hashing so generate-time and verify-time hashes match (also closes the undefined→null jsonb-drop trap). type-check + tests green.
+- area: Reports & verification
+- evidence: `apps/api/src/reports/reports.service.ts:46-76` (pre-fix) hashed only buyer/PO/aqlResult(perClass)/loops/photoHashes — never the DefectInstance rows or quantity/notes.
+- problem: The core buyer-facing content (defect narrative + photo-evidence mapping, quantity shortfall, cartons, workmanship/packaging notes) was OUTSIDE the tamper-proof envelope, so it could be altered after signing while public `GET /reports/verify/:token` still returned `valid:true` — defeating the central tamper-proof guarantee.
+- fix: Add every buyer-visible result field (incl. an ordered, canonicalized defect list with evidence ids) to the signed canonical.
+- verify: Editing a DefectInstance / quantity field after report generation makes public verification return `valid:false`.
+- refs: security review 2026-07-11 · [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§9)
+
+### INS-039 · Audit hash omits actor identity + timestamp (forgeable attribution)   [HIGH]
+- status: done            # 2026-07-11 (security review): fixed. audit.service.append() now folds orgId, actorType, actorUserId, ipAddress, userAgent and an app-assigned createdAt (ISO) into the versioned payloadHash, so a direct row UPDATE of the "who"/"when" breaks the chain and verifyChain() detects it. Corrected the misleading concurrency NOTE. type-check + tests green.
+- area: Tamper-proof & audit
+- evidence: `apps/api/src/audit/audit.service.ts:36-46` (pre-fix) hashed only action/entityType/entityId/metadata; actorUserId/actorType/createdAt were persisted outside the hash.
+- problem: An attacker with DB write access (the exact threat a hash chain defends against) could rewrite `actor_user_id`/`created_at` on any audit row and `verifyChain()` still returned true — the forensically decisive fields were forgeable with no tamper evidence.
+- fix: Fold all immutable, security-relevant columns (incl. an application-assigned timestamp) into the payload hash; version the payload format.
+- verify: A direct UPDATE of actor/timestamp on an audit row breaks chain verification. (Full DB-backed audit.service spec is INS-013.)
+- refs: security review 2026-07-11 · [../reference/inspect-schema.md](../reference/inspect-schema.md) (§9)
 
 ### INS-003 · PDF binary is never rendered   [HIGH]
 - status: todo
@@ -118,7 +166,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§7)
 
 ### INS-022 · Web client has no write helper (apiPost/Put/Patch/Delete)   [HIGH]
-- status: in-progress    # 2026-06-20: apiPost/Put/Patch/Delete + ApiError (surfaces NestJS messages) added to apps/web/lib/api.ts; type-checks clean. Live smoke (e.g. create buyer) pending the API/DB (INS-001).
+- status: done    # 2026-07-11: apiPost/Put/Patch/Delete + apiSend + ApiError (surfaces NestJS messages) live in apps/web/lib/api.ts (:105-137) and consumed by every server-action file (inspections/presets/dashboard/users/products/purchase-orders/buyers/suppliers/invite/populate/guests actions.ts). The full write loop was exercised live against the Railway DB (2026-06-20 smoke). Closed by the security-review pass verification.
 - area: Web console
 - evidence: `apps/web/lib/api.ts:15-39` exposes only `apiGet` + `loadOrFallback`; the only POST in the whole app is `lib/auth.ts:26` (login).
 - problem: No screen can perform any mutation through the client because the API client exposes only reads, so every primary action button across the console is structurally inert.
@@ -175,6 +223,33 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 
 ## Medium
 
+### INS-040 · supersedesInspectionId written unvalidated (cross-tenant link + billing manipulation)   [MEDIUM]
+- status: done            # 2026-07-11 (security review): fixed. inspections.service.create() now validates supersedesInspectionId with findFirst({id, orgId}) before writing (mirroring poId/loopPresetId/assignedInspectorId), so a re-inspection can only supersede a same-org inspection and the RE_INSPECTION BillableEvent classification can't be forced from a foreign/unrelated id. type-check + tests green.
+- area: Inspection lifecycle
+- evidence: `apps/api/src/inspections/inspections.service.ts:120` (pre-fix) wrote `input.supersedesInspectionId` with no org check; the self-FK (`schema.prisma:533`) enforces existence only.
+- problem: A QA_MANAGER could link a new inspection to another tenant's inspection (cross-tenant reference + onDelete:Restrict coupling) and, more readily, force any first inspection to be billed as a RE_INSPECTION (submit() derives the kind solely from this field).
+- fix: Org-scope the supersedes id on create (optionally also assert a terminal prior status).
+- verify: Creating an inspection with a foreign/nonexistent supersedesInspectionId is rejected (400).
+- refs: security review 2026-07-11 (also relates to INS-010, INS-018)
+
+### INS-041 · Buyer.defaultLoopPresetId accepts a cross-tenant preset   [MEDIUM]
+- status: done            # 2026-07-11 (security review): fixed. buyers.service create()+update() now call assertPresetInOrg() (findFirst {id, orgId}) so only the caller's own presets can be referenced; null clears, undefined is a no-op. Regression spec: buyers.service.spec.ts. type-check + tests green.
+- area: Workspace CRUD
+- evidence: `apps/api/src/buyers/buyers.service.ts:49,64` (pre-fix) wrote the client-supplied `defaultLoopPresetId` verbatim; the single-column FK (`schema.prisma:261`) checks existence only.
+- problem: A buyer in org A could hold an FK to org B's preset — a latent cross-tenant leak that activates the moment a read path resolves the preset (e.g. the buyer edit form's preset selector).
+- fix: Re-validate a non-null preset id against the caller's org on create + update (mirroring PurchaseOrdersService.assertBelongsToOrg).
+- verify: PATCH/POST /buyers with a foreign preset id is rejected (400). ✅ unit-tested.
+- refs: security review 2026-07-11 (INS-010 class)
+
+### INS-044 · DefectInstance has no clientRequestId/idempotency (contradicts a stated invariant)   [MEDIUM]
+- status: todo            # NEW 2026-07-11 (security review): needs a schema migration (add `clientRequestId String?` + `@@unique([orgId, clientRequestId])`) + addDefect() dedupe — deferred because it alters the live schema.
+- area: Defect catalog / Populate console
+- evidence: `CLAUDE.md` states "DefectInstance … writes accept an optional clientRequestId and dedupe on @@unique([orgId, clientRequestId])", but `schema.prisma:641` DefectInstance has neither the column nor the constraint; `populate.service.addDefect()` always `create()`s.
+- problem: A retried add-defect (double-click / offline-sync replay) duplicates the DefectInstance row; submit() groups defects by severity, so a phantom duplicate can flip a MAJOR class from PASS to FAIL — changing the binding QC outcome. Inspection + Photo are protected by exactly this constraint; DefectInstance is not.
+- fix: Add `clientRequestId` + `@@unique([orgId, clientRequestId])` to DefectInstance (migration), and have addDefect() accept it and return the existing row on replay.
+- verify: Replaying add-defect with the same clientRequestId returns the original row without inserting a duplicate; AQL counts are unaffected.
+- refs: security review 2026-07-11 (schema piece INS-016 implies but never spelled out)
+
 ### INS-011 · Append-only audit log not protected by DB triggers   [MEDIUM]
 - status: todo
 - area: Tamper-proof & audit
@@ -185,7 +260,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§9)
 
 ### INS-012 · Monotonic per-org audit sequence relies on caller-supplied tx   [MEDIUM]
-- status: todo
+- status: todo            # 2026-07-11 (security review): CONFIRMED — under Postgres default Read Committed, wrapping append() in the caller's tx does NOT serialize the read-max-then-write, so two concurrent same-org appends collide on @@unique([orgId,sequence]) → P2002 rolls back the loser's business mutation (no data corruption, but a spurious failure with no retry). The misleading "wrap … to avoid races" NOTE was corrected in audit.service.ts. Still open: Serializable+retry or an atomic per-org counter / advisory lock.
 - area: Tamper-proof & audit
 - evidence: `audit.service.ts:25-26` NOTE "caller MUST wrap in the audited write's transaction to avoid races"; `AuditLog.sequence` is a plain `Int`, `@@unique([orgId, sequence])` enforces uniqueness only.
 - problem: Sequence assignment reads-latest-then-writes with no DB generation, so two concurrent writers can pick the same next sequence; correctness depends on every caller wrapping the append in the audited write's transaction and retrying on unique-violation.
@@ -221,7 +296,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§7)
 
 ### INS-016 · Photo idempotency partial; verify dedupe semantics   [MEDIUM]
-- status: todo
+- status: todo            # 2026-07-11 (security review): registerPhoto dedups on (orgId, clientRequestId) only — a token reused across two inspections in the same org returns the FIRST inspection's photo and silently attaches nothing to the second. One reviewer rated this a real correctness defect (scope dedupe to inspectionId, 409 on cross-inspection collision); another judged it the intended org-scoped idempotency contract (matches @@unique([orgId, clientRequestId]) and the schema-doc semantics). Decide the contract here; the real web client already generates a fresh token per call, so it is not currently triggered in-product.
 - area: Populate console
 - evidence: `inspections.service.ts:71-76` + `populate.service.ts:92-97` dedupe on `(orgId, clientRequestId)`; `@@unique([orgId, clientRequestId])` on Inspection + Photo; dedupe-on-retry is app logic.
 - problem: Idempotency exists on create and registerPhoto but not uniformly across all retryable writes; the unique constraint only errors on duplicates — returning the existing row instead of erroring is app behavior that must be consistent.
@@ -304,6 +379,51 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 ---
 
 ## Low
+
+### INS-042 · Login timing side-channel enables active-account enumeration   [LOW]
+- status: done            # 2026-07-11 (security review): fixed. validateUser() now runs an equivalent scrypt (hashPassword, discarded) on the miss/inactive path so a failed login's latency no longer reveals whether the email maps to an active account. auth.service.spec still green.
+- area: Auth & RBAC
+- evidence: `apps/api/src/auth/auth.service.ts:37` short-circuited before scrypt for unknown/inactive emails.
+- problem: Timing gap (fast for unknown/inactive vs ~scrypt for active) enabled account enumeration on the un-throttled public /auth/login.
+- fix: Constant-work failure path (dummy scrypt).
+- verify: Failed logins for existent-active vs nonexistent emails have comparable latency.
+- refs: security review 2026-07-11 (see also INS-047 rate limiting)
+
+### INS-043 · reports.generate() double-call throws 500 instead of idempotent return   [LOW]
+- status: done            # 2026-07-11 (security review): fixed. generate() now catches Prisma P2002 on the Report.inspectionId unique and returns the existing report, so a concurrent double-generate converges idempotently instead of surfacing an opaque 500.
+- area: Reports & verification
+- evidence: `reports.service.ts` guard `if (inspection.report) return` and `tx.report.create` were not atomic; `Report.inspectionId` is `@unique`.
+- problem: A double-click / proxy retry could race two generate() calls; the loser hit the unique constraint and surfaced an unhandled 500.
+- fix: Catch P2002 → re-read + return the existing report.
+- verify: Two concurrent generate() calls both return the same report; neither 500s.
+- refs: security review 2026-07-11
+
+### INS-045 · Web session exposes the raw API bearer JWT to the browser   [LOW]
+- status: todo            # NEW 2026-07-11 (security review): deferred — needs a web-auth refactor (read the token via next-auth/jwt getToken server-side instead of placing it in the client-visible session), verified against the live login flow to avoid regressing apiToken().
+- area: Web console
+- evidence: `apps/web/lib/auth.ts:109` `s.accessToken = token.accessToken` — NextAuth serves this at `GET /api/auth/session`, so `fetch('/api/auth/session')` returns the API bearer JWT to client JS.
+- problem: The access token is only ever consumed server-side (`lib/api.ts` apiToken()), yet it's exposed to the browser, so any XSS/extension/kiosk foothold can exfiltrate it and replay against the API for the token lifetime (contradicts the "server-side only" contract at lib/api.ts:18).
+- fix: Keep the token only in the encrypted NextAuth JWT; have apiToken() read it via `getToken` server-side; leave only role/orgId in the session.
+- verify: `GET /api/auth/session` no longer contains accessToken; server-side API calls still authenticate.
+- refs: security review 2026-07-11
+
+### INS-046 · Report.canonicalSnapshot is nullable while verification depends on it   [LOW]
+- status: todo            # NEW 2026-07-11 (security review): needs a `SET NOT NULL` migration (or a CHECK that it's non-null whenever signature is set) — deferred as a live-schema change.
+- area: Reports & verification
+- evidence: `schema.prisma:724` `canonicalSnapshot Json?` while contentHash/signature/brandingSnapshot are NOT NULL and verifyByToken recomputes the hash from it.
+- problem: A Report row with a signature but null canonicalSnapshot (backfill / future re-gen path) would make public verification return `valid:false` for a genuinely signed report — a silently unverifiable artifact.
+- fix: Make canonicalSnapshot NOT NULL (migration), matching brandingSnapshot.
+- verify: The DB rejects a Report with a signature and null canonicalSnapshot.
+- refs: security review 2026-07-11
+
+### INS-047 · No rate limiting on public auth / invitation-accept endpoints   [LOW]
+- status: todo            # NEW 2026-07-11 (security review): add @nestjs/throttler (or edge rate limiting) to POST /auth/login, /auth/refresh, /invitations/accept, and /guest reads.
+- area: Auth & RBAC / Infra
+- evidence: no `@nestjs/throttler`/ThrottlerGuard anywhere in `apps/api`; the only global guards are JwtAuthGuard + RolesGuard.
+- problem: Unauthenticated endpoints (login, token accept, guest fetch) are un-throttled, aggravating credential-stuffing, token-guessing (INS-037), and enumeration (INS-042).
+- fix: Add per-IP rate limiting to the public routes.
+- verify: Rapid repeated hits to /auth/login and /invitations/accept are throttled (429).
+- refs: security review 2026-07-11
 
 ### INS-031 · Live list screens render lossy data (counts hardcoded to "—")   [LOW]
 - status: todo

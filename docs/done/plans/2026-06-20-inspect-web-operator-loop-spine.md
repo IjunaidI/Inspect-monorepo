@@ -1,5 +1,9 @@
 # Inspect Web — Operator-Loop Spine — Implementation Plan
 
+> **Status: ✅ DONE — shipped + verified live 2026-06-20; moved to `done/` 2026-07-11.** Closes INS-026/027/028
+> (create-inspection wired, QA decision persisted, real session/sign-out). See [STATUS.md](../../STATUS.md).
+> (Checkboxes below were not ticked during execution; completion is tracked in STATUS/BACKLOG + the shipped code.)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wire the QA operator loop (session → create inspection → submit → QA decision) into the Next.js console against the verified API.
@@ -8,7 +12,7 @@
 
 **Tech Stack:** NestJS 11 + Prisma 6 (API), Next.js 15 App Router + React 19 + NextAuth v5 (web), Jest (API unit tests). No new runtime dependencies.
 
-**Spec:** [docs/in-progress/specs/2026-06-20-inspect-web-operator-loop-spine-design.md](../specs/2026-06-20-inspect-web-operator-loop-spine-design.md)
+**Spec:** [docs/done/specs/2026-06-20-inspect-web-operator-loop-spine-design.md](../specs/2026-06-20-inspect-web-operator-loop-spine-design.md)
 
 ## Global Constraints
 

@@ -15,6 +15,8 @@ export interface AuditAppendInput {
   entityType?: string;
   entityId?: string;
   metadata?: unknown;
+  ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 /**
@@ -22,8 +24,12 @@ export interface AuditAppendInput {
  * per-org sequence and links each entry to the previous via prevEntryHash.
  * Pass the transaction client when atomicity with the audited write matters.
  *
- * NOTE: sequence assignment reads the latest entry then writes — wrap in the
- * same transaction as the audited mutation to avoid races under concurrency.
+ * NOTE: sequence assignment reads-latest-then-writes. Wrapping in the caller's
+ * transaction gives atomicity but does NOT serialize the read under Postgres's
+ * default Read Committed isolation, so two concurrent same-org appends can pick
+ * the same sequence; the @@unique([orgId, sequence]) constraint then rejects the
+ * loser with P2002 (loud failure, no silent fork). A gap-free, race-free counter
+ * needs Serializable + retry or an advisory lock — tracked as INS-012.
  */
 @Injectable()
 export class AuditService {
@@ -33,13 +39,28 @@ export class AuditService {
     input: AuditAppendInput,
     client: Prisma.TransactionClient = this.prisma,
   ) {
+    // Assign the timestamp in application code so it participates in the hash
+    // (a DB @default(now()) is unknowable at hash time).
+    const createdAt = new Date();
+    // The payload hash covers EVERY forensically-meaningful, immutable field —
+    // including actor identity, type, org, request origin, and time — so a direct
+    // row UPDATE of any of them breaks the chain and verifyChain() detects it.
+    // (Security review: previously only action/entity/metadata were hashed, so
+    // the "who"/"when" of an event could be silently forged.)
     const payloadHash = createHash('sha256')
       .update(
         canonicalize({
+          v: 2,
+          orgId: input.orgId ?? null,
+          actorType: input.actorType,
+          actorUserId: input.actorUserId ?? null,
           action: input.action,
           entityType: input.entityType ?? null,
           entityId: input.entityId ?? null,
           metadata: input.metadata ?? null,
+          ipAddress: input.ipAddress ?? null,
+          userAgent: input.userAgent ?? null,
+          createdAt: createdAt.toISOString(),
         }),
         'utf8',
       )
@@ -70,6 +91,9 @@ export class AuditService {
         prevEntryHash,
         sequence,
         metadata: input.metadata as Prisma.InputJsonValue,
+        ipAddress: input.ipAddress ?? undefined,
+        userAgent: input.userAgent ?? undefined,
+        createdAt,
       },
     });
   }

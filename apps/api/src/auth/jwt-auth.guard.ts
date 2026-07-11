@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { verifyJwt } from './jwt';
+import { requireSecret } from './jwt-secret';
 import { IS_PUBLIC_KEY } from './public.decorator';
 import { Role } from './rbac';
 
@@ -37,7 +38,7 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing bearer token');
     }
     const token = header.slice('Bearer '.length);
-    const secret = this.config.get<string>('JWT_ACCESS_SECRET') ?? 'dev-access-secret';
+    const secret = requireSecret(this.config, 'JWT_ACCESS_SECRET');
 
     let claims: Record<string, unknown>;
     try {

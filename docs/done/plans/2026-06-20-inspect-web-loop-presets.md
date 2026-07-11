@@ -1,5 +1,9 @@
 # Plan: Loop Presets — List · Builder · New-Version · Archive · View
 
+> **Status: ✅ DONE — shipped 2026-06-28; moved to `done/` 2026-07-11.** Full builder (loop sidebar, shot counter,
+> severity-grouped defect chips, measurement fields, custom-defect creation), list search/sort, new-version + archive
+> flows are wired live. Closes INS-024. See [STATUS.md](../../STATUS.md). (Checkbox state below is stale.)
+
 **For agentic workers:** REQUIRED SUB-SKILL: `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
 All actionable items are `- [ ]` checkboxes. Complete them in the order listed; the dependency graph is strictly top-down within each task group.
 

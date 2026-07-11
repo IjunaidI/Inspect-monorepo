@@ -99,6 +99,20 @@ export class InspectionsService {
       if (!inspector) throw new BadRequestException('assigned inspector not found in organization');
     }
 
+    // Tenant-isolation + billing-integrity guard (security review): a re-inspection
+    // may only supersede an inspection in the SAME org. Without this check a caller
+    // could link across tenants and force a RE_INSPECTION BillableEvent (submit()
+    // derives the billing kind solely from this field).
+    if (input.supersedesInspectionId) {
+      const prior = await this.prisma.inspection.findFirst({
+        where: { id: input.supersedesInspectionId, orgId },
+        select: { id: true },
+      });
+      if (!prior) {
+        throw new BadRequestException('superseded inspection not found in organization');
+      }
+    }
+
     const snapshot = buildPresetSnapshot(preset as unknown as PresetLike);
     const aqlPlan: AqlPlanInput = input.aqlPlan ?? {};
     const computedSampling = input.lotSize ? computeSampling(input.lotSize, aqlPlan) : undefined;

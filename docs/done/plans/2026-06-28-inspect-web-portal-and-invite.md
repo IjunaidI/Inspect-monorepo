@@ -1,7 +1,7 @@
 # Plan: Guest Portal + Invite Flow (INS-025 · INS-029 · INS-030)
 
 **Date:** 2026-06-28  
-**Status:** in-progress  
+**Status:** ✅ done (shipped 2026-06-28; moved to `done/` 2026-07-11 — verified against the live code)  
 **Closes:** INS-025 (portal), INS-029 (invite accept + invite user), INS-030 (role change)
 
 ## Context

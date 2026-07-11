@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword } from '../auth/password';
 
@@ -26,6 +26,19 @@ export class InvitationsService {
     }
     if (invitation.expiresAt.getTime() < Date.now()) {
       throw new BadRequestException('Invitation has expired');
+    }
+
+    // Tenant-isolation guard: User.email is globally unique. If an account with
+    // this email already exists in ANOTHER org, accepting must NOT relocate it,
+    // reset its password, or change its role — that would be a cross-tenant
+    // account takeover. Only a brand-new account, or an existing one already in
+    // the invitation's org, may be activated by an invite. (Security review.)
+    const existing = await this.prisma.user.findUnique({
+      where: { email: invitation.email },
+      select: { id: true, orgId: true },
+    });
+    if (existing && existing.orgId !== invitation.orgId) {
+      throw new ForbiddenException('An account already exists for this email');
     }
 
     const passwordHash = await hashPassword(input.password);

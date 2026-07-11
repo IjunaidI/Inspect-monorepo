@@ -35,10 +35,11 @@ export class BuyersService {
     return buyer;
   }
 
-  create(orgId: string, userId: string, input: CreateBuyerInput) {
+  async create(orgId: string, userId: string, input: CreateBuyerInput) {
     if (!input?.name?.trim()) {
       throw new BadRequestException('name is required');
     }
+    await this.assertPresetInOrg(orgId, input.defaultLoopPresetId);
     return this.prisma.buyer.create({
       data: {
         orgId,
@@ -54,6 +55,7 @@ export class BuyersService {
 
   async update(orgId: string, id: string, input: UpdateBuyerInput) {
     await this.get(orgId, id);
+    await this.assertPresetInOrg(orgId, input.defaultLoopPresetId);
     return this.prisma.buyer.update({
       where: { id },
       data: {
@@ -67,6 +69,23 @@ export class BuyersService {
             : input.defaultLoopPresetId,
       },
     });
+  }
+
+  /**
+   * Tenant-isolation guard (security review): a buyer's defaultLoopPresetId must
+   * reference a preset in the SAME org. The DB FK only checks existence, so
+   * without this a caller could point at another tenant's preset. null (clear)
+   * and undefined (no change) pass through untouched.
+   */
+  private async assertPresetInOrg(orgId: string, presetId?: string | null): Promise<void> {
+    if (!presetId) return;
+    const preset = await this.prisma.loopPreset.findFirst({
+      where: { id: presetId, orgId },
+      select: { id: true },
+    });
+    if (!preset) {
+      throw new BadRequestException('defaultLoopPresetId not found in organization');
+    }
   }
 
   async archive(orgId: string, id: string) {

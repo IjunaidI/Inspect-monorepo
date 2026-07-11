@@ -31,10 +31,28 @@ import { UsersModule } from './users/users.module';
 import { BuyerGuestsModule } from './buyer-guests/buyer-guests.module';
 import * as path from 'path';
 
+/**
+ * Fail-closed env validation (security review): refuse to boot without strong JWT
+ * signing secrets. Mirrors the existing hard-fail on REDIS_URL — an unset secret
+ * previously fell back to a source-visible default, letting anyone forge a
+ * PLATFORM_ADMIN token.
+ */
+function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
+  for (const key of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']) {
+    const value = config[key];
+    const s = value == null ? '' : String(value).trim();
+    if (s === '' || s.toUpperCase() === 'CHANGE_ME') {
+      throw new Error(`${key} is required (set a strong secret; refusing a default/placeholder)`);
+    }
+  }
+  return config;
+}
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validate: validateEnv,
       envFilePath: [
         path.resolve(process.cwd(), '../../.env'),
         path.resolve(process.cwd(), '.env'),

@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { hasAtLeast, Role } from '../auth/rbac';
@@ -37,8 +38,9 @@ export class UsersService {
     });
   }
 
-  invite(orgId: string, inviter: AuthUser, input: InviteUserInput) {
+  async invite(orgId: string, inviter: AuthUser, input: InviteUserInput) {
     if (!input?.email?.trim()) throw new BadRequestException('email is required');
+    const email = input.email.trim().toLowerCase();
     const role = input.role ?? 'INSPECTOR';
     if (role === 'PLATFORM_ADMIN') {
       throw new ForbiddenException('Cannot invite a platform admin');
@@ -46,11 +48,23 @@ export class UsersService {
     if (!hasAtLeast(inviter.role, role)) {
       throw new ForbiddenException('Cannot invite a role above your own');
     }
+    // Defense-in-depth (security review): never issue an invite for an email that
+    // already belongs to a user in a DIFFERENT org — accepting it could relocate
+    // or reset that foreign-tenant account. (The accept path also enforces this.)
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { orgId: true },
+    });
+    if (existing && existing.orgId !== orgId) {
+      throw new ForbiddenException('An account already exists for this email');
+    }
     return this.prisma.invitation.create({
       data: {
         orgId,
-        email: input.email.trim().toLowerCase(),
+        email,
         role,
+        // Security token: use a CSPRNG value, not the guessable cuid() default.
+        token: randomUUID(),
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
         invitedById: inviter.userId,
       },

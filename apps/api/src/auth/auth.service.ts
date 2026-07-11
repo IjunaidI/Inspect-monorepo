@@ -1,8 +1,9 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { verifyPassword } from './password';
+import { hashPassword, verifyPassword } from './password';
 import { signJwt, verifyJwt } from './jwt';
+import { requireSecret } from './jwt-secret';
 import { Role } from './rbac';
 import { AuthUser } from './auth-user';
 
@@ -19,10 +20,10 @@ export class AuthService {
   ) {}
 
   private get accessSecret(): string {
-    return this.config.get<string>('JWT_ACCESS_SECRET') ?? 'dev-access-secret';
+    return requireSecret(this.config, 'JWT_ACCESS_SECRET');
   }
   private get refreshSecret(): string {
-    return this.config.get<string>('JWT_REFRESH_SECRET') ?? 'dev-refresh-secret';
+    return requireSecret(this.config, 'JWT_REFRESH_SECRET');
   }
   private get accessTtl(): number {
     return Number(this.config.get('JWT_ACCESS_TTL_SECONDS') ?? 900);
@@ -35,6 +36,10 @@ export class AuthService {
   async validateUser(email: string, password: string): Promise<AuthUser | null> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.passwordHash || user.status !== 'ACTIVE') {
+      // Constant-work path (security review): run an equivalent scrypt so the
+      // response latency of a failed login does not reveal whether the email
+      // maps to an active account (account-enumeration side-channel).
+      await hashPassword(password).catch(() => undefined);
       return null;
     }
     const ok = await verifyPassword(password, user.passwordHash);
