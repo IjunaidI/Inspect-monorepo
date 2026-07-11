@@ -4,8 +4,16 @@ import { AuthUser } from '../auth/auth-user';
 const OWNER: AuthUser = { userId: 'u-owner', orgId: 'org1', role: 'ORG_OWNER' };
 const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER' };
 
-function makeService(mailResult: { sent: boolean; messageId?: string } = { sent: true }) {
+function makeService(
+  mailResult: { sent: boolean; messageId?: string } = { sent: true },
+  existingUser: { orgId: string | null } | null = null,
+) {
   const prisma = {
+    // The invite path re-checks the email against existing accounts (INS-035
+    // defense-in-depth); default stub: no account exists for the email.
+    user: {
+      findUnique: jest.fn(async () => existingUser),
+    },
     invitation: {
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
         id: 'inv1',
@@ -39,12 +47,13 @@ describe('UsersService.invite', () => {
       orgId: 'org1',
       email: 'new.user@example.com',
       role: 'INSPECTOR',
-      token: 'tok-abc',
     });
+    // INS-037: the service generates a CSPRNG UUID token (never the cuid default).
+    expect(invitation.token).toMatch(/^[0-9a-f-]{36}$/);
     expect(mail.sendUserInvitation).toHaveBeenCalledTimes(1);
     expect(mail.sendUserInvitation).toHaveBeenCalledWith({
       to: 'new.user@example.com',
-      token: 'tok-abc',
+      token: invitation.token,
       role: 'INSPECTOR',
     });
   });
@@ -57,7 +66,8 @@ describe('UsersService.invite', () => {
       role: 'INSPECTOR',
     });
 
-    expect(invitation).toMatchObject({ email: 'x@y.com', token: 'tok-abc' });
+    expect(invitation).toMatchObject({ email: 'x@y.com' });
+    expect(invitation.token).toBeTruthy();
   });
 
   it('rejects a missing email and sends nothing', async () => {
@@ -83,5 +93,25 @@ describe('UsersService.invite', () => {
       service.invite('org1', QA, { email: 'x@y.com', role: 'ORG_OWNER' }),
     ).rejects.toThrow('Cannot invite a role above your own');
     expect(mail.sendUserInvitation).not.toHaveBeenCalled();
+  });
+
+  it('rejects an email already registered in another org (INS-035) and sends nothing', async () => {
+    const { service, mail, prisma } = makeService({ sent: true }, { orgId: 'other-org' });
+    await expect(
+      service.invite('org1', OWNER, { email: 'taken@y.com', role: 'INSPECTOR' }),
+    ).rejects.toThrow('An account already exists for this email');
+    expect(prisma.invitation.create).not.toHaveBeenCalled();
+    expect(mail.sendUserInvitation).not.toHaveBeenCalled();
+  });
+
+  it('still allows re-inviting an email that belongs to the same org', async () => {
+    const { service, mail } = makeService({ sent: true }, { orgId: 'org1' });
+    const invitation = await service.invite('org1', OWNER, {
+      email: 'same@y.com',
+      role: 'INSPECTOR',
+    });
+    expect(invitation).toMatchObject({ email: 'same@y.com' });
+    expect(invitation.token).toBeTruthy();
+    expect(mail.sendUserInvitation).toHaveBeenCalledTimes(1);
   });
 });

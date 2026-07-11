@@ -1,6 +1,9 @@
 import { OrgsService } from './orgs.service';
 
-function makeService(mailResult: { sent: boolean; messageId?: string } = { sent: true }) {
+function makeService(
+  mailResult: { sent: boolean; messageId?: string } = { sent: true },
+  existingUser: { id: string } | null = null,
+) {
   const tx = {
     organization: {
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
@@ -19,6 +22,11 @@ function makeService(mailResult: { sent: boolean; messageId?: string } = { sent:
     },
   };
   const prisma = {
+    // Onboarding refuses an ownerEmail that already has an account (security
+    // review); default stub: no existing account.
+    user: {
+      findUnique: jest.fn(async () => existingUser),
+    },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<any>) => fn(tx)),
   };
@@ -47,12 +55,13 @@ describe('OrgsService.create', () => {
       orgId: 'org1',
       email: 'owner@acme.com',
       role: 'ORG_OWNER',
-      token: 'tok-owner',
     });
+    // INS-037: the service generates a CSPRNG UUID token (never the cuid default).
+    expect(result.invitation.token).toMatch(/^[0-9a-f-]{36}$/);
     expect(mail.sendUserInvitation).toHaveBeenCalledTimes(1);
     expect(mail.sendUserInvitation).toHaveBeenCalledWith({
       to: 'owner@acme.com',
-      token: 'tok-owner',
+      token: result.invitation.token,
       role: 'ORG_OWNER',
       orgName: 'Acme Apparel',
     });
@@ -68,7 +77,7 @@ describe('OrgsService.create', () => {
     });
 
     expect(result.org.id).toBe('org1');
-    expect(result.invitation.token).toBe('tok-owner');
+    expect(result.invitation.token).toBeTruthy();
   });
 
   it('rejects invalid input before any write or email', async () => {
@@ -86,6 +95,21 @@ describe('OrgsService.create', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       service.create('admin-1', { name: 'A', type: 'MANUFACTURER', ownerEmail: ' ' } as any),
     ).rejects.toThrow('ownerEmail is required');
+
+    expect(tx.organization.create).not.toHaveBeenCalled();
+    expect(mail.sendUserInvitation).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ownerEmail that already has an account and sends nothing', async () => {
+    const { service, tx, mail } = makeService({ sent: true }, { id: 'existing-user' });
+
+    await expect(
+      service.create('admin-1', {
+        name: 'Acme',
+        type: 'MANUFACTURER',
+        ownerEmail: 'taken@acme.com',
+      }),
+    ).rejects.toThrow('An account already exists for this email');
 
     expect(tx.organization.create).not.toHaveBeenCalled();
     expect(mail.sendUserInvitation).not.toHaveBeenCalled();
