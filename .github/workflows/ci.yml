@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: inspect
+          POSTGRES_PASSWORD: inspect
+          POSTGRES_DB: inspect
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://inspect:inspect@localhost:5432/inspect?schema=public"
+      REDIS_URL: "redis://localhost:6379"
+      # CI-only throwaway secrets (never reused anywhere else).
+      JWT_ACCESS_SECRET: "iM04fRyCsDYCIN3-JkNKQ0vU-22ob_r23OCe8k0HApI"
+      JWT_REFRESH_SECRET: "ylzRdtnHklnbE4TacM4xDFrJET_p8SWaJYC6bj_wvDY"
+      BOOTSTRAP_ADMIN_EMAIL: "ci-admin@inspect.local"
+      BOOTSTRAP_ADMIN_PASSWORD: "Ci-Adm1n-YCvfwL_BY-cojInYDETZ"
+      BOOTSTRAP_ADMIN_NAME: "CI Admin"
+      S3_ENDPOINT: "http://localhost:9000"
+      S3_REGION: "us-east-1"
+      S3_BUCKET: "inspect-photos"
+      S3_ACCESS_KEY_ID: "minioadmin"
+      S3_SECRET_ACCESS_KEY: "minioadmin"
+      S3_FORCE_PATH_STYLE: "true"
+      TURBO_TELEMETRY_DISABLED: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # MinIO needs a start command, so it can't be a GitHub service container.
+      # If it fails to start, the integration suite skips byte-upload tests gracefully,
+      # so these steps must not fail the job.
+      - name: Start MinIO
+        continue-on-error: true
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live > /dev/null; then
+              echo "MinIO is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MinIO did not become healthy in time"
+          exit 1
+
+      - name: Create MinIO bucket
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: minioadmin
+          AWS_SECRET_ACCESS_KEY: minioadmin
+          AWS_REGION: us-east-1
+        run: aws --endpoint-url http://localhost:9000 s3 mb s3://inspect-photos
+
+      - name: Generate Ed25519 report-signing key
+        run: |
+          node -e "const { generateKeyPairSync } = require('node:crypto'); const { privateKey } = generateKeyPairSync('ed25519'); process.stdout.write(privateKey.export({ type: 'pkcs8', format: 'pem' }));" > /tmp/report-signing-key.pem
+          {
+            echo "REPORT_SIGNING_PRIVATE_KEY_PEM<<PEM_EOF"
+            cat /tmp/report-signing-key.pem
+            echo "PEM_EOF"
+          } >> "$GITHUB_ENV"
+          rm /tmp/report-signing-key.pem
+
+      - name: Apply database migrations
+        run: pnpm --filter @inspect/api exec prisma migrate deploy
+
+      - name: Seed database
+        run: pnpm --filter @inspect/api exec prisma db seed
+
+      - name: Type-check
+        run: pnpm type-check
+
+      - name: Unit tests (API)
+        run: pnpm --filter @inspect/api test
+
+      - name: Integration tests (API)
+        run: pnpm --filter @inspect/api test:integration
+
+      - name: Build (API)
+        run: pnpm --filter @inspect/api build
+
+      # Enable after local verification:
+      # - name: Lint
+      #   run: pnpm lint
+      # - name: Build (web)
+      #   run: pnpm --filter @inspect/web build
