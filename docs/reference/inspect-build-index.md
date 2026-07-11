@@ -42,7 +42,7 @@ A `docker-compose.dev.yml` (Postgres + Redis + MinIO) is itself a Phase-2 task s
 | Phase | Plan file | Produces | DB needed? |
 |---|---|---|---|
 | **1. Foundation & domain core** ✅ | `done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md` | `@inspect/shared-types`; AQL engine (ISO 2859-1); tamper-proof crypto; audit hash-chain — all unit-tested | **No** |
-| 2. Auth & tenancy 🟡 | `in-progress/plans/2026-06-06-inspect-phase2-auth-tenancy.md` | login, JWT, multi-tenant RBAC guards, invite-only onboarding, `docker-compose.dev.yml`, Prisma migrate/seed run — *Tasks 1–4 done; 5–7 DB-bound, unverified (INS-001)* | Yes |
+| 2. Auth & tenancy ✅ | `done/plans/2026-06-06-inspect-phase2-auth-tenancy.md` | login, JWT + refresh, multi-tenant RBAC guards (negative matrix integration-tested), invite-only onboarding + email delivery, `docker-compose.dev.yml`, Prisma migrate/seed — *completed 2026-07-11 (INS-009/INS-004)* | Yes |
 | 3. Workspace | `…-phase3-workspace.md` (TBW) | Buyer/Supplier/PO/Product CRUD + loop-preset builder (API + console) | Yes |
 | 4. Inspection setup | `…-phase4-inspection-setup.md` (TBW) | create/assign-inspection flow; wire AQL engine; snapshot preset; locked tamper-proof block | Yes |
 | 5. Admin populate console | `…-phase5-populate-console.md` (TBW) | presigned S3 upload, drag photos into loops, defect tagging, measurements | Yes |

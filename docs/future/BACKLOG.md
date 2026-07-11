@@ -24,13 +24,13 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 ## Blockers
 
 ### INS-001 · Stack has never run against a real Postgres/Redis   [BLOCKER]
-- status: in-progress    # 2026-06-20: FULL LOOP VERIFIED LIVE end-to-end (acceptance a+b met). A committed smoke driver (apps/api/scripts/smoke-loop.mjs) drives admin login → create org → accept owner invite → workspace CRUD → create inspection → (Platform-Admin cross-tenant) populate presign/photo/defect/measure → submit (AQL→PASS, code J) → QA decision → Ed25519-signed report → public verify (valid+hashMatches+signatureValid) → buyer-guest magic-link fetch — all 25 steps 2xx against the Railway Postgres+Redis. Remaining for closure: containerized CI integration test (INS-009) + real photo byte upload to MinIO/S3 (INS-023). See runbook.
+- status: done            # 2026-06-20: FULL LOOP VERIFIED LIVE end-to-end (acceptance a+b) — the committed smoke driver (apps/api/scripts/smoke-loop.mjs) drives all 25 steps 2xx against the Railway Postgres+Redis. 2026-07-11: acceptance (c) closed — the smoke assertions folded into a 36-test Jest integration suite (apps/api/test/integration/: negative RBAC matrix, live token refresh, core loop, tamper-evidence + immutability regressions) verified green vs the live Postgres, plus .github/workflows/ci.yml running migrate→seed→unit→integration against containerized Postgres 16 + Redis 7 (+MinIO for the INS-023 byte path) on every push/PR.
 - area: Infra & CI
 - evidence: `prisma/migrations/` has only `00000000000000_init` (never applied); API testCount is "compiles, type-checks; logic unit-tested"; only `apps/api/test/app.e2e-spec.ts` (1 test) exists.
 - problem: The entire DB-bound surface (auth login/me, guards, onboarding, all CRUD, inspection lifecycle, populate, reports, audit) is coded but has **never executed against a real database**. Correctness, migrations, FK policies, and the seven app-layer invariants are all unproven.
 - fix: Bring up `docker-compose.dev.yml` (Postgres 16 + Redis 7 + MinIO), run `prisma migrate deploy` + `db seed`, generate an Ed25519 keypair, boot the API, and drive the core loop (login → create inspection → populate → submit → AQL evaluate → sign report → verify token) manually and via a smoke e2e (testcontainers).
 - verify: `prisma migrate status` shows the init migration applied; the API boots clean; a scripted login→create→submit→decision→report flow returns 2xx end-to-end against a containerized Postgres.
-- refs: [../in-progress/plans/2026-06-20-ins-001-stand-up-and-verify.md](../in-progress/plans/2026-06-20-ins-001-stand-up-and-verify.md) (runbook) · [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md) (Phase A)
+- refs: [../done/plans/2026-06-20-ins-001-stand-up-and-verify.md](../done/plans/2026-06-20-ins-001-stand-up-and-verify.md) (runbook) · [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md) (Phase A)
 
 ### INS-002 · Committed real-looking secrets in `.env.example`   [BLOCKER]
 - status: in-progress    # 2026-06-20: .env.example scrubbed to placeholders (working tree clean, verified). PENDING (user-side): rotate the live Railway creds + decide on git-history scrub.
@@ -39,7 +39,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - problem: Real-looking DB/Redis passwords (and other secret-shaped values) are committed in the tracked `.env.example`. Anything live must be rotated and scrubbed before a public/Railway deploy, or tenant isolation + the tamper-proof signing guarantee are compromised.
 - fix: Replace every value in `.env.example` with obvious placeholders (`<postgres-password>`); rotate any credential that was ever real in Railway; confirm no other secret is committed (scan history); regenerate the Ed25519 report-signing keypair.
 - verify: `.env.example` contains only placeholders; a secret scan of tracked files + history finds no live credential; the signing keypair used in any prior commit is rotated/revoked.
-- refs: [../in-progress/plans/2026-06-20-ins-001-stand-up-and-verify.md](../in-progress/plans/2026-06-20-ins-001-stand-up-and-verify.md)
+- refs: [../done/plans/2026-06-20-ins-001-stand-up-and-verify.md](../done/plans/2026-06-20-ins-001-stand-up-and-verify.md)
 
 ### INS-035 · Invitation accept can take over / relocate a cross-org account   [BLOCKER]
 - status: done            # 2026-07-11 (security review): fixed. accept() now looks up the existing user by (globally-unique) email and throws ForbiddenException if it belongs to a different org; invite-creation paths (users.service.invite, orgs.service.create) also refuse an email already registered in another org. Regression spec: invitations.service.spec.ts (cross-tenant reject + brand-new activate + same-org allow).
@@ -103,13 +103,13 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§9/§10)
 
 ### INS-004 · Email / magic-link delivery not implemented   [HIGH]
-- status: done            # 2026-07-11: @Global MailModule + MailService (nodemailer — SMTP_URL transport, dev/json fallback when unset, logged once at boot). users.invite, orgs.create (first ORG_OWNER, sent post-commit), and buyer-guests.invite now await sendUserInvitation / sendBuyerGuestMagicLink built on WEB_BASE_URL (/invite?token&email&role, /portal?token — URL-encoded). Sends never throw (failures log + return {sent:false}) so the business write survives; the copyable link stays in each response as fallback. New env SMTP_URL/MAIL_FROM/WEB_BASE_URL in .env.example + turbo.json globalEnv. 19 new unit tests (mail/users/orgs/buyer-guests specs), API suite 119 green; not yet exercised against a real SMTP server. Report-delivery email + ReportDelivery rows remain INS-020 (blocked on INS-003 PDF).
+- status: done            # 2026-07-11: @Global MailModule + MailService (nodemailer — SMTP_URL transport, dev/json fallback when unset, logged once at boot). users.invite, orgs.create (first ORG_OWNER, sent post-commit), and buyer-guests.invite now await sendUserInvitation / sendBuyerGuestMagicLink built on WEB_BASE_URL (/invite?token&email&role, /portal?token — URL-encoded). Sends never throw (failures log + return {sent:false}) so the business write survives; the copyable link stays in each response as fallback. New env SMTP_URL/MAIL_FROM/WEB_BASE_URL in .env.example + turbo.json globalEnv. Review-hardened same day: short SMTP timeouts (5s connect/greeting, 10s socket — nodemailer's 30–120s defaults would stall the invite HTTP path), malformed/scheme-less SMTP_URL degrades loudly to dev/json mode instead of crashing boot, dev/json mode actually logs each message, and invite/guest responses expose emailSent. 24 new unit tests (mail/users/orgs/buyer-guests specs), API suite 135 green; not yet exercised against a real SMTP server. Report-delivery email + ReportDelivery rows remain INS-020 (blocked on INS-003 PDF).
 - area: Tenancy & onboarding
 - evidence: `apps/api/src/buyer-guests/buyer-guests.service.ts:33` comment calls the token "the credential to send them" but `invite()` just returns it to the caller; no `nodemailer`/SMTP in `apps/api/package.json`.
 - problem: Invitations, buyer-guest magic links, and report deliveries generate tokens but nothing emails them, so onboarding and report delivery cannot complete without manually copying tokens.
 - fix: Add an email provider (`nodemailer`/SMTP, dev stream transport); send invitation, buyer-guest magic-link, and report-delivery emails; write `ReportDelivery`/`DeliveryChannel` rows on send.
 - verify: Inviting a user / buyer guest / delivering a report sends an email with the correct tokenized link and writes a delivery record; no token is returned to the API caller as the only credential.
-- refs: [../in-progress/plans/2026-06-06-inspect-phase2-auth-tenancy.md](../in-progress/plans/2026-06-06-inspect-phase2-auth-tenancy.md) (Task 7)
+- refs: [../done/plans/2026-06-06-inspect-phase2-auth-tenancy.md](../done/plans/2026-06-06-inspect-phase2-auth-tenancy.md) (Task 7)
 
 ### INS-005 · Aggregation / count / dashboard endpoints absent   [HIGH]
 - status: todo
@@ -148,7 +148,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md](../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md) (Task 7)
 
 ### INS-009 · No integration/e2e suite against a real DB; CI absent   [HIGH]
-- status: todo            # 2026-06-20: a framework-free full-loop smoke driver now exists (apps/api/scripts/smoke-loop.mjs, proven green against the Railway DB) — fold its assertions into a testcontainers-backed Jest e2e + a CI workflow, and add the negative RBAC matrix (401/403/cross-org).
+- status: done            # 2026-07-11: 36-test Jest integration suite at apps/api/test/integration/ (run: pnpm api test:integration; env-driven DATABASE_URL/REDIS_URL — the repo-root .env locally, service containers in CI). Covers the negative RBAC matrix (401 no/garbage/forged-dev-secret/expired/refresh-as-access tokens; 403 role floors incl. the no-org-admin tenant guard; cross-org 404s + list isolation; INS-035 cross-tenant invite refusal), the live token-refresh round-trip, the full 25-step core loop, DB-level tamper-evidence (INS-038) and post-lock immutability, and the presigned byte-upload path (INS-023, self-skips without MinIO). Verified green against the live Railway Postgres+Redis. CI: .github/workflows/ci.yml (Postgres 16 + Redis 7 services, MinIO via docker run, per-run Ed25519 key, migrate→seed→type-check→unit→integration→build) on push/PR to main. Chose env-driven service containers over testcontainers (no Docker on the dev machine; CI provides the containers).
 - area: Infra & CI
 - evidence: only `apps/api/test/app.e2e-spec.ts` (1 test); all 97 passing tests are pure-unit; no CI workflow in the repo.
 - problem: Nothing exercises Prisma, guards, RBAC-by-`orgId`, or the inspection lifecycle against a database, and there is no CI gate, so DB-layer regressions are invisible.
@@ -175,7 +175,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md) (Phase B) — **prerequisite for INS-023/024/026/027/029/030.**
 
 ### INS-023 · Populate screen fully static (no upload/tag/measure/submit)   [HIGH]
-- status: done            # 2026-06-28: parameterized `/inspections/[id]/populate` wired — PLATFORM_ADMIN-gated server page loads inspection + defect catalog; `populate-workspace.tsx` client component drives loop sidebar, photo presign+register, defect tag (catalog + custom), measurement save, and submit-for-review via Server Actions; photo byte PUT to MinIO gated on MinIO running (INS-023 MinIO infra). DB-side (presign metadata + defect + measurement) works without MinIO. `pnpm type-check` clean, 100 API tests green.
+- status: done            # 2026-06-28: parameterized `/inspections/[id]/populate` wired — PLATFORM_ADMIN-gated server page loads inspection + defect catalog; `populate-workspace.tsx` client component drives loop sidebar, photo presign+register, defect tag (catalog + custom), measurement save, and submit-for-review via Server Actions; DB-side (presign metadata + defect + measurement) works without MinIO. 2026-07-11: the real photo BYTE path now has an e2e (test/integration/storage-bytes.e2e-spec.ts — presigned PUT of real bytes + register with their true sha256) that runs in CI against MinIO and self-skips where object storage is unreachable; local MinIO still needs Docker (docker-compose.dev.yml).
 - area: Web console
 - evidence: `apps/web/app/(console)/populate/page.tsx:57-58,104` — Save / Submit / Upload buttons have no handlers; all loop/shot/tag/measurement data is hardcoded.
 - problem: The Platform-Admin populate flow — the one role that owns photo upload, defect tagging, measurements, and submit-for-review — does nothing on the web; the backend populate service is unreachable from the UI.
@@ -365,7 +365,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - problem: Org Owners cannot invite users and invitees cannot accept (set name/password, activate account) from the web, so invite-only onboarding cannot complete through the UI.
 - fix: Wire Invite user to the invitations create endpoint and the accept page to read the token from `searchParams` and POST account activation.
 - verify: Inviting a user creates an invitation (+ email per INS-004); opening the invite link with the token and submitting activates the account and allows login.
-- refs: [../in-progress/plans/2026-06-06-inspect-phase2-auth-tenancy.md](../in-progress/plans/2026-06-06-inspect-phase2-auth-tenancy.md) (Task 7)
+- refs: [../done/plans/2026-06-06-inspect-phase2-auth-tenancy.md](../done/plans/2026-06-06-inspect-phase2-auth-tenancy.md) (Task 7)
 
 ### INS-030 · Change-user-role and Add/Import workspace actions unwired   [MEDIUM]
 - status: done            # 2026-06-28: Per-row role <select> on /users live-patches via PATCH /users/:id/role. Deactivate action wired via MoreVertical menu. Add Buyer/Supplier now wired (done in workspace directory plan, 2026-06-28). CSV import remains out-of-scope for MVP.
@@ -453,10 +453,19 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md)
 
 ### INS-034 · Workspace CRUD and onboarding modules untested   [LOW]
-- status: todo
+- status: todo            # 2026-07-11: partially reduced — users/orgs/buyer-guests/invitations/buyers now have unit specs (security review + INS-004), and the INS-009 integration suite exercises the CRUD create paths + tenant scoping live. Remaining: suppliers/products/purchase-orders/loop-presets/defect-catalog/guest specs.
 - area: Workspace CRUD
 - evidence: `buyers`/`suppliers`/`products`/`purchase-orders`/`users`/`loop-presets`/`defect-catalog`/`invitations`/`buyer-guests`/`guest`/`orgs` modules all `tested:false`.
 - problem: A large band of controllers/services has no tests, so RBAC scoping, validation, and CRUD correctness are unverified once the DB is live.
 - fix: Add controller/service specs (or integration tests) for the untested modules, prioritizing tenant-scoping + validation paths.
 - verify: Each module has at least happy-path + RBAC-scoping tests passing against a test DB.
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md)
+
+### INS-048 · Lint is broken repo-wide (ESLint 9 without flat config; `next lint` deprecated)   [LOW]
+- status: todo            # found 2026-07-11 while scoping CI — lint is therefore NOT in the CI workflow yet (commented out).
+- area: Infra & CI
+- evidence: `pnpm lint` fails: `apps/api` has ESLint 9.x installed but only a legacy `.eslintrc`-style setup (no `eslint.config.js` flat config → "ESLint couldn't find an eslint.config.(js|mjs|cjs) file"); `apps/web` `next lint` prints the deprecation notice directing to the ESLint CLI codemod.
+- problem: Neither app can lint, so style/correctness rules are unenforced and lint cannot gate CI.
+- fix: Migrate `apps/api` to an ESLint 9 flat config (typescript-eslint + prettier); migrate `apps/web` off `next lint` via `next-lint-to-eslint-cli`; then enable the commented-out Lint step in `.github/workflows/ci.yml`.
+- verify: `pnpm lint` passes at the repo root; the CI Lint step is enabled and green.
+- refs: —

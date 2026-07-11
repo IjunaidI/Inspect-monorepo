@@ -133,13 +133,47 @@ describe('MailService', () => {
       expect(result.messageId).toBeTruthy();
     });
 
-    it('uses an SMTP transport when SMTP_URL is set', () => {
+    it('uses an SMTP transport with short timeouts when SMTP_URL is set', () => {
       const { service } = makeService({
         SMTP_URL: 'smtp://user:pass@smtp.example.com:587',
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const transporter = (service as any).transporter;
-      expect(transporter.transporter.name).toBe('SMTP');
+      const smtp = (service as any).transporter.transporter;
+      expect(smtp.name).toBe('SMTP');
+      // Review finding: nodemailer's defaults (30–120s) would stall the invite
+      // HTTP path on a black-holed SMTP host — the timeouts must stay short.
+      expect(smtp.options.host).toBe('smtp.example.com');
+      expect(smtp.options.port).toBe(587);
+      expect(smtp.options.connectionTimeout).toBeLessThanOrEqual(10_000);
+      expect(smtp.options.greetingTimeout).toBeLessThanOrEqual(10_000);
+      expect(smtp.options.socketTimeout).toBeLessThanOrEqual(30_000);
+      expect(smtp.options.auth).toEqual({ user: 'user', pass: 'pass' });
+    });
+
+    it('degrades a malformed/scheme-less SMTP_URL to json mode instead of crashing boot', () => {
+      for (const bad of ['smtp.example.com:587', 'not a url', 'http://smtp.example.com']) {
+        const { service } = makeService({ SMTP_URL: bad });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        expect((service as any).transporter.transporter.name).toBe('JSONTransport');
+      }
+    });
+
+    it('logs the full serialized message (link included) in dev/json mode', async () => {
+      const { service } = makeService({});
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const logSpy = jest.spyOn((service as any).logger, 'log');
+
+      await service.sendUserInvitation({
+        to: 'dev@example.com',
+        token: 'tok-logged',
+        role: 'INSPECTOR',
+      });
+
+      const devMailLine = logSpy.mock.calls
+        .map((c) => String(c[0]))
+        .find((line) => line.includes('[dev mail'));
+      expect(devMailLine).toBeTruthy();
+      expect(devMailLine).toContain('tok-logged');
     });
   });
 });

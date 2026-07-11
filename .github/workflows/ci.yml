@@ -53,6 +53,10 @@ jobs:
       S3_ACCESS_KEY_ID: "minioadmin"
       S3_SECRET_ACCESS_KEY: "minioadmin"
       S3_FORCE_PATH_STYLE: "true"
+      # Fail the integration step if MinIO/bucket setup broke — otherwise the
+      # byte-path test would skip silently and INS-023 coverage could vanish
+      # while CI stays green.
+      REQUIRE_STORAGE: "1"
       TURBO_TELEMETRY_DISABLED: "1"
       NEXT_TELEMETRY_DISABLED: "1"
 

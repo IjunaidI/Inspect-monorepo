@@ -1,6 +1,6 @@
 # Inspect Web — Operator-Loop Spine — Design
 
-> **Status:** 🟡 In progress (brainstormed 2026-06-20). First slice of the **frontend integration** phase.
+> **Status:** ✅ Done (shipped + verified live 2026-06-20; moved to done/ 2026-07-11 — closed INS-026/027/028). First slice of the **frontend integration** phase.
 > Wires the QA operator loop (session → create → submit → decide) to the API verified end-to-end on
 > 2026-06-20 (see [../plans/2026-06-20-ins-001-stand-up-and-verify.md](../plans/2026-06-20-ins-001-stand-up-and-verify.md)).
 > Backlog: closes [INS-028](../../future/BACKLOG.md) and the core of [INS-026](../../future/BACKLOG.md) +

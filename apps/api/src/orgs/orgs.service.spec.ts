@@ -78,6 +78,7 @@ describe('OrgsService.create', () => {
 
     expect(result.org.id).toBe('org1');
     expect(result.invitation.token).toBeTruthy();
+    expect(result.emailSent).toBe(false);
   });
 
   it('rejects invalid input before any write or email', async () => {

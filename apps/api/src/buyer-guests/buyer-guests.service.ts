@@ -53,9 +53,14 @@ export class BuyerGuestsService {
       select: SAFE_SELECT,
     });
     // MailService never throws — a failed send is logged, and the magic link
-    // is still returned to the inviter as a copyable fallback.
-    await this.mail.sendBuyerGuestMagicLink({ to: email, token, buyerName: buyer.name });
-    return { guest, token };
+    // is still returned to the inviter as a copyable fallback. `emailSent`
+    // lets the console distinguish "emailed" from "copy this link".
+    const { sent } = await this.mail.sendBuyerGuestMagicLink({
+      to: email,
+      token,
+      buyerName: buyer.name,
+    });
+    return { guest, token, emailSent: sent };
   }
 
   async revoke(orgId: string, id: string) {

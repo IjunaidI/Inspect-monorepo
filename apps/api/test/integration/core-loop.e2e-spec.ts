@@ -214,22 +214,25 @@ describe('Core inspection loop (integration)', () => {
     const original = report!.canonicalSnapshot as Record<string, unknown>;
 
     // An attacker with DB write access edits a buyer-visible field post-signing.
+    // Restore in finally: if an assertion throws (or the run is killed), the
+    // shared DB must not keep a permanently-tampered signed report row.
     await prisma.report.update({
       where: { id: reportId },
       data: { canonicalSnapshot: { ...original, lotSize: 999999 } },
     });
-    const tampered = expect2xx(
-      await client.get(`/reports/verify/${verificationToken}`),
-      'GET /reports/verify/:token (tampered)',
-    );
-    expect(tampered.valid).toBe(false);
-    expect(tampered.hashMatches).toBe(false);
-
-    // Restore the genuine snapshot; verification turns green again.
-    await prisma.report.update({
-      where: { id: reportId },
-      data: { canonicalSnapshot: original as any },
-    });
+    try {
+      const tampered = expect2xx(
+        await client.get(`/reports/verify/${verificationToken}`),
+        'GET /reports/verify/:token (tampered)',
+      );
+      expect(tampered.valid).toBe(false);
+      expect(tampered.hashMatches).toBe(false);
+    } finally {
+      await prisma.report.update({
+        where: { id: reportId },
+        data: { canonicalSnapshot: original as any },
+      });
+    }
     const restored = expect2xx(
       await client.get(`/reports/verify/${verificationToken}`),
       'GET /reports/verify/:token (restored)',

@@ -66,7 +66,7 @@ describe('UsersService.invite', () => {
       role: 'INSPECTOR',
     });
 
-    expect(invitation).toMatchObject({ email: 'x@y.com' });
+    expect(invitation).toMatchObject({ email: 'x@y.com', emailSent: false });
     expect(invitation.token).toBeTruthy();
   });
 

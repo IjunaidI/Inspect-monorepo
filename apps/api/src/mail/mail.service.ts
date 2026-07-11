@@ -38,8 +38,10 @@ export interface BuyerGuestMagicLinkMail {
  * side effect of a business write (invitation row, guest token) that must not
  * fail or roll back that write; failures are logged and reported as {sent:false}.
  *
- * Transport: SMTP_URL when configured, otherwise nodemailer's JSON transport
- * (dev mode — messages are serialized/logged, not delivered).
+ * Transport: SMTP_URL (`smtp://` or `smtps://`, short timeouts) when configured,
+ * otherwise nodemailer's JSON transport (dev mode — each message is logged in
+ * full, not delivered). A malformed SMTP_URL degrades LOUDLY to dev/json mode
+ * instead of crashing boot.
  */
 @Injectable()
 export class MailService {
@@ -47,6 +49,7 @@ export class MailService {
   private readonly transporter: Transporter;
   private readonly from: string;
   private readonly webBaseUrl: string;
+  private jsonMode = false;
 
   constructor(
     config: ConfigService,
@@ -57,20 +60,50 @@ export class MailService {
       /\/+$/,
       '',
     );
+    this.transporter = transporter ?? this.buildTransport(config.get<string>('SMTP_URL'));
+  }
 
-    if (transporter) {
-      this.transporter = transporter;
-    } else {
-      const smtpUrl = config.get<string>('SMTP_URL');
-      if (smtpUrl) {
-        this.transporter = nodemailer.createTransport(smtpUrl);
-      } else {
-        this.transporter = nodemailer.createTransport({ jsonTransport: true });
-        this.logger.log(
-          'SMTP_URL is not set — mail is in dev/json mode (messages are logged as JSON, not delivered)',
+  /**
+   * SMTP_URL is parsed here (not passed to nodemailer as a string) for two
+   * reasons found in review: (1) nodemailer's defaults would let a black-holed
+   * SMTP host stall invite/onboarding requests for 30–120s — the awaited send
+   * sits in the HTTP request path, so timeouts must be a few seconds; (2) a
+   * scheme-less/malformed URL string makes nodemailer throw a cryptic TypeError
+   * inside the constructor, taking the whole API down at boot — config problems
+   * must degrade to dev/json mode with a loud error instead.
+   */
+  private buildTransport(smtpUrl: string | undefined): Transporter {
+    if (smtpUrl) {
+      try {
+        const url = new URL(smtpUrl);
+        if (!/^smtps?:$/.test(url.protocol)) {
+          throw new Error(`unsupported scheme "${url.protocol}//" (use smtp:// or smtps://)`);
+        }
+        const secure = url.protocol === 'smtps:';
+        return nodemailer.createTransport({
+          host: url.hostname,
+          port: url.port ? Number(url.port) : secure ? 465 : 587,
+          secure,
+          auth: url.username
+            ? { user: decodeURIComponent(url.username), pass: decodeURIComponent(url.password) }
+            : undefined,
+          connectionTimeout: 5_000,
+          greetingTimeout: 5_000,
+          socketTimeout: 10_000,
+        });
+      } catch (err) {
+        this.logger.error(
+          `SMTP_URL is set but unusable (${err instanceof Error ? err.message : String(err)}) — ` +
+            'falling back to dev/json mode; NO EMAIL WILL BE DELIVERED until it is fixed',
         );
       }
+    } else {
+      this.logger.log(
+        'SMTP_URL is not set — mail is in dev/json mode (each message is logged in full, not delivered)',
+      );
     }
+    this.jsonMode = true;
+    return nodemailer.createTransport({ jsonTransport: true });
   }
 
   /** Invitation email for org users and first org owners (accept at /invite). */
@@ -115,6 +148,12 @@ export class MailService {
   private async send(message: { to: string; subject: string; text: string }): Promise<SendResult> {
     try {
       const info = await this.transporter.sendMail({ from: this.from, ...message });
+      // In dev/json mode the "delivery" is the serialized message itself — log it
+      // (link + token included) so the documented dev workflow actually works.
+      const serialized = (info as { message?: string })?.message;
+      if (this.jsonMode && serialized) {
+        this.logger.log(`[dev mail → ${message.to}] ${serialized}`);
+      }
       return { sent: true, messageId: info?.messageId };
     } catch (err) {
       this.logger.error(

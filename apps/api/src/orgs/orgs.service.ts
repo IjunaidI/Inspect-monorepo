@@ -74,12 +74,13 @@ export class OrgsService {
     });
     // Email the first Org Owner after the transaction commits. MailService
     // never throws, so a failed send cannot roll back or fail org creation.
-    await this.mail.sendUserInvitation({
+    // `emailSent` lets the console distinguish "emailed" from "copy this link".
+    const { sent } = await this.mail.sendUserInvitation({
       to: result.invitation.email,
       token: result.invitation.token,
       role: result.invitation.role,
       orgName: result.org.name,
     });
-    return result;
+    return { ...result, emailSent: sent };
   }
 }

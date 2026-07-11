@@ -4,9 +4,11 @@
  * true sha256 of those bytes. This is the one loop step the metadata-only smoke
  * loop never exercised.
  *
- * The suite probes S3_ENDPOINT first and SKIPS (loudly) when object storage is
- * unreachable, so the DB-only local run stays green; CI starts MinIO and runs it
- * for real.
+ * The suite probes S3_ENDPOINT + the target bucket first and SKIPS (loudly)
+ * when storage is unreachable OR the bucket is missing, so a DB-only local run
+ * stays green even with a bucket-less MinIO up. Set REQUIRE_STORAGE=1 (CI does)
+ * to turn that skip into a hard failure — otherwise a MinIO/bucket setup
+ * regression would silently drop INS-023 coverage while CI stays green.
  */
 import { INestApplication } from '@nestjs/common';
 import { createHash } from 'node:crypto';
@@ -21,15 +23,31 @@ import {
   runTag,
 } from './support';
 
-async function probeEndpoint(endpoint: string): Promise<boolean> {
+interface StorageProbe {
+  usable: boolean;
+  reason: string;
+}
+
+async function probeStorage(endpoint: string, bucket: string): Promise<StorageProbe> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2500);
   try {
-    // Any HTTP response (even 403/404) proves the endpoint is reachable.
-    await fetch(endpoint, { method: 'GET', signal: controller.signal });
-    return true;
+    // Path-style bucket URL: 200/403 = bucket exists (listing may be denied);
+    // 404 = endpoint up but NO bucket — presigned PUTs would 404, so treat it
+    // as unusable rather than letting the test fail hard on a half-set-up MinIO.
+    const res = await fetch(`${endpoint.replace(/\/+$/, '')}/${bucket}`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    if (res.status === 404) {
+      return {
+        usable: false,
+        reason: `bucket "${bucket}" does not exist at ${endpoint} (create it, e.g. aws --endpoint-url ${endpoint} s3 mb s3://${bucket})`,
+      };
+    }
+    return { usable: true, reason: 'ok' };
   } catch {
-    return false;
+    return { usable: false, reason: `object storage unreachable at ${endpoint}` };
   } finally {
     clearTimeout(timer);
   }
@@ -39,19 +57,23 @@ describe('Photo byte upload via presigned URL (integration)', () => {
   let app: INestApplication;
   let client: ApiClient;
   let storageUp = false;
-  let endpoint = '';
   const tag = runTag('bytes');
 
   beforeAll(async () => {
     app = await bootApp();
     client = apiClient(app);
-    endpoint = process.env.S3_ENDPOINT ?? 'http://localhost:9000';
-    storageUp = await probeEndpoint(endpoint);
+    const endpoint = process.env.S3_ENDPOINT ?? 'http://localhost:9000';
+    const bucket = process.env.S3_BUCKET ?? 'inspect-photos';
+    const probe = await probeStorage(endpoint, bucket);
+    storageUp = probe.usable;
     if (!storageUp) {
+      if (process.env.REQUIRE_STORAGE === '1') {
+        throw new Error(`REQUIRE_STORAGE=1 but the byte path cannot run: ${probe.reason}`);
+      }
       // eslint-disable-next-line no-console
       console.warn(
-        `[storage-bytes] SKIPPED — object storage unreachable at ${endpoint}. ` +
-          'Start MinIO (docker-compose.dev.yml) or run in CI to exercise the byte path.',
+        `[storage-bytes] SKIPPED — ${probe.reason}. ` +
+          'Start MinIO (docker-compose.dev.yml) + create the bucket, or run in CI, to exercise the byte path.',
       );
     }
   });

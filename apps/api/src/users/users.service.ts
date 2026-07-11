@@ -75,12 +75,13 @@ export class UsersService {
     });
     // MailService never throws — a failed send is logged, and the invitation
     // (with its copyable link in the console) is still returned to the caller.
-    await this.mail.sendUserInvitation({
+    // `emailSent` lets the console distinguish "emailed" from "copy this link".
+    const { sent } = await this.mail.sendUserInvitation({
       to: invitation.email,
       token: invitation.token,
       role: invitation.role,
     });
-    return invitation;
+    return { ...invitation, emailSent: sent };
   }
 
   async updateRole(orgId: string, actor: AuthUser, userId: string, role: Role) {
