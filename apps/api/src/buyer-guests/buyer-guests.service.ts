@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 
 const DEFAULT_TTL_DAYS = 30;
 const SAFE_SELECT = {
@@ -20,7 +21,10 @@ export interface InviteGuestInput {
 /** Invite-only buyer guests, scoped to one buyer in one tenant (spec §3/§11). */
 @Injectable()
 export class BuyerGuestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   list(orgId: string, buyerId: string) {
     return this.prisma.buyerGuest.findMany({
@@ -48,6 +52,9 @@ export class BuyerGuestsService {
       create: { orgId, buyerId, email, status: 'ACTIVE', token, tokenExpiresAt },
       select: SAFE_SELECT,
     });
+    // MailService never throws — a failed send is logged, and the magic link
+    // is still returned to the inviter as a copyable fallback.
+    await this.mail.sendBuyerGuestMagicLink({ to: email, token, buyerName: buyer.name });
     return { guest, token };
   }
 

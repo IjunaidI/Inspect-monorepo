@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { AuthUser } from '../auth/auth-user';
 import { hasAtLeast, Role } from '../auth/rbac';
 
@@ -28,7 +29,10 @@ export interface InviteUserInput {
 /** Org Owner user management within their own org (spec §4). */
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   list(orgId: string) {
     return this.prisma.user.findMany({
@@ -58,7 +62,7 @@ export class UsersService {
     if (existing && existing.orgId !== orgId) {
       throw new ForbiddenException('An account already exists for this email');
     }
-    return this.prisma.invitation.create({
+    const invitation = await this.prisma.invitation.create({
       data: {
         orgId,
         email,
@@ -69,6 +73,14 @@ export class UsersService {
         invitedById: inviter.userId,
       },
     });
+    // MailService never throws — a failed send is logged, and the invitation
+    // (with its copyable link in the console) is still returned to the caller.
+    await this.mail.sendUserInvitation({
+      to: invitation.email,
+      token: invitation.token,
+      role: invitation.role,
+    });
+    return invitation;
   }
 
   async updateRole(orgId: string, actor: AuthUser, userId: string, role: Role) {
