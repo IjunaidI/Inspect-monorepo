@@ -53,6 +53,17 @@ describe('Core inspection loop (integration)', () => {
     await app.close();
   });
 
+  it('buyer list carries live relation counts (INS-005)', async () => {
+    const buyers = expect2xx(
+      await client.get('/buyers', { token: org.ownerToken }),
+      'GET /buyers (_count)',
+    ) as Array<{ id: string; _count?: Record<string, number> }>;
+    const mine = buyers.find((b) => b.id === ws.buyerId);
+    expect(mine).toBeTruthy();
+    expect(mine!._count?.purchaseOrders).toBe(1);
+    expect(mine!._count?.reports).toBe(0); // none generated yet at this point
+  });
+
   it('creates an inspection with a snapshotted preset and computed AQL sampling (lot 1000 -> code J)', async () => {
     const inspection = expect2xx(
       await client.post('/inspections', {
@@ -145,6 +156,18 @@ describe('Core inspection loop (integration)', () => {
       'populate record measurement',
     );
     expect(measurement.id).toBeTruthy();
+  });
+
+  it('inspection detail returns the loop evidence on reload (photos/defects/measurements)', async () => {
+    const detail = expect2xx(
+      await client.get(`/inspections/${inspectionId}`, { token: org.ownerToken }),
+      'GET /inspections/:id (evidence includes)',
+    );
+    const loop = detail.loops?.find((l: { id: string }) => l.id === loopId);
+    expect(loop).toBeTruthy();
+    expect(loop.photos?.some((p: { id: string }) => p.id === photoId)).toBe(true);
+    expect(loop.defects?.length).toBeGreaterThanOrEqual(1);
+    expect(loop.measurements?.some((m: { label: string }) => m.label === 'Length')).toBe(true);
   });
 
   it('submit runs the AQL evaluation: 1 MINOR on code J -> SUBMITTED with PASS recommendation', async () => {

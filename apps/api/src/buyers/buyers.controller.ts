@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { BuyersService, CreateBuyerInput, UpdateBuyerInput } from './buyers.service';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -11,8 +11,8 @@ export class BuyersController {
   constructor(private readonly buyers: BuyersService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.buyers.list(requireOrgId(user));
+  list(@CurrentUser() user: AuthUser, @Query('includeArchived') includeArchived?: string) {
+    return this.buyers.list(requireOrgId(user), { includeArchived: includeArchived === '1' });
   }
 
   @Get(':id')

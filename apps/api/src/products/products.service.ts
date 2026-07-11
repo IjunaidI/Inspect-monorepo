@@ -14,10 +14,14 @@ export interface UpdateProductInput {
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(orgId: string) {
+  list(orgId: string, opts: { includeArchived?: boolean } = {}) {
     return this.prisma.product.findMany({
-      where: { orgId, archivedAt: null },
+      where: { orgId, ...(opts.includeArchived ? {} : { archivedAt: null }) },
       orderBy: { styleNumber: 'asc' },
+      // INS-005: relation counts so the console lists render real figures.
+      include: {
+        _count: { select: { purchaseOrders: true, inspections: true } },
+      },
     });
   }
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { LoopPresetsService, CreateLoopPresetInput } from './loop-presets.service';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -11,8 +11,8 @@ export class LoopPresetsController {
   constructor(private readonly presets: LoopPresetsService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.presets.list(requireOrgId(user));
+  list(@CurrentUser() user: AuthUser, @Query('includeArchived') includeArchived?: string) {
+    return this.presets.list(requireOrgId(user), { includeArchived: includeArchived === '1' });
   }
 
   @Get(':id')

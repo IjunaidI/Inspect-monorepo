@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   ProductsService,
   CreateProductInput,
@@ -15,8 +15,8 @@ export class ProductsController {
   constructor(private readonly products: ProductsService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser) {
-    return this.products.list(requireOrgId(user));
+  list(@CurrentUser() user: AuthUser, @Query('includeArchived') includeArchived?: string) {
+    return this.products.list(requireOrgId(user), { includeArchived: includeArchived === '1' });
   }
 
   @Get(':id')

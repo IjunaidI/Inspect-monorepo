@@ -52,7 +52,18 @@ export class InspectionsService {
         supplier: true,
         product: true,
         purchaseOrder: true,
-        loops: { orderBy: { position: 'asc' } },
+        // Loops carry their evidence: without these includes the populate
+        // workspace "loses" registered photos/defects/measurements on reload
+        // and report previews render empty.
+        loops: {
+          orderBy: { position: 'asc' },
+          include: {
+            photos: true,
+            defects: { include: { defectCatalog: true } },
+            measurements: true,
+          },
+        },
+        assignedInspector: { select: { id: true, name: true, email: true } },
         aqlResult: true,
         report: true,
       },

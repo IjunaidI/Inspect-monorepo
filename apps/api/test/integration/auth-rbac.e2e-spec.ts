@@ -113,6 +113,8 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       expect(me.status).toBe(200);
       expect(me.body.orgId).toBe(orgA.orgId);
       expect(me.body.role).toBe('ORG_OWNER');
+      // Session truth: the console shell shows the real workspace name.
+      expect(me.body.orgName).toBe(`E2E Org ${tag}-a`);
     });
 
     it('rejects an access token presented as a refresh token', async () => {

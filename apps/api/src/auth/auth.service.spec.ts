@@ -10,6 +10,7 @@ const SECRETS: Record<string, unknown> = {
 };
 
 function makeService(user: Record<string, unknown> | null) {
+  const userUpdate = jest.fn(async () => user);
   const prisma = {
     user: {
       findUnique: jest.fn(async ({ where }: { where: { email?: string; id?: string } }) => {
@@ -18,11 +19,13 @@ function makeService(user: Record<string, unknown> | null) {
         if (where.id !== undefined) return user.id === where.id ? user : null;
         return null;
       }),
+      update: userUpdate,
     },
   };
   const config = { get: (k: string) => SECRETS[k] };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new AuthService(prisma as any, config as any);
+  const service = new AuthService(prisma as any, config as any);
+  return Object.assign(service, { __userUpdate: userUpdate });
 }
 
 describe('AuthService', () => {
@@ -56,6 +59,21 @@ describe('AuthService', () => {
     it('returns the principal for valid credentials', async () => {
       const principal = await makeService(activeUser).validateUser('qa@org.com', 'correct-pw');
       expect(principal).toEqual({ userId: 'u1', orgId: 'org1', role: 'QA_MANAGER' });
+    });
+
+    it('stamps lastLoginAt on success and never on failure', async () => {
+      const okSvc = makeService(activeUser);
+      await okSvc.validateUser('qa@org.com', 'correct-pw');
+      expect(okSvc.__userUpdate).toHaveBeenCalledTimes(1);
+      const arg = okSvc.__userUpdate.mock.calls[0] as unknown as [
+        { where: { id: string }; data: { lastLoginAt: Date } },
+      ];
+      expect(arg[0].where).toEqual({ id: 'u1' });
+      expect(arg[0].data.lastLoginAt).toBeInstanceOf(Date);
+
+      const badSvc = makeService(activeUser);
+      await badSvc.validateUser('qa@org.com', 'wrong');
+      expect(badSvc.__userUpdate).not.toHaveBeenCalled();
     });
   });
 

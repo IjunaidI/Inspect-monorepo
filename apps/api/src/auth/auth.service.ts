@@ -46,6 +46,11 @@ export class AuthService {
     if (!ok) {
       return null;
     }
+    // Record the login so GET /users "Last login" reflects reality.
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
     return { userId: user.id, orgId: user.orgId, role: user.role as Role };
   }
 

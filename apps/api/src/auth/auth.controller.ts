@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Get, Post } from '@nestjs/common';
 import { AuthService, TokenPair } from './auth.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { Public } from './public.decorator';
 import { CurrentUser } from './current-user.decorator';
 import { AuthUser } from './auth-user';
@@ -14,7 +15,10 @@ interface RefreshBody {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Public()
   @Post('login')
@@ -35,7 +39,15 @@ export class AuthController {
   }
 
   @Get('me')
-  me(@CurrentUser() user: AuthUser): AuthUser {
-    return user;
+  async me(@CurrentUser() user: AuthUser): Promise<AuthUser & { orgName: string | null }> {
+    // The console shell shows the real workspace name (null for the cross-tenant
+    // Platform Admin, which the web renders as "Platform").
+    const org = user.orgId
+      ? await this.prisma.organization.findUnique({
+          where: { id: user.orgId },
+          select: { name: true },
+        })
+      : null;
+    return { ...user, orgName: org?.name ?? null };
   }
 }

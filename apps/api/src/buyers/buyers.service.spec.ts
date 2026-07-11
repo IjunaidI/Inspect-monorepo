@@ -23,6 +23,37 @@ function makeService(presetInOrg: boolean) {
   return { service, buyerCreate, buyerUpdate, prisma };
 }
 
+describe('BuyersService.list aggregates (INS-005)', () => {
+  function makeListService() {
+    const findMany = jest.fn(async (_args: { where: Record<string, unknown> }) => []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new BuyersService({ buyer: { findMany } } as any);
+    return { service, findMany };
+  }
+
+  it('includes relation _count and defaults to active-only', async () => {
+    const { service, findMany } = makeListService();
+    await service.list('orgA');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { orgId: 'orgA', archivedAt: null },
+        include: {
+          _count: {
+            select: { purchaseOrders: true, inspections: true, reports: true },
+          },
+        },
+      }),
+    );
+  });
+
+  it('includeArchived drops the archivedAt filter', async () => {
+    const { service, findMany } = makeListService();
+    await service.list('orgA', { includeArchived: true });
+    const arg = findMany.mock.calls[0][0];
+    expect(arg.where).toEqual({ orgId: 'orgA' });
+  });
+});
+
 describe('BuyersService preset tenant scoping', () => {
   it('create rejects a defaultLoopPresetId from another org', async () => {
     const { service, buyerCreate } = makeService(false);

@@ -16,10 +16,14 @@ export interface UpdateSupplierInput {
 export class SuppliersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(orgId: string) {
+  list(orgId: string, opts: { includeArchived?: boolean } = {}) {
     return this.prisma.supplier.findMany({
-      where: { orgId, archivedAt: null },
+      where: { orgId, ...(opts.includeArchived ? {} : { archivedAt: null }) },
       orderBy: { name: 'asc' },
+      // INS-005: relation counts so the console lists render real figures.
+      include: {
+        _count: { select: { purchaseOrders: true, inspections: true } },
+      },
     });
   }
 
