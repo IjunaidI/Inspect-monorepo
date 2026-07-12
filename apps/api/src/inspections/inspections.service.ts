@@ -36,10 +36,24 @@ const DECIDABLE = new Set(['SUBMITTED', 'UNDER_REVIEW', 'HOLD']);
 export class InspectionsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(orgId: string, status?: string) {
+  list(orgId: string, status?: string, opts: { q?: string; take?: number; skip?: number } = {}) {
     return this.prisma.inspection.findMany({
-      where: { orgId, ...(status ? { status: status as never } : {}) },
+      where: {
+        orgId,
+        ...(status ? { status: status as never } : {}),
+        ...(opts.q
+          ? {
+              OR: [
+                { purchaseOrder: { poNumber: { contains: opts.q, mode: 'insensitive' as const } } },
+                { buyer: { name: { contains: opts.q, mode: 'insensitive' as const } } },
+                { product: { styleNumber: { contains: opts.q, mode: 'insensitive' as const } } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { createdAt: 'desc' },
+      take: opts.take,
+      skip: opts.skip,
       include: { buyer: true, supplier: true, product: true, purchaseOrder: true, aqlResult: true },
     });
   }
@@ -64,6 +78,8 @@ export class InspectionsService {
           },
         },
         assignedInspector: { select: { id: true, name: true, email: true } },
+        // Top-level photos too: not-yet-assigned uploads have no loop.
+        photos: { orderBy: { createdAt: 'asc' } },
         aqlResult: true,
         report: true,
       },

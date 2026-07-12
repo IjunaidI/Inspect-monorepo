@@ -648,6 +648,10 @@ model DefectInstance {
   severity         DefectSeverity
   notes            String?
   createdByUserId  String?
+  /// Idempotency token (INS-044): a retried add-defect must not duplicate the
+  /// row — a phantom duplicate could flip the AQL verdict. Mirrors Inspection
+  /// and Photo.
+  clientRequestId  String?
   createdAt        DateTime       @default(now())
 
   organization   Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
@@ -656,6 +660,7 @@ model DefectInstance {
   defectCatalog  DefectCatalog?        @relation(fields: [defectCatalogId], references: [id], onDelete: Restrict)
   photos         DefectInstancePhoto[]
 
+  @@unique([orgId, clientRequestId])
   @@index([orgId])
   @@index([inspectionId])
   @@index([inspectionId, severity])

@@ -18,6 +18,7 @@ export interface PresignOptions {
   expiresSeconds: number;
   now: Date;
   forcePathStyle?: boolean; // true for MinIO
+  method?: 'GET' | 'PUT'; // default PUT (upload); GET presigns a download/view URL
 }
 
 function uriEncode(input: string, encodeSlash: boolean): string {
@@ -50,7 +51,7 @@ function sha256Hex(data: string): string {
   return createHash('sha256').update(data, 'utf8').digest('hex');
 }
 
-export function presignS3PutUrl(opts: PresignOptions): string {
+export function presignS3Url(opts: PresignOptions): string {
   const url = new URL(opts.endpoint);
   const host = url.host;
   const amzDate = opts.now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
@@ -76,7 +77,7 @@ export function presignS3PutUrl(opts: PresignOptions): string {
 
   const canonicalHeaders = `host:${host}\n`;
   const canonicalRequest = [
-    'PUT',
+    opts.method ?? 'PUT',
     canonicalUri,
     canonicalQuery,
     canonicalHeaders,
@@ -98,4 +99,9 @@ export function presignS3PutUrl(opts: PresignOptions): string {
   const signature = createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
 
   return `${url.protocol}//${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
+}
+
+/** Back-compat wrapper — the original upload-only entry point. */
+export function presignS3PutUrl(opts: PresignOptions): string {
+  return presignS3Url({ ...opts, method: 'PUT' });
 }

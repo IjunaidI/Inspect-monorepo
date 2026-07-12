@@ -9,15 +9,37 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthUser } from '../auth/auth-user';
 import { requireOrgId } from '../common/tenant';
+import { parseListQuery, RawListQuery } from '../common/list-query';
+import { StorageService } from '../storage/storage.service';
+
+interface PhotoLike {
+  storageKey: string;
+}
 
 @Controller('inspections')
 @Roles('QA_MANAGER')
 export class InspectionsController {
-  constructor(private readonly inspections: InspectionsService) {}
+  constructor(
+    private readonly inspections: InspectionsService,
+    private readonly storage: StorageService,
+  ) {}
+
+  /**
+   * Decorate photos with short-lived presigned GET URLs (INS-049) so evidence
+   * is viewable. Must never fail the read — a presign problem degrades to
+   * viewUrl:null and the UI falls back to its placeholder tile.
+   */
+  private withViewUrl<T extends PhotoLike>(photo: T): T & { viewUrl: string | null } {
+    try {
+      return { ...photo, viewUrl: this.storage.presignDownload(photo.storageKey) };
+    } catch {
+      return { ...photo, viewUrl: null };
+    }
+  }
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query('status') status?: string) {
-    return this.inspections.list(requireOrgId(user), status);
+  list(@CurrentUser() user: AuthUser, @Query() query: RawListQuery & { status?: string }) {
+    return this.inspections.list(requireOrgId(user), query.status, parseListQuery(query));
   }
 
   @Get('aql-preview')
@@ -36,8 +58,16 @@ export class InspectionsController {
   }
 
   @Get(':id')
-  get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.inspections.get(requireOrgId(user), id);
+  async get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    const inspection = await this.inspections.get(requireOrgId(user), id);
+    return {
+      ...inspection,
+      photos: inspection.photos?.map((p) => this.withViewUrl(p)),
+      loops: inspection.loops?.map((loop) => ({
+        ...loop,
+        photos: loop.photos?.map((p) => this.withViewUrl(p)),
+      })),
+    };
   }
 
   @Post()

@@ -20,10 +20,16 @@ export interface UpdateBuyerInput {
 export class BuyersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(orgId: string, opts: { includeArchived?: boolean } = {}) {
+  list(orgId: string, opts: { includeArchived?: boolean; q?: string; take?: number; skip?: number } = {}) {
     return this.prisma.buyer.findMany({
-      where: { orgId, ...(opts.includeArchived ? {} : { archivedAt: null }) },
+      where: {
+        orgId,
+        ...(opts.includeArchived ? {} : { archivedAt: null }),
+        ...(opts.q ? { name: { contains: opts.q, mode: 'insensitive' as const } } : {}),
+      },
       orderBy: { name: 'asc' },
+      take: opts.take,
+      skip: opts.skip,
       // INS-005: relation counts so the console lists render real figures.
       include: {
         _count: {

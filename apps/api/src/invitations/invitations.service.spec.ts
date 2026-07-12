@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  GoneException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InvitationsService } from './invitations.service';
 
 /**
@@ -41,6 +46,44 @@ const validInvite = {
   acceptedAt: null,
   expiresAt: new Date(Date.now() + 60_000),
 };
+
+describe('InvitationsService.getByToken (INS-054)', () => {
+  it('returns verified email/role/orgName for a pending invitation', async () => {
+    const { service } = makeService({
+      invitation: { ...validInvite, organization: { name: 'Acme Apparel' } },
+    });
+    const result = await service.getByToken('tok');
+    expect(result).toEqual({
+      email: 'alice@orga.com',
+      role: 'INSPECTOR',
+      orgName: 'Acme Apparel',
+      expiresAt: validInvite.expiresAt,
+    });
+  });
+
+  it('404s an unknown token', async () => {
+    const { service } = makeService({ invitation: null });
+    await expect(service.getByToken('nope')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('410s a consumed invitation', async () => {
+    const { service } = makeService({
+      invitation: { ...validInvite, acceptedAt: new Date(), organization: { name: 'A' } },
+    });
+    await expect(service.getByToken('tok')).rejects.toBeInstanceOf(GoneException);
+  });
+
+  it('410s an expired invitation', async () => {
+    const { service } = makeService({
+      invitation: {
+        ...validInvite,
+        expiresAt: new Date(Date.now() - 1000),
+        organization: { name: 'A' },
+      },
+    });
+    await expect(service.getByToken('tok')).rejects.toBeInstanceOf(GoneException);
+  });
+});
 
 describe('InvitationsService.accept', () => {
   it('refuses when an account with that email exists in another org (cross-tenant takeover)', async () => {

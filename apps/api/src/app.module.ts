@@ -30,6 +30,7 @@ import { OrgsModule } from './orgs/orgs.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { UsersModule } from './users/users.module';
 import { BuyerGuestsModule } from './buyer-guests/buyer-guests.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import * as path from 'path';
 
 /**
@@ -101,6 +102,7 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     InvitationsModule,
     UsersModule,
     BuyerGuestsModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

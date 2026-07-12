@@ -26,6 +26,7 @@ export interface AddDefectInput {
   severity?: Severity;
   notes?: string;
   photoIds?: string[];
+  clientRequestId?: string;
 }
 export interface AddMeasurementInput {
   inspectionLoopId: string;
@@ -127,6 +128,15 @@ export class PopulateService {
 
   async addDefect(inspectionId: string, userId: string, input: AddDefectInput) {
     const insp = await this.loadOpenInspection(inspectionId);
+    // Idempotency (INS-044): a replayed add-defect (double-click / offline
+    // sync) returns the original row — a phantom duplicate could flip the
+    // per-class AQL verdict on submit.
+    if (input?.clientRequestId) {
+      const existing = await this.prisma.defectInstance.findFirst({
+        where: { orgId: insp.orgId, clientRequestId: input.clientRequestId },
+      });
+      if (existing) return existing;
+    }
     if (!input?.defectCatalogId && !input?.customText?.trim()) {
       throw new BadRequestException('either defectCatalogId or customText is required');
     }
@@ -165,6 +175,7 @@ export class PopulateService {
         severity,
         notes: input.notes,
         createdByUserId: userId,
+        clientRequestId: input.clientRequestId,
         photos: input.photoIds?.length
           ? { create: input.photoIds.map((photoId) => ({ photoId })) }
           : undefined,

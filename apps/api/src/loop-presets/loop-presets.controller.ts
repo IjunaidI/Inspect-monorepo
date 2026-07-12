@@ -4,6 +4,7 @@ import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthUser } from '../auth/auth-user';
 import { requireOrgId } from '../common/tenant';
+import { parseListQuery, RawListQuery } from '../common/list-query';
 
 @Controller('loop-presets')
 @Roles('QA_MANAGER')
@@ -11,8 +12,11 @@ export class LoopPresetsController {
   constructor(private readonly presets: LoopPresetsService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query('includeArchived') includeArchived?: string) {
-    return this.presets.list(requireOrgId(user), { includeArchived: includeArchived === '1' });
+  list(@CurrentUser() user: AuthUser, @Query() query: RawListQuery & { includeArchived?: string }) {
+    return this.presets.list(requireOrgId(user), {
+      ...parseListQuery(query),
+      includeArchived: query.includeArchived === '1',
+    });
   }
 
   @Get(':id')

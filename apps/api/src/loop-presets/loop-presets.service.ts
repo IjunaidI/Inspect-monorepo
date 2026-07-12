@@ -22,10 +22,16 @@ export interface CreateLoopPresetInput {
 export class LoopPresetsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(orgId: string, opts: { includeArchived?: boolean } = {}) {
+  list(orgId: string, opts: { includeArchived?: boolean; q?: string; take?: number; skip?: number } = {}) {
     return this.prisma.loopPreset.findMany({
-      where: { orgId, ...(opts.includeArchived ? {} : { isArchived: false }) },
+      where: {
+        orgId,
+        ...(opts.includeArchived ? {} : { isArchived: false }),
+        ...(opts.q ? { name: { contains: opts.q, mode: 'insensitive' as const } } : {}),
+      },
       orderBy: [{ name: 'asc' }, { version: 'desc' }],
+      take: opts.take,
+      skip: opts.skip,
       // INS-005: usage counts so the presets screen renders real figures.
       include: {
         _count: {

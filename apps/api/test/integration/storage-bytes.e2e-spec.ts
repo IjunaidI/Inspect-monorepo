@@ -130,5 +130,20 @@ describe('Photo byte upload via presigned URL (integration)', () => {
     );
     expect(photo.id).toBeTruthy();
     expect(photo.contentHash).toBe(contentHash);
+
+    // INS-049: the inspection detail decorates the photo with a presigned GET
+    // viewUrl, and fetching it returns the EXACT uploaded bytes.
+    const detail = expect2xx(
+      await client.get(`/inspections/${inspection.id}`, { token: org.ownerToken }),
+      'GET /inspections/:id (viewUrl)',
+    );
+    const detailPhoto = detail.loops
+      ?.flatMap((l: { photos?: Array<{ id: string; viewUrl?: string | null }> }) => l.photos ?? [])
+      .find((p: { id: string }) => p.id === photo.id);
+    expect(detailPhoto?.viewUrl).toBeTruthy();
+    const download = await fetch(detailPhoto.viewUrl);
+    expect(download.status).toBe(200);
+    const downloaded = Buffer.from(await download.arrayBuffer());
+    expect(createHash('sha256').update(downloaded).digest('hex')).toBe(contentHash);
   });
 });

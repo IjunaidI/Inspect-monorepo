@@ -136,9 +136,14 @@ describe('Core inspection loop (integration)', () => {
       'populate assign photo to loop',
     );
 
-    const defectBody = ws.minorDefectId
-      ? { defectCatalogId: ws.minorDefectId, inspectionLoopId: loopId, photoIds: [photoId], notes: 'e2e' }
-      : { customText: 'Loose thread (e2e)', severity: 'MINOR', inspectionLoopId: loopId, photoIds: [photoId] };
+    const defectBody = {
+      ...(ws.minorDefectId
+        ? { defectCatalogId: ws.minorDefectId, notes: 'e2e' }
+        : { customText: 'Loose thread (e2e)', severity: 'MINOR' }),
+      inspectionLoopId: loopId,
+      photoIds: [photoId],
+      clientRequestId: `defect-${tag}`,
+    };
     const defect = expect2xx(
       await client.post(`/inspections/${inspectionId}/populate/defects`, {
         token: adminToken,
@@ -147,6 +152,17 @@ describe('Core inspection loop (integration)', () => {
       'populate tag defect',
     );
     expect(defect.severity).toBe('MINOR');
+
+    // INS-044: replaying the same clientRequestId returns the ORIGINAL row —
+    // a duplicate here would change the AQL count and could flip the verdict.
+    const replay = expect2xx(
+      await client.post(`/inspections/${inspectionId}/populate/defects`, {
+        token: adminToken,
+        body: defectBody,
+      }),
+      'populate tag defect (replay)',
+    );
+    expect(replay.id).toBe(defect.id);
 
     const measurement = expect2xx(
       await client.post(`/inspections/${inspectionId}/populate/measurements`, {
@@ -166,7 +182,8 @@ describe('Core inspection loop (integration)', () => {
     const loop = detail.loops?.find((l: { id: string }) => l.id === loopId);
     expect(loop).toBeTruthy();
     expect(loop.photos?.some((p: { id: string }) => p.id === photoId)).toBe(true);
-    expect(loop.defects?.length).toBeGreaterThanOrEqual(1);
+    // Exactly one: the INS-044 replay above must not have created a duplicate.
+    expect(loop.defects?.length).toBe(1);
     expect(loop.measurements?.some((m: { label: string }) => m.label === 'Length')).toBe(true);
   });
 

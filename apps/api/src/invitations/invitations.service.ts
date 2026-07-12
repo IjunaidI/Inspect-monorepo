@@ -1,4 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  GoneException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword } from '../auth/password';
 
@@ -12,6 +18,30 @@ export interface AcceptInvitationInput {
 @Injectable()
 export class InvitationsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Public lookup so the /invite page renders VERIFIED data (email/role/org)
+   * from the token instead of trusting spoofable query params (INS-054).
+   * Leaks nothing beyond what the invitation email itself contains.
+   */
+  async getByToken(token: string) {
+    if (!token?.trim()) throw new BadRequestException('token is required');
+    const invitation = await this.prisma.invitation.findUnique({
+      where: { token },
+      include: { organization: { select: { name: true } } },
+    });
+    if (!invitation) throw new NotFoundException('Invitation not found');
+    if (invitation.acceptedAt) throw new GoneException('Invitation already used');
+    if (invitation.expiresAt.getTime() < Date.now()) {
+      throw new GoneException('Invitation has expired');
+    }
+    return {
+      email: invitation.email,
+      role: invitation.role,
+      orgName: invitation.organization?.name ?? null,
+      expiresAt: invitation.expiresAt,
+    };
+  }
 
   async accept(input: AcceptInvitationInput) {
     if (!input?.token) throw new BadRequestException('token is required');

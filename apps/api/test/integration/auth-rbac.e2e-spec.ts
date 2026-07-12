@@ -226,6 +226,77 @@ describe('Auth & RBAC negative matrix (integration)', () => {
     });
   });
 
+  describe('list search + pagination (INS-050)', () => {
+    it('q filters case-insensitively and stays org-scoped', async () => {
+      const hit = expect2xx(
+        await client.get(`/buyers?q=${encodeURIComponent(`buyer a ${tag}`)}`, {
+          token: orgA.ownerToken,
+        }),
+        'GET /buyers?q=<match>',
+      ) as any[];
+      expect(hit.some((b) => b.id === buyerAId)).toBe(true);
+
+      const miss = expect2xx(
+        await client.get('/buyers?q=zzz-no-such-buyer', { token: orgA.ownerToken }),
+        'GET /buyers?q=<miss>',
+      ) as any[];
+      expect(miss.length).toBe(0);
+
+      // Org B searching org A's buyer name sees nothing (isolation holds under q).
+      const cross = expect2xx(
+        await client.get(`/buyers?q=${encodeURIComponent(`Buyer A ${tag}`)}`, {
+          token: orgB.ownerToken,
+        }),
+        'GET /buyers?q= (cross-org)',
+      ) as any[];
+      expect(cross.length).toBe(0);
+    });
+
+    it('take/skip slice deterministically', async () => {
+      // Two known buyers exist in org A by now (Buyer A + at least one more via
+      // other suites is NOT guaranteed here, so create a second one).
+      expect2xx(
+        await client.post('/buyers', { token: orgA.ownerToken, body: { name: `Buyer A2 ${tag}` } }),
+        'POST /buyers (pagination fixture)',
+      );
+      const page1 = expect2xx(
+        await client.get('/buyers?take=1&skip=0', { token: orgA.ownerToken }),
+        'GET /buyers?take=1&skip=0',
+      ) as any[];
+      const page2 = expect2xx(
+        await client.get('/buyers?take=1&skip=1', { token: orgA.ownerToken }),
+        'GET /buyers?take=1&skip=1',
+      ) as any[];
+      expect(page1.length).toBe(1);
+      expect(page2.length).toBe(1);
+      expect(page1[0].id).not.toBe(page2[0].id);
+    });
+  });
+
+  describe('dashboard summary (INS-005)', () => {
+    it('returns org-scoped rollups that exclude the other tenant', async () => {
+      const a = expect2xx(
+        await client.get('/dashboard/summary', { token: orgA.ownerToken }),
+        'GET /dashboard/summary (org A)',
+      );
+      expect(a.buyers).toBeGreaterThanOrEqual(1); // buyerAId created in beforeAll
+      expect(a.inspectionsByStatus).toBeDefined();
+
+      // Org B has exactly its own single buyer — org A's rows never leak in.
+      const b = expect2xx(
+        await client.get('/dashboard/summary', { token: orgB.ownerToken }),
+        'GET /dashboard/summary (org B)',
+      );
+      expect(b.buyers).toBe(1);
+      expect(b.purchaseOrders).toBe(0);
+    });
+
+    it('refuses the no-org platform admin (tenant guard)', async () => {
+      const res = await client.get('/dashboard/summary', { token: adminToken });
+      expect(res.status).toBe(403);
+    });
+  });
+
   describe('@Public routes stay public', () => {
     it('GET / responds without auth', async () => {
       const res = await client.get('/');
@@ -241,6 +312,35 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       const res = await client.get('/reports/verify/definitely-not-a-token');
       expect(res.status).toBe(200);
       expect(res.body.valid).toBe(false);
+    });
+
+    it('invitation lookup is public and state-aware: 200 pending, 404 unknown, 410 consumed (INS-054)', async () => {
+      const email = `lookup+${tag}@e2e.local`;
+      const invitation = expect2xx(
+        await client.post('/users/invite', {
+          token: orgA.ownerToken,
+          body: { email, role: 'INSPECTOR' },
+        }),
+        'POST /users/invite (lookup fixture)',
+      );
+
+      const pending = await client.get(`/invitations/${invitation.token}`);
+      expect(pending.status).toBe(200);
+      expect(pending.body.email).toBe(email);
+      expect(pending.body.role).toBe('INSPECTOR');
+      expect(pending.body.orgName).toContain('E2E Org');
+
+      const unknown = await client.get('/invitations/definitely-not-a-token');
+      expect(unknown.status).toBe(404);
+
+      expect2xx(
+        await client.post('/invitations/accept', {
+          body: { token: invitation.token, password: `E2eLookup!${tag}`, name: 'Lookup' },
+        }),
+        'POST /invitations/accept (lookup fixture)',
+      );
+      const consumed = await client.get(`/invitations/${invitation.token}`);
+      expect(consumed.status).toBe(410);
     });
 
     it('invitation accept is public (bad token is a 4xx, not a 401 guard rejection)', async () => {

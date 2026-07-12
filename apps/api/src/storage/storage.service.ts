@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { presignS3PutUrl } from './sigv4';
+import { presignS3Url } from './sigv4';
 
 @Injectable()
 export class StorageService {
@@ -15,7 +15,16 @@ export class StorageService {
 
   /** Presigned PUT URL the client uploads to directly (no base64 through the API). */
   presignUpload(key: string, expiresSeconds = 900): string {
-    return presignS3PutUrl({
+    return this.presign(key, 'PUT', expiresSeconds);
+  }
+
+  /** Presigned GET URL so uploaded photos are actually viewable (INS-049). */
+  presignDownload(key: string, expiresSeconds = 900): string {
+    return this.presign(key, 'GET', expiresSeconds);
+  }
+
+  private presign(key: string, method: 'GET' | 'PUT', expiresSeconds: number): string {
+    return presignS3Url({
       endpoint: this.config.get<string>('S3_ENDPOINT') ?? 'http://localhost:9000',
       region: this.config.get<string>('S3_REGION') ?? 'us-east-1',
       bucket: this.config.get<string>('S3_BUCKET') ?? 'inspect-photos',
@@ -24,6 +33,7 @@ export class StorageService {
       secretAccessKey: this.config.get<string>('S3_SECRET_ACCESS_KEY') ?? '',
       expiresSeconds,
       now: new Date(),
+      method,
       forcePathStyle:
         (this.config.get<string>('S3_FORCE_PATH_STYLE') ?? 'true') !== 'false',
     });

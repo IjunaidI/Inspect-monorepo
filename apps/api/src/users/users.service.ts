@@ -34,10 +34,22 @@ export class UsersService {
     private readonly mail: MailService,
   ) {}
 
-  list(orgId: string) {
+  list(orgId: string, opts: { q?: string; take?: number; skip?: number } = {}) {
     return this.prisma.user.findMany({
-      where: { orgId },
+      where: {
+        orgId,
+        ...(opts.q
+          ? {
+              OR: [
+                { email: { contains: opts.q, mode: 'insensitive' as const } },
+                { name: { contains: opts.q, mode: 'insensitive' as const } },
+              ],
+            }
+          : {}),
+      },
       orderBy: { createdAt: 'asc' },
+      take: opts.take,
+      skip: opts.skip,
       select: SAFE_SELECT,
     });
   }

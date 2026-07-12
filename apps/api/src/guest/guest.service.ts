@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 
 /**
  * Buyer guest portal (spec §11): read-only access scoped to ONE buyer's reports
@@ -7,7 +8,10 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 @Injectable()
 export class GuestService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   private async guestByToken(token: string) {
     if (!token) {
@@ -52,6 +56,20 @@ export class GuestService {
         userAgent,
       },
     });
-    return report;
+    // Buyer-visible photo evidence (INS-049): short-lived presigned GET URLs.
+    // Never fails the read — presign problems degrade to viewUrl:null.
+    const photoRows = await this.prisma.photo.findMany({
+      where: { inspectionId: report.inspectionId },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, contentHash: true, storageKey: true, inspectionLoopId: true },
+    });
+    const photos = photoRows.map(({ storageKey, ...p }) => {
+      try {
+        return { ...p, viewUrl: this.storage.presignDownload(storageKey) };
+      } catch {
+        return { ...p, viewUrl: null as string | null };
+      }
+    });
+    return { ...report, photos };
   }
 }
