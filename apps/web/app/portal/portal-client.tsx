@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, Eye, ExternalLink, Lock, Search } from 'lucide-react';
 import { Mono } from '@/components/inspect/shell';
 import { BrandedReport, type BrandedReportData } from '@/components/inspect/branded-report';
 import { severity, ui } from '@/components/inspect/tokens';
-import type { ApiGuestReport } from '@/lib/api';
+import type { ApiGuestReport, ApiGuestReportPhoto } from '@/lib/api';
 
 type PortalStatus = 'pass' | 'fail' | 'hold';
 const statusChip: Record<PortalStatus, { label: string; fg: string; bg: string }> = {
@@ -26,6 +26,7 @@ function reportStatus(r: ApiGuestReport): PortalStatus {
 function mapToReportData(
   r: ApiGuestReport,
   buyer: { name: string; color: string },
+  photos?: ApiGuestReportPhoto[],
 ): BrandedReportData {
   type Snap = {
     poNumber?: string | null;
@@ -78,6 +79,12 @@ function mapToReportData(
         ? { sampleSize: cs.sampleSize, codeLetter: cs.sampleSizeCodeLetter ?? '—', lotSize: snap.lotSize ?? 0 }
         : null,
     classes,
+    // Buyer-visible photo evidence (INS-049) — the guest detail endpoint returns
+    // flat photos (no loop names), so they render as a single evidence group.
+    photos:
+      photos && photos.length > 0
+        ? [{ loop: 'Evidence photos', shots: photos.map((p) => ({ id: p.id, viewUrl: p.viewUrl })), flaggedCount: 0 }]
+        : undefined,
     tamperProof: r.contentHash
       ? { contentHash: r.contentHash, signedAt: r.generatedAt }
       : null,
@@ -95,6 +102,27 @@ export function PortalClient({
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(reports[0]?.id ?? null);
   const [search, setSearch] = useState('');
+  // Photo evidence per report id, fetched lazily from the guest detail endpoint
+  // (INS-049) via the server-side proxy route when a report is selected.
+  const [photosById, setPhotosById] = useState<Record<string, ApiGuestReportPhoto[]>>({});
+
+  useEffect(() => {
+    if (!selectedId || photosById[selectedId]) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/guest/reports/${encodeURIComponent(selectedId)}?token=${encodeURIComponent(token)}`);
+        if (!res.ok) return;
+        const detail = (await res.json()) as ApiGuestReport;
+        if (!cancelled) {
+          setPhotosById((prev) => ({ ...prev, [selectedId]: detail.photos ?? [] }));
+        }
+      } catch {
+        // Photos are progressive enhancement — the report renders without them.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedId, token, photosById]);
 
   const C = buyer.color;
   const initials = initialsOf(buyer.name);
@@ -108,7 +136,7 @@ export function PortalClient({
   const selected = reports.find((r) => r.id === selectedId);
   const selectedStatus = selected ? reportStatus(selected) : 'hold';
   const selectedChip = statusChip[selectedStatus];
-  const reportData = selected ? mapToReportData(selected, buyer) : null;
+  const reportData = selected ? mapToReportData(selected, buyer, photosById[selected.id]) : null;
 
   return (
     <div style={{ height: '100vh', background: '#EEF1F5', fontFamily: ui.font, fontSize: 13, color: ui.ink, display: 'flex', flexDirection: 'column' }}>

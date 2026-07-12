@@ -49,6 +49,25 @@ export async function archivePreset(id: string): Promise<{ error?: string }> {
   }
 }
 
+/**
+ * Presigned PUT for a loop-preset reference image (INS-052).
+ * The client uploads the bytes directly to storage; only the returned
+ * storageKey is submitted with the preset.
+ */
+export async function presignPresetImage(
+  ext?: string,
+): Promise<{ data?: { storageKey: string; uploadUrl: string }; error?: string }> {
+  try {
+    const data = await apiPost<{ storageKey: string; uploadUrl: string }>(
+      '/loop-presets/presign',
+      { ext },
+    );
+    return { data };
+  } catch (e) {
+    return { error: msg(e, 'presign failed') };
+  }
+}
+
 export async function createDefect(
   name: string,
   defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR',

@@ -22,12 +22,23 @@ export async function apiToken(): Promise<string | null> {
 }
 
 /**
- * Unauthenticated GET — for public endpoints (guest portal, verify).
+ * Unauthenticated GET — for public endpoints (guest portal, verify, invite lookup).
  * Does NOT call auth(); safe to use from pages with no session.
+ * Throws ApiError on non-2xx so callers can branch on the HTTP status
+ * (e.g. 404 unknown invite vs 410 consumed/expired). Network failures still
+ * surface as fetch's TypeError — distinct from an API-level error.
  */
 export async function apiGetPublic<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`API GET ${path} failed: ${res.status}`);
+  if (!res.ok) {
+    let detail = '';
+    try {
+      const parsed = await res.json() as { message?: unknown };
+      const m = parsed.message;
+      detail = Array.isArray(m) ? m.join(', ') : typeof m === 'string' ? m : '';
+    } catch { /* non-JSON */ }
+    throw new ApiError(res.status, path, detail || `API GET ${path} failed: ${res.status}`);
+  }
   return (await res.json()) as T;
 }
 
@@ -222,6 +233,8 @@ export interface ApiPresetStep {
   position: number;
   measurementFields: ApiMeasurementField[];
   allowedDefects: ApiAllowedDefect[];
+  /** Present on GET /loop-presets/:id — reference image keys decorated with short-lived view URLs (INS-052). */
+  referenceImages?: { key: string; viewUrl: string | null }[];
 }
 
 export interface ApiLoopPresetDetail extends ApiLoopPreset {
@@ -325,6 +338,8 @@ export interface ApiPhoto {
   inspectionLoopId?: string | null;
   capturedAt?: string | null;
   clientRequestId?: string | null;
+  /** Short-lived presigned GET URL (INS-049) — present on GET /inspections/:id; null when presign fails. */
+  viewUrl?: string | null;
 }
 
 export interface ApiDefectCatalogItem {
@@ -381,6 +396,14 @@ export interface ApiVerifyResult {
   generatedAt?: string | null;
 }
 
+/** Buyer-visible photo evidence on GET /guest/reports/:id (INS-049). */
+export interface ApiGuestReportPhoto {
+  id: string;
+  contentHash?: string | null;
+  inspectionLoopId?: string | null;
+  viewUrl: string | null;
+}
+
 export interface ApiGuestReport {
   id: string;
   generatedAt: string;
@@ -389,6 +412,8 @@ export interface ApiGuestReport {
   verificationToken?: string | null;
   canonicalSnapshot?: Record<string, unknown> | null;
   brandingSnapshot?: { logoUrl?: string | null; primaryColor?: string | null } | null;
+  /** Present on the detail endpoint (GET /guest/reports/:id) only. */
+  photos?: ApiGuestReportPhoto[];
 }
 
 export interface ApiInvitation {
@@ -400,4 +425,12 @@ export interface ApiInvitation {
   orgId: string;
   /** Whether the invitation email was actually delivered (MailService result). */
   emailSent?: boolean;
+}
+
+/** Public GET /invitations/:token — verified invite data (INS-054). 404 unknown; 410 consumed/expired. */
+export interface ApiInvitationLookup {
+  email: string;
+  role: string;
+  orgName: string | null;
+  expiresAt: string;
 }

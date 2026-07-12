@@ -2,7 +2,19 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Check, Lock, X } from 'lucide-react';
 import { Mono, SeverityTag, UnverifiedBadge } from './shell';
 import { mono, severity, ui, type SeverityKey } from './tokens';
-import type { ApiPhoto, ApiMeasurement } from '@/lib/api';
+import type { ApiMeasurement } from '@/lib/api';
+
+/**
+ * Photo evidence tile input. `viewUrl` is the short-lived presigned GET URL
+ * (INS-049) — when set the tile renders the real thumbnail; the gradient
+ * placeholder remains only for photos with no viewable URL. Console photos
+ * (ApiPhoto) and guest-portal photos (no storageKey) both satisfy this shape.
+ */
+export interface ReportPhoto {
+  id: string;
+  storageKey?: string | null;
+  viewUrl?: string | null;
+}
 
 export interface BrandedReportData {
   buyer: {
@@ -39,7 +51,7 @@ export interface BrandedReportData {
   }[];
   photos?: {
     loop: string;
-    shots: ApiPhoto[];
+    shots: ReportPhoto[];
     flaggedCount: number;
   }[];
   measurements?: {
@@ -215,10 +227,15 @@ export function BrandedReport({
                   <div style={{ display: 'flex', gap: 12 }}>
                     {row.shots.map((photo, i) => (
                       <div key={photo.id} style={{ flex: 1, borderRadius: 8, overflow: 'hidden', border: `1px solid ${ui.line}` }}>
+                        {/* Real thumbnail when a presigned viewUrl exists (INS-049); gradient placeholder otherwise. */}
                         <div style={{ position: 'relative', height: 96, background: 'linear-gradient(135deg,#BFC8D2,#7E8794)' }}>
+                          {photo.viewUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={photo.viewUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          )}
                           <div style={{ position: 'absolute', top: 6, left: 6 }}><UnverifiedBadge /></div>
                         </div>
-                        <div style={{ padding: '6px 8px', fontSize: 10.5, color: ui.sub, ...mono }}>{String(i + 1).padStart(2, '0')} · {photo.storageKey.slice(-8)}</div>
+                        <div style={{ padding: '6px 8px', fontSize: 10.5, color: ui.sub, ...mono }}>{String(i + 1).padStart(2, '0')} · {(photo.storageKey ?? photo.id).slice(-8)}</div>
                       </div>
                     ))}
                   </div>

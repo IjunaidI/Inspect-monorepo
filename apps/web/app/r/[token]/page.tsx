@@ -23,7 +23,7 @@ export default async function VerifyPage({
   try {
     result = await apiGetPublic<ApiVerifyResult>(`/reports/verify/${encodeURIComponent(token)}`);
   } catch (e) {
-    // apiGetPublic throws a plain Error on a non-2xx response; a network
+    // apiGetPublic throws ApiError on a non-2xx response; a network
     // failure surfaces as fetch's TypeError — distinct from "not found".
     unreachable = e instanceof TypeError;
   }

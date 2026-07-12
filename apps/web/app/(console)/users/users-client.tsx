@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useTransition, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, Lock, Plus, Search, MoreVertical } from 'lucide-react';
 import { Avatar, Mono, RoleBadge } from '@/components/inspect/shell';
 import { severity, ui, type RoleKey } from '@/components/inspect/tokens';
@@ -138,7 +139,10 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
 }
 
 export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; live: boolean; currentUserId?: string }) {
-  const [search, setSearch] = useState('');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const serverQuery = searchParams.get('q') ?? '';
+  const [search, setSearch] = useState(serverQuery);
   const [showInvite, setShowInvite] = useState(false);
   const [state, action, pending] = useActionState(inviteUser, {});
 
@@ -158,6 +162,13 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter pushes the term server-side (INS-050); typing keeps the instant filter.
+              if (e.key === 'Enter') {
+                const q = search.trim();
+                router.push(q ? `/users?q=${encodeURIComponent(q)}` : '/users');
+              }
+            }}
             style={{ width: 320, height: 36, padding: '0 12px 0 36px', fontSize: 13, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', outline: 'none' }}
             placeholder="Search by name or email…"
           />

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ClipboardList } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardList, Search } from 'lucide-react';
 import { apiGet, type ApiInspection } from '@/lib/api';
 import { Btn, Mono, PageHead } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
@@ -13,18 +13,65 @@ const STATUS_CHIPS = [
   { label: 'Report Issued', value: 'REPORT_ISSUED' },
 ] as const;
 
+const PAGE_SIZE = 50;
+
+/** Build an /inspections href preserving the other filters (page resets unless given). */
+function hrefFor(params: { status?: string; q?: string; page?: number }): string {
+  const sp = new URLSearchParams();
+  if (params.status) sp.set('status', params.status);
+  if (params.q) sp.set('q', params.q);
+  if (params.page && params.page > 1) sp.set('page', String(params.page));
+  const qs = sp.toString();
+  return qs ? `/inspections?${qs}` : '/inspections';
+}
+
+function PagerLink({ href, disabled, dir }: { href: string; disabled: boolean; dir: 'prev' | 'next' }) {
+  const style = {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    border: `1px solid ${ui.line}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: disabled ? ui.faint : ui.sub,
+    opacity: disabled ? 0.5 : 1,
+    background: '#fff',
+  } as const;
+  const icon = dir === 'prev' ? <ChevronLeft size={14} /> : <ChevronRight size={14} />;
+  if (disabled) return <span style={style} aria-disabled="true">{icon}</span>;
+  return (
+    <Link href={href} aria-label={dir === 'prev' ? 'Previous page' : 'Next page'} style={style}>
+      {icon}
+    </Link>
+  );
+}
+
 export default async function InspectionsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; page?: string }>;
 }) {
-  const { status } = await searchParams;
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  const inspections = await apiGet<ApiInspection[]>(`/inspections${qs}`).catch(() => []);
+  const { status, q, page } = await searchParams;
+  const pageNum = Math.max(parseInt(page ?? '1', 10) || 1, 1);
 
-  const subLabel = status
-    ? `${inspections.length} · filtered by ${status}`
-    : `${inspections.length} total`;
+  // Server-side search + pagination (INS-050): forward q/take/skip to the API.
+  const apiParams = new URLSearchParams();
+  if (status) apiParams.set('status', status);
+  if (q) apiParams.set('q', q);
+  apiParams.set('take', String(PAGE_SIZE));
+  apiParams.set('skip', String((pageNum - 1) * PAGE_SIZE));
+  const inspections = await apiGet<ApiInspection[]>(`/inspections?${apiParams.toString()}`).catch(() => []);
+
+  const subLabel = [
+    `${inspections.length} shown`,
+    status ? `filtered by ${status}` : null,
+    q ? `matching “${q}”` : null,
+    pageNum > 1 ? `page ${pageNum}` : null,
+  ].filter(Boolean).join(' · ');
+
+  const hasPrev = pageNum > 1;
+  const hasNext = inspections.length === PAGE_SIZE;
 
   return (
     <div style={{ padding: '24px 32px 40px' }}>
@@ -32,16 +79,35 @@ export default async function InspectionsListPage({
         <ClipboardList size={15} color={ui.sub} />
         <span style={{ color: ui.ink, fontWeight: 550 }}>Inspections</span>
       </div>
-      <PageHead title="Inspections" sub={subLabel} actions={<Btn kind="primary" href="/inspections/new">New inspection</Btn>} />
+      <PageHead
+        title="Inspections"
+        sub={subLabel}
+        actions={
+          <>
+            {/* Server-side search (INS-050): plain GET form — Enter submits ?q= */}
+            <form method="GET" action="/inspections" style={{ position: 'relative' }}>
+              {status && <input type="hidden" name="status" value={status} />}
+              <Search size={15} color={ui.faint} style={{ position: 'absolute', left: 12, top: 10.5 }} />
+              <input
+                name="q"
+                defaultValue={q ?? ''}
+                placeholder="Search PO, buyer, style…"
+                style={{ width: 280, height: 36, padding: '0 12px 0 36px', fontSize: 13, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </form>
+            <Btn kind="primary" href="/inspections/new">New inspection</Btn>
+          </>
+        }
+      />
 
-      {/* Status filter chips */}
+      {/* Status filter chips (preserve the search term) */}
       <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
         {STATUS_CHIPS.map((chip) => {
           const isActive = chip.value === status || (chip.value === undefined && !status);
           return (
             <Link
               key={chip.label}
-              href={chip.value ? `/inspections?status=${chip.value}` : '/inspections'}
+              href={hrefFor({ status: chip.value, q })}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -64,7 +130,13 @@ export default async function InspectionsListPage({
 
       {inspections.length === 0 ? (
         <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, padding: 22, color: ui.sub, fontSize: 13 }}>
-          {status ? `No inspections with status "${status}".` : 'No inspections yet — create one.'}
+          {q
+            ? `No inspections match “${q}”${status ? ` with status "${status}"` : ''}.`
+            : status
+              ? `No inspections with status "${status}".`
+              : pageNum > 1
+                ? 'No more inspections on this page.'
+                : 'No inspections yet — create one.'}
         </div>
       ) : (
         <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -80,6 +152,15 @@ export default async function InspectionsListPage({
               <span style={{ fontSize: 12.5, color: ui.sub }}>{i.aqlResult?.systemRecommendation ?? '—'}</span>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Pagination (INS-050): more pages inferred by a full page of rows */}
+      {(hasPrev || hasNext) && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 12, color: ui.sub, fontSize: 12.5 }}>
+          <span>Page <Mono>{pageNum}</Mono></span>
+          <PagerLink dir="prev" disabled={!hasPrev} href={hrefFor({ status, q, page: pageNum - 1 })} />
+          <PagerLink dir="next" disabled={!hasNext} href={hrefFor({ status, q, page: pageNum + 1 })} />
         </div>
       )}
     </div>

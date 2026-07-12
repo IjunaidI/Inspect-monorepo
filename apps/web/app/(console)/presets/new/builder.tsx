@@ -1,28 +1,35 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronDown,
   ChevronRight,
-  GripVertical,
+  ChevronUp,
   Image as ImageIcon,
   Minus,
   Plus,
   Repeat,
   Smartphone,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Mono, SeverityTag } from '@/components/inspect/shell';
 import { severity, ui, type SeverityKey } from '@/components/inspect/tokens';
 import type { ApiDefectCatalog, ApiLoopPresetDetail } from '@/lib/api';
 import type { CreatePresetInput } from '../actions';
-import { createPreset, createDefect } from '../actions';
+import { createPreset, createDefect, presignPresetImage } from '../actions';
 
 interface MeasurementFieldDraft {
   id: string;
   label: string;
   unit: string;
+}
+
+/** An uploaded reference image: the storage key submitted with the preset + a display name. */
+interface ReferenceImageDraft {
+  key: string;
+  name: string;
 }
 
 interface StepDraft {
@@ -32,6 +39,7 @@ interface StepDraft {
   requiredShotCount: number;
   measurementFields: MeasurementFieldDraft[];
   allowedDefectCatalogIds: Set<string>;
+  referenceImages: ReferenceImageDraft[];
 }
 
 interface BuilderState {
@@ -59,6 +67,7 @@ function blankStep(name = ''): StepDraft {
     requiredShotCount: 1,
     measurementFields: [],
     allowedDefectCatalogIds: new Set(),
+    referenceImages: [],
   };
 }
 
@@ -66,7 +75,8 @@ function initFromSeed(seed: ApiLoopPresetDetail): BuilderState {
   return {
     presetName: seed.name,
     description: seed.description ?? '',
-    aqlLevel: seed.aqlLevel ?? 'II',
+    // Only General Level II is implemented (the API rejects anything else).
+    aqlLevel: 'II',
     steps: seed.steps.map((s) => ({
       id: crypto.randomUUID(),
       zoneName: s.zoneName,
@@ -78,6 +88,10 @@ function initFromSeed(seed: ApiLoopPresetDetail): BuilderState {
         unit: f.unit ?? '',
       })),
       allowedDefectCatalogIds: new Set(s.allowedDefects.map((a) => a.defectCatalog.id)),
+      referenceImages: (s.referenceImageUrls ?? []).map((key) => ({
+        key,
+        name: key.split('/').pop() ?? key,
+      })),
     })),
     activeStepIndex: 0,
     customDefectName: '',
@@ -86,8 +100,6 @@ function initFromSeed(seed: ApiLoopPresetDetail): BuilderState {
     saveError: null,
   };
 }
-
-const AQL_LEVELS = ['I', 'II', 'III', 'S1', 'S2', 'S3', 'S4'];
 
 const fieldLabel = {
   fontSize: 11,
@@ -131,6 +143,9 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [extraDefects, setExtraDefects] = useState<ApiDefectCatalog[]>([]);
+  const refImageInputRef = useRef<HTMLInputElement>(null);
+  const [refUploading, setRefUploading] = useState(false);
+  const [refError, setRefError] = useState<string | null>(null);
   const [state, setState] = useState<BuilderState>(
     seed ? initFromSeed(seed) : {
       presetName: '',
@@ -164,6 +179,71 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
       const activeStepIndex = Math.min(prev.activeStepIndex, Math.max(0, steps.length - 1));
       return { ...prev, steps, activeStepIndex };
     });
+  }
+
+  /** Swap a loop with its neighbor (INS-052) — positions derive from array order at submit. */
+  function moveStep(index: number, delta: -1 | 1) {
+    setState((prev) => {
+      const target = index + delta;
+      if (target < 0 || target >= prev.steps.length) return prev;
+      const steps = [...prev.steps];
+      [steps[index], steps[target]] = [steps[target], steps[index]];
+      let activeStepIndex = prev.activeStepIndex;
+      if (prev.activeStepIndex === index) activeStepIndex = target;
+      else if (prev.activeStepIndex === target) activeStepIndex = index;
+      return { ...prev, steps, activeStepIndex };
+    });
+  }
+
+  /**
+   * Reference-image upload (INS-052): presign via the API, PUT the bytes
+   * directly to storage, then attach the storage key to this loop. Failures
+   * surface inline and never block saving the preset without images.
+   */
+  async function handleReferenceUpload(stepIndex: number, file: File) {
+    setRefError(null);
+    setRefUploading(true);
+    try {
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const presign = await presignPresetImage(ext);
+      if (presign.error || !presign.data) {
+        setRefError(presign.error ?? 'Could not prepare the upload.');
+        return;
+      }
+      const { storageKey, uploadUrl } = presign.data;
+      const res = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      });
+      if (!res.ok) {
+        setRefError(`Image upload failed (${res.status}). The preset can still be saved without it.`);
+        return;
+      }
+      setState((prev) => ({
+        ...prev,
+        steps: prev.steps.map((s, i) =>
+          i === stepIndex
+            ? { ...s, referenceImages: [...s.referenceImages, { key: storageKey, name: file.name }] }
+            : s,
+        ),
+      }));
+    } catch (e) {
+      setRefError(e instanceof Error ? e.message : 'Image upload failed.');
+    } finally {
+      setRefUploading(false);
+    }
+  }
+
+  function removeReferenceImage(stepIndex: number, key: string) {
+    setState((prev) => ({
+      ...prev,
+      steps: prev.steps.map((s, i) =>
+        i === stepIndex
+          ? { ...s, referenceImages: s.referenceImages.filter((r) => r.key !== key) }
+          : s,
+      ),
+    }));
   }
 
   function updateStepField<K extends keyof StepDraft>(index: number, field: K, value: StepDraft[K]) {
@@ -285,7 +365,7 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
       steps: state.steps.map((s) => ({
         zoneName: s.zoneName,
         description: s.description || undefined,
-        referenceImageUrls: [],
+        referenceImageUrls: s.referenceImages.map((r) => r.key),
         requiredShotCount: s.requiredShotCount,
         measurementFields: s.measurementFields.map((f) => ({
           label: f.label,
@@ -364,17 +444,19 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
             placeholder="Preset name"
             style={{ ...titleInput, fontSize: 18, fontWeight: 600, marginBottom: 8, letterSpacing: -0.2, width: '100%' }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <span style={{ fontSize: 11.5, color: ui.faint }}>AQL Level</span>
+            {/* Only General Level II is implemented — the sampling engine and the API both enforce it. */}
             <select
               value={state.aqlLevel}
               onChange={(e) => set({ aqlLevel: e.target.value })}
               style={{ fontFamily: 'inherit', fontSize: 12, border: `1px solid ${ui.line}`, borderRadius: 6, padding: '2px 6px', color: ui.ink, background: '#fff' }}
             >
-              {AQL_LEVELS.map((l) => (
-                <option key={l} value={l}>{l}</option>
-              ))}
+              <option value="II">II</option>
             </select>
+          </div>
+          <div style={{ fontSize: 11, color: ui.faint, marginBottom: 8 }}>
+            ISO 2859-1 General Level II (MVP)
           </div>
           <textarea
             value={state.description}
@@ -405,7 +487,25 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
                   onClick={() => set({ activeStepIndex: i })}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 10, borderRadius: 8, background: active ? ui.accentSoft : 'transparent', borderLeft: active ? `2px solid ${ui.accent}` : '2px solid transparent', marginLeft: active ? -2 : 0, cursor: 'pointer' }}
                 >
-                  <GripVertical size={14} color={ui.faint} />
+                  {/* Working reorder controls (INS-052) — keyboard-accessible, replace the decorative drag handle. */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flexShrink: 0 }}>
+                    <button
+                      aria-label={`Move ${step.zoneName || `Loop ${String(i + 1).padStart(2, '0')}`} up`}
+                      disabled={i === 0}
+                      onClick={(e) => { e.stopPropagation(); moveStep(i, -1); }}
+                      style={{ ...iconBtn, width: 18, height: 14, opacity: i === 0 ? 0.3 : 1, cursor: i === 0 ? 'default' : 'pointer' }}
+                    >
+                      <ChevronUp size={12} />
+                    </button>
+                    <button
+                      aria-label={`Move ${step.zoneName || `Loop ${String(i + 1).padStart(2, '0')}`} down`}
+                      disabled={i === state.steps.length - 1}
+                      onClick={(e) => { e.stopPropagation(); moveStep(i, 1); }}
+                      style={{ ...iconBtn, width: 18, height: 14, opacity: i === state.steps.length - 1 ? 0.3 : 1, cursor: i === state.steps.length - 1 ? 'default' : 'pointer' }}
+                    >
+                      <ChevronDown size={12} />
+                    </button>
+                  </div>
                   <Mono style={{ fontSize: 11, color: ui.faint, minWidth: 18 }}>{String(i + 1).padStart(2, '0')}</Mono>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: active ? 600 : 500, color: ui.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -458,11 +558,51 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
 
               <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 28, marginTop: 28 }}>
                 <div>
-                  <div style={fieldLabel}>Reference</div>
-                  <div style={{ width: 200, height: 200, borderRadius: 10, border: '1.5px dashed #C8D0DA', background: 'repeating-linear-gradient(135deg, #FAFBFC 0 8px, #F0F3F7 8px 16px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: ui.sub }}>
+                  <div style={fieldLabel}>Reference · {activeStep.referenceImages.length}</div>
+                  {/* Real reference-image upload (INS-052): presigned PUT straight to storage. */}
+                  <input
+                    ref={refImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleReferenceUpload(state.activeStepIndex, file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Upload a reference image"
+                    onClick={refUploading ? undefined : () => refImageInputRef.current?.click()}
+                    style={{ width: 200, height: 200, borderRadius: 10, border: '1.5px dashed #C8D0DA', background: 'repeating-linear-gradient(135deg, #FAFBFC 0 8px, #F0F3F7 8px 16px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: ui.sub, cursor: refUploading ? 'default' : 'pointer', fontFamily: 'inherit', opacity: refUploading ? 0.6 : 1 }}
+                  >
                     <ImageIcon size={20} color={ui.sub} />
-                    <div style={{ fontSize: 11, color: ui.faint }}>Drop image or <span style={{ color: ui.accent }}>pick from library</span></div>
-                  </div>
+                    <div style={{ fontSize: 11, color: ui.faint }}>
+                      {refUploading ? 'Uploading…' : <>Click to <span style={{ color: ui.accent }}>upload an image</span></>}
+                    </div>
+                  </button>
+                  {refError && (
+                    <div style={{ marginTop: 8, fontSize: 11.5, color: '#DC2626', lineHeight: 1.4 }}>{refError}</div>
+                  )}
+                  {activeStep.referenceImages.length > 0 && (
+                    <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {activeStep.referenceImages.map((img) => (
+                        <div key={img.key} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 28, padding: '0 8px 0 10px', borderRadius: 6, border: `1px solid ${ui.line}`, background: '#fff', fontSize: 11.5, color: ui.sub }}>
+                          <ImageIcon size={12} color={ui.faint} />
+                          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={img.name}>{img.name}</span>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${img.name}`}
+                            onClick={() => removeReferenceImage(state.activeStepIndex, img.key)}
+                            style={{ ...iconBtn, width: 20, height: 20 }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 28, minWidth: 0 }}>
@@ -472,7 +612,6 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
                     <div style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, overflow: 'hidden' }}>
                       {Array.from({ length: activeStep.requiredShotCount }, (_, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderTop: i ? `1px solid ${ui.lineSoft}` : 'none' }}>
-                          <GripVertical size={14} color="#C8D0DA" />
                           <Mono style={{ fontSize: 11, color: ui.faint, minWidth: 18 }}>{String(i + 1).padStart(2, '0')}</Mono>
                           <span style={{ flex: 1, fontSize: 13, color: ui.sub }}>
                             Shot {String(i + 1).padStart(2, '0')}

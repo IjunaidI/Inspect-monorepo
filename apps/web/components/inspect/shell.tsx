@@ -10,13 +10,13 @@ import {
   LogOut,
   Package,
   Repeat,
-  Search,
   Upload,
   Users,
 } from 'lucide-react';
 import { mono as monoStyle, roles, severity, ui, type RoleKey, type SeverityKey } from './tokens';
 import { initialsFrom } from '@/lib/roles';
 import { signOutAction } from '@/app/(console)/actions';
+import { CommandPalette } from './command-palette';
 
 // ─── Primitives ──────────────────────────────────────────────
 export function Mono({ children, style }: { children: ReactNode; style?: CSSProperties }) {
@@ -317,24 +317,8 @@ function Topbar({ org, search, user }: { org: string; search: string; user: type
         flexShrink: 0,
       }}
     >
-      {/* becomes CommandPalette trigger — Task 15 */}
-      <div
-        style={{
-          flex: 1,
-          maxWidth: 420,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '7px 12px',
-          background: ui.bg,
-          borderRadius: 8,
-          border: `1px solid ${ui.line}`,
-        }}
-      >
-        <Search size={15} color={ui.faint} />
-        <span style={{ color: ui.faint, fontSize: 13, flex: 1 }}>{search}</span>
-        <Mono style={{ fontSize: 11, color: ui.faint, border: `1px solid ${ui.line}`, borderRadius: 4, padding: '1px 6px' }}>⌘K</Mono>
-      </div>
+      {/* Real ⌘K command palette (INS-051) — org-scoped global search. */}
+      <CommandPalette placeholder={search} />
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <Avatar initials={user.initials} size={30} />

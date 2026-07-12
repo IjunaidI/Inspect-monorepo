@@ -18,11 +18,18 @@ const ROLE_KEY: Record<string, RoleKey> = {
   INSPECTOR: 'inspector', QA_MANAGER: 'qa', ORG_OWNER: 'owner', PLATFORM_ADMIN: 'platform',
 };
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
   const session = (await auth()) as unknown as { user?: { id?: string; role?: string } } | null;
   const currentUserId = session?.user?.id;
 
-  const { data: users, live } = await loadOrFallback<ApiUser[]>('/users', DEMO_USERS);
+  // Server-side search (INS-050) — the client keeps its instant filter for the loaded page.
+  const path = q ? `/users?q=${encodeURIComponent(q)}` : '/users';
+  const { data: users, live } = await loadOrFallback<ApiUser[]>(path, DEMO_USERS);
 
   return (
     <div style={{ padding: '28px 32px' }}>

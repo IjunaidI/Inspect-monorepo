@@ -53,14 +53,24 @@ function StatTiles({ summary }: { summary: ApiDashboardSummary }) {
   );
 }
 
+const PAGE_SIZE = 50;
+
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ includeArchived?: string }>;
+  searchParams: Promise<{ includeArchived?: string; q?: string; page?: string }>;
 }) {
-  const { includeArchived } = await searchParams;
+  const { includeArchived, q, page } = await searchParams;
+  const pageNum = Math.max(parseInt(page ?? '1', 10) || 1, 1);
+
   // Default = active rows only (API default); ?includeArchived=1 shows everything.
-  const qs = includeArchived === '1' ? '?includeArchived=1' : '';
+  // Server-side search + pagination (INS-050): forward q/take/skip.
+  const apiParams = new URLSearchParams();
+  if (includeArchived === '1') apiParams.set('includeArchived', '1');
+  if (q) apiParams.set('q', q);
+  apiParams.set('take', String(PAGE_SIZE));
+  apiParams.set('skip', String((pageNum - 1) * PAGE_SIZE));
+  const qs = `?${apiParams.toString()}`;
 
   const summaryRes = await loadOrFallback<ApiDashboardSummary>('/dashboard/summary', DEMO_SUMMARY);
   const buyersRes = await loadOrFallback<ApiBuyer[]>(`/buyers${qs}`, DEMO_BUYERS);
@@ -79,6 +89,8 @@ export default async function DashboardPage({
         suppliers={suppliersRes.data}
         presets={presets}
         live={buyersRes.live}
+        page={pageNum}
+        pageSize={PAGE_SIZE}
       />
     </div>
   );

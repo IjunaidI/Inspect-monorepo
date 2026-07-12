@@ -1,5 +1,6 @@
 import { Mono, RoleBadge } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
+import { ApiError, apiGetPublic, type ApiInvitationLookup } from '@/lib/api';
 import { AcceptForm } from './accept-form';
 
 export const dynamic = 'force-dynamic';
@@ -15,25 +16,64 @@ const ROLE_KEY: Record<string, 'inspector' | 'qa' | 'owner'> = {
   ORG_OWNER: 'owner',
 };
 
+function ErrorCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div style={{ minHeight: '100vh', background: ui.bg, fontFamily: ui.font, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ maxWidth: 420, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 16, padding: '32px 36px', textAlign: 'center' }}>
+        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>{title}</div>
+        <div style={{ fontSize: 13.5, color: ui.sub, lineHeight: 1.6 }}>{body}</div>
+      </div>
+    </div>
+  );
+}
+
 export default async function InviteAcceptPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string; email?: string; role?: string; org?: string }>;
+  searchParams: Promise<{ token?: string }>;
 }) {
-  const { token, email, role, org } = await searchParams;
+  const { token } = await searchParams;
 
   if (!token) {
     return (
-      <div style={{ minHeight: '100vh', background: ui.bg, fontFamily: ui.font, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ maxWidth: 420, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 16, padding: '32px 36px', textAlign: 'center' }}>
-          <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Invalid invitation link</div>
-          <div style={{ fontSize: 13.5, color: ui.sub }}>This link is missing a token. Please use the full link from your invitation email.</div>
-        </div>
-      </div>
+      <ErrorCard
+        title="Invalid invitation link"
+        body="This link is missing a token. Please use the full link from your invitation email."
+      />
     );
   }
 
-  const roleKey = ROLE_KEY[role ?? ''] ?? 'inspector';
+  // Resolve the invitation server-side (INS-054): the page renders VERIFIED
+  // email/role/org from the API, never the spoofable query params.
+  let invitation: ApiInvitationLookup;
+  try {
+    invitation = await apiGetPublic<ApiInvitationLookup>(`/invitations/${encodeURIComponent(token)}`);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) {
+      return (
+        <ErrorCard
+          title="Invitation not found"
+          body="This invitation link isn't recognized. Check that you used the full link from your invitation email, or ask your Org Owner to send a new invite."
+        />
+      );
+    }
+    if (e instanceof ApiError && e.status === 410) {
+      return (
+        <ErrorCard
+          title="Invitation no longer valid"
+          body="This invitation was already used or has expired. Ask your Org Owner to send you a new invite."
+        />
+      );
+    }
+    return (
+      <ErrorCard
+        title="Could not verify the invitation"
+        body="The invitation service did not respond. Please try again shortly."
+      />
+    );
+  }
+
+  const roleKey = ROLE_KEY[invitation.role] ?? 'inspector';
 
   return (
     <div style={{ minHeight: '100vh', width: '100%', background: ui.bg, fontFamily: ui.font, color: ui.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -46,8 +86,8 @@ export default async function InviteAcceptPage({
           <div style={{ marginTop: 20 }}>
             <div style={{ fontSize: 21, fontWeight: 600, letterSpacing: -0.3 }}>You&apos;ve been invited</div>
             <div style={{ fontSize: 13.5, color: ui.sub, marginTop: 6, lineHeight: 1.5 }}>
-              {org ? (
-                <>You&apos;ve been invited to join <b style={{ color: ui.ink, fontWeight: 600 }}>{org}</b> on Inspect.</>
+              {invitation.orgName ? (
+                <>You&apos;ve been invited to join <b style={{ color: ui.ink, fontWeight: 600 }}>{invitation.orgName}</b> on Inspect.</>
               ) : (
                 'You\'ve been invited to join an Inspect workspace.'
               )}
@@ -56,8 +96,8 @@ export default async function InviteAcceptPage({
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 16, padding: 12, background: ui.fill, border: `1px solid ${ui.line}`, borderRadius: 10 }}>
             <span style={{ fontSize: 12, color: ui.sub }}>Assigned role</span>
             <RoleBadge role={roleKey} />
-            {role && <span style={{ fontSize: 12, color: ui.sub }}>{ROLE_LABEL[role] ?? role}</span>}
-            {email && <Mono style={{ marginLeft: 'auto', fontSize: 12, color: ui.faint }}>{email}</Mono>}
+            <span style={{ fontSize: 12, color: ui.sub }}>{ROLE_LABEL[invitation.role] ?? invitation.role}</span>
+            <Mono style={{ marginLeft: 'auto', fontSize: 12, color: ui.faint }}>{invitation.email}</Mono>
           </div>
         </div>
         <AcceptForm token={token} />

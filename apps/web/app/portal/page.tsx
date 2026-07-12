@@ -1,5 +1,5 @@
 import { Lock } from 'lucide-react';
-import { apiGetPublic, type ApiGuestReport } from '@/lib/api';
+import { ApiError, apiGetPublic, type ApiGuestReport } from '@/lib/api';
 import { ui } from '@/components/inspect/tokens';
 import { PortalClient } from './portal-client';
 
@@ -45,7 +45,7 @@ export default async function GuestPortalPage({
   try {
     reports = await apiGetPublic<ApiGuestReport[]>(`/guest/reports?token=${encodeURIComponent(token)}`);
   } catch (e) {
-    errorMsg = e instanceof Error && e.message.includes('401')
+    errorMsg = e instanceof ApiError && (e.status === 401 || e.status === 403)
       ? 'Your guest link has expired or is invalid.'
       : 'Unable to load reports. Please try again later.';
   }

@@ -59,6 +59,35 @@ function ArchivedBadge() {
   );
 }
 
+/** Real Prev/Next pagination controls (INS-050). */
+function Pager({ page, hasPrev, hasNext, onPage }: { page: number; hasPrev: boolean; hasNext: boolean; onPage: (n: number) => void }) {
+  const btn = (disabled: boolean) => ({
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    border: `1px solid ${ui.line}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: ui.faint,
+    opacity: disabled ? 0.5 : 1,
+    background: '#fff',
+    cursor: disabled ? 'default' : 'pointer',
+    padding: 0,
+  } as const);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      {page > 1 && <Mono style={{ fontSize: 11.5, color: ui.faint, marginRight: 4 }}>page {page}</Mono>}
+      <button aria-label="Previous page" disabled={!hasPrev} style={btn(!hasPrev)} onClick={() => onPage(page - 1)}>
+        <ChevronLeft size={14} />
+      </button>
+      <button aria-label="Next page" disabled={!hasNext} style={btn(!hasNext)} onClick={() => onPage(page + 1)}>
+        <ChevronRight size={14} />
+      </button>
+    </div>
+  );
+}
+
 const BRANDS = ['#1457A3', '#0B7D6B', '#C2410C', '#7C3AED', '#B5791A', '#0B1220'];
 const initialsOf = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '??';
@@ -132,26 +161,44 @@ export function DirectoryClient({
   suppliers: initialSuppliers,
   presets,
   live,
+  page,
+  pageSize,
 }: {
   buyers: ApiBuyer[];
   suppliers: ApiSupplier[];
   presets: ApiLoopPreset[];
   live: boolean;
+  page: number;
+  pageSize: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   /** Reflects the server-side ?includeArchived=1 filter (API default = active only). */
   const showArchived = searchParams.get('includeArchived') === '1';
+  /** The server-side search term currently applied (INS-050). */
+  const serverQuery = searchParams.get('q') ?? '';
 
   const [tab, setTab] = useState<'buyers' | 'suppliers'>('buyers');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(serverQuery);
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
   const [buyerState, buyerAction, buyerPending] = useActionState(createBuyer, {});
   const [supplierState, supplierAction, supplierPending] = useActionState(createSupplier, {});
+
+  /** Push new server-side params (search/page/archived), preserving the others. */
+  function pushListParams(next: { q?: string; page?: number; includeArchived?: boolean }) {
+    const sp = new URLSearchParams();
+    const archived = next.includeArchived !== undefined ? next.includeArchived : showArchived;
+    if (archived) sp.set('includeArchived', '1');
+    const q = next.q !== undefined ? next.q : serverQuery;
+    if (q) sp.set('q', q);
+    if (next.page && next.page > 1) sp.set('page', String(next.page));
+    const qs = sp.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
 
   const buyers = initialBuyers;
   const suppliers = initialSuppliers;
@@ -163,6 +210,10 @@ export function DirectoryClient({
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     (s.address ?? '').toLowerCase().includes(search.toLowerCase()),
   );
+
+  /** Real Prev/Next (INS-050): next exists when the server returned a full page. */
+  const hasPrev = page > 1;
+  const hasNext = (tab === 'buyers' ? buyers.length : suppliers.length) === pageSize;
 
   return (
     <>
@@ -185,14 +236,15 @@ export function DirectoryClient({
         <div style={{ position: 'relative' }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={ui.faint} strokeWidth="2" style={{ position: 'absolute', left: 12, top: 10.5 }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input value={search} onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') pushListParams({ q: search.trim() }); }}
             style={{ width: 340, height: 36, padding: '0 12px 0 36px', fontSize: 13, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', outline: 'none' }}
-            placeholder={tab === 'buyers' ? 'Search buyers by name…' : 'Search suppliers by name or city…'} />
+            placeholder={tab === 'buyers' ? 'Search buyers by name… (Enter searches all)' : 'Search suppliers by name or city… (Enter searches all)'} />
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button style={chip(showArchived)} onClick={() => router.push(`${pathname}?includeArchived=1`)}>
+          <button style={chip(showArchived)} onClick={() => pushListParams({ includeArchived: true })}>
             All{showArchived && <Mono style={{ opacity: 0.7 }}>{tab === 'buyers' ? buyers.length : suppliers.length}</Mono>}
           </button>
-          <button style={chip(!showArchived)} onClick={() => router.push(pathname)}>
+          <button style={chip(!showArchived)} onClick={() => pushListParams({ includeArchived: false })}>
             Active{!showArchived && <Mono style={{ opacity: 0.7 }}>{tab === 'buyers' ? buyers.length : suppliers.length}</Mono>}
           </button>
         </div>
@@ -299,10 +351,7 @@ export function DirectoryClient({
             </table>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: `1px solid ${ui.lineSoft}`, color: ui.sub, fontSize: 12.5 }}>
               <span>Showing <Mono>{filteredBuyers.length}</Mono> buyer{filteredBuyers.length === 1 ? '' : 's'}</span>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${ui.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, opacity: 0.5 }}><ChevronLeft size={14} /></div>
-                <div style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${ui.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, opacity: 0.5 }}><ChevronRight size={14} /></div>
-              </div>
+              <Pager page={page} hasPrev={hasPrev} hasNext={hasNext} onPage={(n) => pushListParams({ page: n })} />
             </div>
           </div>
         </>
@@ -381,10 +430,7 @@ export function DirectoryClient({
             </table>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: `1px solid ${ui.lineSoft}`, color: ui.sub, fontSize: 12.5 }}>
               <span>Showing <Mono>{filteredSuppliers.length}</Mono> supplier{filteredSuppliers.length === 1 ? '' : 's'}</span>
-              <div style={{ display: 'flex', gap: 4 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${ui.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, opacity: 0.5 }}><ChevronLeft size={14} /></div>
-                <div style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${ui.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, opacity: 0.5 }}><ChevronRight size={14} /></div>
-              </div>
+              <Pager page={page} hasPrev={hasPrev} hasNext={hasNext} onPage={(n) => pushListParams({ page: n })} />
             </div>
           </div>
         </>

@@ -309,11 +309,24 @@ export function PopulateWorkspace({
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
                 {(activeLoop.photos ?? []).map((photo, i) => (
                   <div key={photo.id} style={{ border: `1px solid ${ui.line}`, borderRadius: 12, background: '#fff', overflow: 'hidden' }}>
-                    <div style={{ position: 'relative', height: 150, background: 'linear-gradient(135deg,#BFC8D2,#7E8794)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {/* Real thumbnail via short-lived presigned GET (INS-049); gradient placeholder when presign was unavailable. */}
+                    <div style={{ position: 'relative', height: 150, background: 'linear-gradient(135deg,#BFC8D2,#7E8794)' }}>
+                      {photo.viewUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={photo.viewUrl} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      )}
                       <div style={{ position: 'absolute', top: 8, left: 8 }}><CompactUnverified /></div>
-                      <div style={{ position: 'absolute', bottom: 8, right: 8, width: 26, height: 26, borderRadius: 7, background: 'rgba(11,18,32,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Eye size={14} color="#fff" />
-                      </div>
+                      {photo.viewUrl && (
+                        <a
+                          href={photo.viewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Open full size"
+                          style={{ position: 'absolute', bottom: 8, right: 8, width: 26, height: 26, borderRadius: 7, background: 'rgba(11,18,32,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          <Eye size={14} color="#fff" />
+                        </a>
+                      )}
                     </div>
                     <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Mono style={{ fontSize: 11, color: ui.faint }}>{String(i + 1).padStart(2, '0')}</Mono>
