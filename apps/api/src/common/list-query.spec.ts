@@ -24,4 +24,12 @@ describe('parseListQuery (INS-050)', () => {
     expect(parseListQuery({ q: '   ' }).q).toBeUndefined();
     expect(parseListQuery({ q: 'x'.repeat(500) }).q).toHaveLength(200);
   });
+
+  it('coerces repeated/array/object params instead of throwing (500 guard)', () => {
+    // Express delivers ?q=a&q=b as ['a','b'] — must not throw on .trim().
+    expect(parseListQuery({ q: ['a', 'b'] }).q).toBe('a');
+    expect(parseListQuery({ q: { x: 1 } }).q).toBeUndefined();
+    expect(parseListQuery({ take: ['25', '9'] }).take).toBe(25);
+    expect(parseListQuery({ skip: [] }).skip).toBe(0);
+  });
 });

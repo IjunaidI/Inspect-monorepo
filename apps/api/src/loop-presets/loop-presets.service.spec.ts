@@ -53,3 +53,25 @@ describe('LoopPresetsService.create AQL level guard', () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('LoopPresetsService.create reference-image tenant scoping (security review)', () => {
+  it('rejects a referenceImageUrls key outside the org namespace', async () => {
+    const { service, create } = makeService();
+    await expect(
+      service.create('orgA', 'u1', {
+        name: 'P',
+        steps: [{ ...STEP, referenceImageUrls: ['orgs/orgB/presets/leaked.jpg'] }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('accepts a key under the caller org namespace', async () => {
+    const { service, create } = makeService();
+    await service.create('orgA', 'u1', {
+      name: 'P',
+      steps: [{ ...STEP, referenceImageUrls: ['orgs/orgA/presets/mine.jpg'] }],
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});

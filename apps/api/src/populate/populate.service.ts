@@ -165,22 +165,39 @@ export class PopulateService {
         throw new BadRequestException('one or more photoIds are not on this inspection');
       }
     }
-    return this.prisma.defectInstance.create({
-      data: {
-        orgId: insp.orgId,
-        inspectionId: insp.id,
-        inspectionLoopId: input.inspectionLoopId,
-        defectCatalogId: input.defectCatalogId,
-        customText: input.customText,
-        severity,
-        notes: input.notes,
-        createdByUserId: userId,
-        clientRequestId: input.clientRequestId,
-        photos: input.photoIds?.length
-          ? { create: input.photoIds.map((photoId) => ({ photoId })) }
-          : undefined,
-      },
-    });
+    try {
+      return await this.prisma.defectInstance.create({
+        data: {
+          orgId: insp.orgId,
+          inspectionId: insp.id,
+          inspectionLoopId: input.inspectionLoopId,
+          defectCatalogId: input.defectCatalogId,
+          customText: input.customText,
+          severity,
+          notes: input.notes,
+          createdByUserId: userId,
+          clientRequestId: input.clientRequestId,
+          photos: input.photoIds?.length
+            ? { create: input.photoIds.map((photoId) => ({ photoId })) }
+            : undefined,
+        },
+      });
+    } catch (e) {
+      // Concurrent replay (double-click): the check-then-insert above can race,
+      // and the loser hits @@unique([orgId, clientRequestId]). Converge to the
+      // winner's row instead of surfacing an opaque 500 (INS-044).
+      if (
+        input.clientRequestId &&
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        const existing = await this.prisma.defectInstance.findFirst({
+          where: { orgId: insp.orgId, clientRequestId: input.clientRequestId },
+        });
+        if (existing) return existing;
+      }
+      throw e;
+    }
   }
 
   async addMeasurement(inspectionId: string, input: AddMeasurementInput) {

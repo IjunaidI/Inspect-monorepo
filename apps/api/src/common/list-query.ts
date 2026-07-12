@@ -10,16 +10,25 @@ export interface ListQuery {
 }
 
 export interface RawListQuery {
-  q?: string;
-  take?: string;
-  skip?: string;
+  q?: unknown;
+  take?: unknown;
+  skip?: unknown;
+}
+
+/** Coerce a possibly-array/object query value to a scalar string (or undefined). */
+function scalar(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  // Express/qs delivers `?q=a&q=b` as an array — take the first scalar entry
+  // rather than throwing a 500 on `.trim()`.
+  if (Array.isArray(value)) return scalar(value[0]);
+  return undefined;
 }
 
 export function parseListQuery(raw: RawListQuery): ListQuery {
-  const takeParsed = parseInt(raw.take ?? '', 10);
+  const takeParsed = parseInt(scalar(raw.take) ?? '', 10);
   const take = Number.isNaN(takeParsed) ? 50 : Math.min(Math.max(takeParsed, 1), 100);
-  const skipParsed = parseInt(raw.skip ?? '', 10);
+  const skipParsed = parseInt(scalar(raw.skip) ?? '', 10);
   const skip = Number.isNaN(skipParsed) ? 0 : Math.max(skipParsed, 0);
-  const q = raw.q?.trim().slice(0, 200) || undefined;
+  const q = scalar(raw.q)?.trim().slice(0, 200) || undefined;
   return { take, skip, q };
 }

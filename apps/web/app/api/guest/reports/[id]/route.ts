@@ -18,9 +18,21 @@ export async function GET(
     return NextResponse.json({ message: 'token is required' }, { status: 400 });
   }
   try {
+    // Forward the real client identity so the API's ReportAccess audit row
+    // records the guest — not this server's IP/UA (security review).
+    const forwardedFor =
+      req.headers.get('x-forwarded-for') ??
+      (req as unknown as { ip?: string }).ip ??
+      '';
     const res = await fetch(
       `${API_URL}/guest/reports/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`,
-      { cache: 'no-store' },
+      {
+        cache: 'no-store',
+        headers: {
+          ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}),
+          'user-agent': req.headers.get('user-agent') ?? 'inspect-portal',
+        },
+      },
     );
     const body = await res.json().catch(() => ({}));
     return NextResponse.json(body, { status: res.status });

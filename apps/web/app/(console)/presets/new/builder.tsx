@@ -200,7 +200,7 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
    * directly to storage, then attach the storage key to this loop. Failures
    * surface inline and never block saving the preset without images.
    */
-  async function handleReferenceUpload(stepIndex: number, file: File) {
+  async function handleReferenceUpload(stepId: string, file: File) {
     setRefError(null);
     setRefUploading(true);
     try {
@@ -220,10 +220,13 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
         setRefError(`Image upload failed (${res.status}). The preset can still be saved without it.`);
         return;
       }
+      // Attach by STABLE step id, not a positional index: the user can reorder
+      // or delete loops while this async upload is in flight, which would
+      // otherwise land the image on the wrong loop (or silently drop it).
       setState((prev) => ({
         ...prev,
-        steps: prev.steps.map((s, i) =>
-          i === stepIndex
+        steps: prev.steps.map((s) =>
+          s.id === stepId
             ? { ...s, referenceImages: [...s.referenceImages, { key: storageKey, name: file.name }] }
             : s,
         ),
@@ -235,11 +238,11 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
     }
   }
 
-  function removeReferenceImage(stepIndex: number, key: string) {
+  function removeReferenceImage(stepId: string, key: string) {
     setState((prev) => ({
       ...prev,
-      steps: prev.steps.map((s, i) =>
-        i === stepIndex
+      steps: prev.steps.map((s) =>
+        s.id === stepId
           ? { ...s, referenceImages: s.referenceImages.filter((r) => r.key !== key) }
           : s,
       ),
@@ -567,7 +570,7 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
                     style={{ display: 'none' }}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) void handleReferenceUpload(state.activeStepIndex, file);
+                      if (file) void handleReferenceUpload(activeStep.id, file);
                       e.target.value = '';
                     }}
                   />
@@ -594,7 +597,7 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
                           <button
                             type="button"
                             aria-label={`Remove ${img.name}`}
-                            onClick={() => removeReferenceImage(state.activeStepIndex, img.key)}
+                            onClick={() => removeReferenceImage(activeStep.id, img.key)}
                             style={{ ...iconBtn, width: 20, height: 20 }}
                           >
                             <X size={12} />

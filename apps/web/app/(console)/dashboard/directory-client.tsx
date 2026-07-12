@@ -200,6 +200,16 @@ export function DirectoryClient({
     router.push(qs ? `${pathname}?${qs}` : pathname);
   }
 
+  /**
+   * The buyers/suppliers tabs share one server ?page= param, so switching to a
+   * tab while paged past a smaller list would show it empty. Reset to page 1 on
+   * every tab switch so each tab always lands on its first page.
+   */
+  function switchTab(next: 'buyers' | 'suppliers') {
+    setTab(next);
+    if (page > 1) pushListParams({ page: 1 });
+  }
+
   const buyers = initialBuyers;
   const suppliers = initialSuppliers;
 
@@ -222,7 +232,7 @@ export function DirectoryClient({
         {([['buyers', 'Buyers', buyers.length], ['suppliers', 'Suppliers / Factories', suppliers.length]] as const).map(([k, l, n]) => {
           const on = tab === k;
           return (
-            <button key={k} onClick={() => setTab(k)}
+            <button key={k} onClick={() => switchTab(k)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 2px 12px', marginBottom: -1, borderTopWidth: 0, borderLeftWidth: 0, borderRightWidth: 0, borderBottomWidth: 2, borderBottomStyle: 'solid', borderBottomColor: on ? ui.accent : 'transparent', color: on ? ui.ink : ui.sub, fontWeight: on ? 600 : 500, fontSize: 14, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit' }}>
               {l}
               <span style={{ ...monoStyle, fontSize: 11, padding: '1px 7px', borderRadius: 999, background: on ? ui.accentSoft : ui.lineSoft, color: on ? ui.accent : ui.faint }}>{n}</span>

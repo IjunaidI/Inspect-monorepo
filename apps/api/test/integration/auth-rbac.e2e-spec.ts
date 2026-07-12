@@ -252,6 +252,11 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       expect(cross.length).toBe(0);
     });
 
+    it('a repeated q param does not 500 (review hardening)', async () => {
+      const res = await client.get('/buyers?q=a&q=b', { token: orgA.ownerToken });
+      expect(res.status).toBe(200);
+    });
+
     it('take/skip slice deterministically', async () => {
       // Two known buyers exist in org A by now (Buyer A + at least one more via
       // other suites is NOT guaranteed here, so create a second one).

@@ -32,14 +32,21 @@ export class LoopPresetsController {
 
   @Get(':id')
   async get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    const preset = await this.presets.get(requireOrgId(user), id);
+    const orgId = requireOrgId(user);
+    const preset = await this.presets.get(orgId, id);
     // Reference images are stored as object keys — decorate with short-lived
-    // view URLs (INS-049 pattern); presign problems degrade to null.
+    // view URLs (INS-049 pattern). Defense-in-depth: only ever presign keys in
+    // THIS org's namespace, so the endpoint can't sign a foreign object even if
+    // a bad key slipped past create-time validation.
+    const refPrefix = `orgs/${orgId}/presets/`;
     return {
       ...preset,
       steps: preset.steps?.map((step) => ({
         ...step,
         referenceImages: (step.referenceImageUrls ?? []).map((key: string) => {
+          if (typeof key !== 'string' || !key.startsWith(refPrefix)) {
+            return { key, viewUrl: null as string | null };
+          }
           try {
             return { key, viewUrl: this.storage.presignDownload(key) };
           } catch {

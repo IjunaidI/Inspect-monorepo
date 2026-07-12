@@ -24,6 +24,10 @@ export class GuestController {
     @Param('id') id: string,
     @Req() req: RequestLike,
   ) {
-    return this.guest.getReport(token, id, req?.ip, req?.headers?.['user-agent']);
+    // Prefer the proxied client identity (the web portal forwards it) so the
+    // ReportAccess audit row records the guest, not the web server.
+    const forwarded = req?.headers?.['x-forwarded-for'];
+    const clientIp = forwarded ? forwarded.split(',')[0].trim() : req?.ip;
+    return this.guest.getReport(token, id, clientIp, req?.headers?.['user-agent']);
   }
 }

@@ -74,9 +74,21 @@ export class LoopPresetsService {
     if (!Array.isArray(input.steps) || input.steps.length === 0) {
       throw new BadRequestException('at least one step is required');
     }
+    const refPrefix = `orgs/${orgId}/presets/`;
     input.steps.forEach((s, i) => {
       if (!s?.zoneName?.trim()) {
         throw new BadRequestException(`step ${i + 1}: zoneName is required`);
+      }
+      // Tenant isolation (security review): reference-image keys must live in
+      // THIS org's preset namespace. Storing an arbitrary key would let the
+      // preset-detail presign turn the API into a signing oracle over any other
+      // tenant's object (keys leak via viewUrls + inspection detail).
+      for (const key of s.referenceImageUrls ?? []) {
+        if (typeof key !== 'string' || !key.startsWith(refPrefix)) {
+          throw new BadRequestException(
+            `step ${i + 1}: referenceImageUrls must be keys under ${refPrefix} (use POST /loop-presets/presign)`,
+          );
+        }
       }
     });
 
