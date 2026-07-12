@@ -3,8 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { MailService } from '../mail/mail.service';
-
-const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+import { inviteTtlMs } from '../common/config';
 
 export interface CreateOrgInput {
   name: string;
@@ -54,7 +53,7 @@ export class OrgsService {
           role: 'ORG_OWNER',
           // Security token: CSPRNG value, not the guessable cuid() default.
           token: randomUUID(),
-          expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+          expiresAt: new Date(Date.now() + inviteTtlMs()),
           invitedById: actorUserId,
         },
       });

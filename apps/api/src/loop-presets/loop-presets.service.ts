@@ -64,6 +64,13 @@ export class LoopPresetsService {
     if (!input?.name?.trim()) {
       throw new BadRequestException('name is required');
     }
+    // Honesty guard (INS-052): the AQL engine implements General Level II only.
+    // Storing another level would silently disagree with every computed sampling.
+    if (input.aqlLevel && input.aqlLevel !== 'II') {
+      throw new BadRequestException(
+        `Only AQL General Level II is supported in the MVP (got '${input.aqlLevel}')`,
+      );
+    }
     if (!Array.isArray(input.steps) || input.steps.length === 0) {
       throw new BadRequestException('at least one step is required');
     }

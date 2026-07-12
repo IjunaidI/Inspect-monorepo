@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return 'Hello World!';
+  /** Service identifier for the public root route (real health is /health). */
+  getServiceInfo(): { service: string; status: string } {
+    return { service: 'inspect-api', status: 'ok' };
   }
 }

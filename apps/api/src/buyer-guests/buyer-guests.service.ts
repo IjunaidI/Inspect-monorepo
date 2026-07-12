@@ -2,8 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
-
-const DEFAULT_TTL_DAYS = 30;
+import { clampGuestTtlDays } from '../common/config';
 const SAFE_SELECT = {
   id: true,
   email: true,
@@ -41,8 +40,9 @@ export class BuyerGuestsService {
     if (!buyer) throw new NotFoundException('Buyer not found');
 
     const token = randomUUID();
+    // Clamped (INS-053): callers can neither mint a permanent token nor a dead one.
     const tokenExpiresAt = new Date(
-      Date.now() + (input.ttlDays ?? DEFAULT_TTL_DAYS) * 24 * 60 * 60 * 1000,
+      Date.now() + clampGuestTtlDays(input.ttlDays) * 24 * 60 * 60 * 1000,
     );
     const email = input.email.trim().toLowerCase();
 

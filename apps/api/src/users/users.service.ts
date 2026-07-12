@@ -9,8 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuthUser } from '../auth/auth-user';
 import { hasAtLeast, Role } from '../auth/rbac';
-
-const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+import { inviteTtlMs } from '../common/config';
 const SAFE_SELECT = {
   id: true,
   email: true,
@@ -81,7 +80,7 @@ export class UsersService {
         role,
         // Security token: use a CSPRNG value, not the guessable cuid() default.
         token: randomUUID(),
-        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+        expiresAt: new Date(Date.now() + inviteTtlMs()),
         invitedById: inviter.userId,
       },
     });

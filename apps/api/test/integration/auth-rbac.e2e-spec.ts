@@ -273,6 +273,35 @@ describe('Auth & RBAC negative matrix (integration)', () => {
     });
   });
 
+  describe('global search (INS-051)', () => {
+    it('finds own-org entities and never the other tenant', async () => {
+      const hits = expect2xx(
+        await client.get(`/search?q=${encodeURIComponent(`Buyer A ${tag}`)}`, {
+          token: orgA.ownerToken,
+        }),
+        'GET /search (org A)',
+      ) as Array<{ type: string; id: string }>;
+      expect(hits.some((h) => h.type === 'buyer' && h.id === buyerAId)).toBe(true);
+
+      const crossHits = expect2xx(
+        await client.get(`/search?q=${encodeURIComponent(`Buyer A ${tag}`)}`, {
+          token: orgB.ownerToken,
+        }),
+        'GET /search (org B)',
+      ) as unknown[];
+      expect(crossHits.length).toBe(0);
+
+      const empty = expect2xx(
+        await client.get('/search', { token: orgA.ownerToken }),
+        'GET /search (no q)',
+      ) as unknown[];
+      expect(empty).toEqual([]);
+
+      const unauth = await client.get('/search?q=x');
+      expect(unauth.status).toBe(401);
+    });
+  });
+
   describe('dashboard summary (INS-005)', () => {
     it('returns org-scoped rollups that exclude the other tenant', async () => {
       const a = expect2xx(

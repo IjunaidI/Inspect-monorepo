@@ -11,8 +11,17 @@ import { hashPassword } from '../src/auth/password';
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
-  const email = process.env.BOOTSTRAP_ADMIN_EMAIL ?? 'admin@inspect.local';
-  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? 'changeme123';
+  // Fail closed (INS-053): no default credentials — this script writes the sole
+  // cross-tenant principal into whatever DATABASE_URL points at.
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL;
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  if (!email || !password) {
+    // eslint-disable-next-line no-console
+    console.error(
+      'Refusing to run: set BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD explicitly.',
+    );
+    process.exit(1);
+  }
   const passwordHash = await hashPassword(password);
 
   const user = await prisma.user.upsert({
@@ -29,7 +38,7 @@ async function main(): Promise<void> {
   });
 
   // eslint-disable-next-line no-console
-  console.log(`Platform admin ready: ${user.email} / ${password}`);
+  console.log(`Platform admin ready: ${user.email} (password from BOOTSTRAP_ADMIN_PASSWORD)`);
 }
 
 main()

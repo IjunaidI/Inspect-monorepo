@@ -7,7 +7,8 @@ import { CacheModule } from '@nestjs/cache-manager';
 import KeyvRedis from '@keyv/redis';
 import { Keyv } from 'keyv';
 import { KeyvCacheableMemory } from 'cacheable';
-import { ScheduleModule } from '@nestjs/schedule';
+// NOTE: ScheduleModule was removed (INS-053) — zero cron/interval jobs exist.
+// Re-register it when the first real job (e.g. expiring stale invitations) lands.
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -31,6 +32,7 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { UsersModule } from './users/users.module';
 import { BuyerGuestsModule } from './buyer-guests/buyer-guests.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { SearchModule } from './search/search.module';
 import * as path from 'path';
 
 /**
@@ -67,14 +69,18 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
         if (!redisUrl) {
           throw new Error('REDIS_URL is required');
         }
+        // Tunable via env (INS-053); the old hardcoded values remain the defaults.
+        const ttl = Number(process.env.CACHE_TTL_MS) > 0
+          ? Number(process.env.CACHE_TTL_MS)
+          : 60 * 60 * 24 * 7 * 1000;
+        const lruSize = Number(process.env.CACHE_LRU_SIZE) > 0
+          ? Number(process.env.CACHE_LRU_SIZE)
+          : 5000;
         return {
-          ttl: 60 * 60 * 24 * 7 * 1000,
+          ttl,
           stores: [
             new Keyv({
-              store: new KeyvCacheableMemory({
-                ttl: 60 * 60 * 24 * 7 * 1000,
-                lruSize: 5000,
-              }),
+              store: new KeyvCacheableMemory({ ttl, lruSize }),
             }),
             new KeyvRedis(redisUrl),
           ],
@@ -82,7 +88,6 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
       },
     }),
     PrismaModule,
-    ScheduleModule.forRoot(),
     HealthModule,
     AuthModule,
     BuyersModule,
@@ -103,6 +108,7 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     UsersModule,
     BuyerGuestsModule,
     DashboardModule,
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [
