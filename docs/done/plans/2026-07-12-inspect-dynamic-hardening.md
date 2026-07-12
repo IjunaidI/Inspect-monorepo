@@ -1,5 +1,7 @@
 # Inspect — Dynamic-Data Hardening Sweep — Implementation Plan
 
+> **✅ EXECUTED 2026-07-12** — all 17 tasks delivered the same day (parallel waves: web-truth + docs agents alongside the API core, then features), verified 162 unit / 44 integration green vs the live DB, type-check + next build clean. Deliberate adaptations discovered at implementation time: `status:'ACTIVE'` filters became `archivedAt`/`isArchived` (the actual schema columns), loop reorder shipped as ↑/↓ buttons, portal photos load via a lazy guest-detail proxy route (ReportAccess logs fire on real views), and the report photo prop kept its existing grouped shape.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development or
 > superpowers:executing-plans. TDD for all new logic. Checkbox steps. Every phase leaves the tree
 > green (`pnpm api test` + `pnpm type-check`; integration where noted). Commit per task with the

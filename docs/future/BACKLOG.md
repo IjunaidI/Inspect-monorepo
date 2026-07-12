@@ -112,7 +112,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-06-inspect-phase2-auth-tenancy.md](../done/plans/2026-06-06-inspect-phase2-auth-tenancy.md) (Task 7)
 
 ### INS-005 · Aggregation / count / dashboard endpoints absent   [HIGH]
-- status: todo
+- status: done            # 2026-07-12 (dynamic-data sweep): GET /buyers|/suppliers|/products|/loop-presets carry relation _count (POs/inspections/reports/steps/defaultForBuyers) + updatedAt; new org-scoped GET /dashboard/summary (inspections grouped by status + buyers/suppliers/products/POs/reports counts, QA floor, tenant-guarded). Verified by integration tests (buyer _count, summary org-isolation) + consumed live by the dashboard tiles/directory/presets screens (INS-031).
 - area: Workspace CRUD
 - evidence: grep `count|stats|summary|aggregate|dashboard|metrics` across `*.controller.ts` = zero routes; `inspections.controller.ts` exposes only `GET /`, `GET /aql-preview`, `GET /:id`, `POST`, `POST /:id/submit`, `POST /:id/decision`.
 - problem: No endpoints return counts/rollups, so dashboard and list screens cannot show real PO/product/report/last-activity figures; the web list screens collapse those columns to "—" even in live mode.
@@ -242,7 +242,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11 (INS-010 class)
 
 ### INS-044 · DefectInstance has no clientRequestId/idempotency (contradicts a stated invariant)   [MEDIUM]
-- status: todo            # NEW 2026-07-11 (security review): needs a schema migration (add `clientRequestId String?` + `@@unique([orgId, clientRequestId])`) + addDefect() dedupe — deferred because it alters the live schema.
+- status: done            # 2026-07-12 (dynamic-data sweep): migration 20260712000000_defect_instance_client_request_id adds clientRequestId + @@unique([orgId, clientRequestId]) (applied to the live DB + runs in CI); populate.addDefect() accepts clientRequestId and returns the existing row on replay. Integration-tested: replaying the same clientRequestId returns the original defect id and the loop still holds exactly one defect (AQL verdict safe).
 - area: Defect catalog / Populate console
 - evidence: `CLAUDE.md` states "DefectInstance … writes accept an optional clientRequestId and dedupe on @@unique([orgId, clientRequestId])", but `schema.prisma:641` DefectInstance has neither the column nor the constraint; `populate.service.addDefect()` always `create()`s.
 - problem: A retried add-defect (double-click / offline-sync replay) duplicates the DefectInstance row; submit() groups defects by severity, so a phantom duplicate can flip a MAJOR class from PASS to FAIL — changing the binding QC outcome. Inspection + Photo are protected by exactly this constraint; DefectInstance is not.
@@ -378,7 +378,41 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 
 ---
 
+> **Dynamic-data sweep batch (2026-07-12).** INS-049..054 below were filed and delivered by the
+> full-sweep plan ([../done/plans/2026-07-12-inspect-dynamic-hardening.md](../done/plans/2026-07-12-inspect-dynamic-hardening.md))
+> that turned the 59 audited stale/hardcoded pieces functional.
+
+### INS-049 · Uploaded photos were never viewable (no presigned GET path)   [MEDIUM]
+- status: done            # 2026-07-12: sigv4 generalized to presignS3Url({method}) (PUT wrapper byte-identical, unit-tested); StorageService.presignDownload; GET /inspections/:id decorates every photo (loop + top-level) with a short-lived viewUrl (never fails the read — degrades to null); GET /guest/reports/:id returns photos[] with viewUrls; populate workspace + branded report render real <img> thumbnails with open-full-size. Integration-tested in CI: uploaded bytes fetched back via the viewUrl hash-match the original.
+- area: Populate console / Reports
+- refs: [../done/specs/2026-07-12-inspect-dynamic-hardening-design.md](../done/specs/2026-07-12-inspect-dynamic-hardening-design.md) (C.1)
+
+### INS-050 · No server-side search or pagination on list endpoints   [MEDIUM]
+- status: done            # 2026-07-12: q/take/skip (clamped 1..100, q capped 200 chars, unit-tested parseListQuery) on buyers/suppliers/products/users/loop-presets/inspections; q is case-insensitive contains on model-natural fields (inspections: PO number OR buyer name OR style). Responses stay flat arrays. Integration-tested: q match/miss/cross-org isolation, deterministic take/skip slices. Web: inspections + dashboard push ?q= and real Prev/Next pagination.
+- area: Workspace CRUD / Web console
+- refs: [../done/specs/2026-07-12-inspect-dynamic-hardening-design.md](../done/specs/2026-07-12-inspect-dynamic-hardening-design.md) (C.2)
+
+### INS-053 · Config hardening: CORS wide open, magic-number TTLs, silent-broken S3, default bootstrap creds   [MEDIUM]
+- status: done            # 2026-07-12: CORS origins from ALLOWED_ORIGINS/WEB_BASE_URL (dev-open only when both unset, with a boot warning); CACHE_TTL_MS/CACHE_LRU_SIZE/INVITE_TTL_DAYS/GUEST_TTL_DAYS (clamped 1..365)/PRESIGN_EXPIRES_SECONDS env-driven with old values as defaults (turbo.json globalEnv + .env.example placeholders); S3 presign throws a clear 400 when creds are missing instead of signing a broken URL; prisma/bootstrap-admin.ts refuses to run without explicit BOOTSTRAP_ADMIN_* and no longer prints the password; dead ScheduleModule removed; GET / identifies the service.
+- area: Infra & CI
+- refs: [../done/specs/2026-07-12-inspect-dynamic-hardening-design.md](../done/specs/2026-07-12-inspect-dynamic-hardening-design.md) (C.5)
+
+### INS-054 · /invite rendered spoofable query params instead of resolving the invitation   [MEDIUM]
+- status: done            # 2026-07-12: public GET /invitations/:token returns verified {email, role, orgName, expiresAt} for a pending invite; 404 unknown, 410 consumed/expired (unit + integration tested, incl. the consumed→410 transition). The /invite page resolves the token server-side and renders verified data; expired/used tokens get an explanatory card instead of a doomed form.
+- area: Tenancy & onboarding
+- refs: [../done/specs/2026-07-12-inspect-dynamic-hardening-design.md](../done/specs/2026-07-12-inspect-dynamic-hardening-design.md) (C.6)
+
 ## Low
+
+### INS-051 · Topbar search was a fake div; no global search exists   [LOW]
+- status: done            # 2026-07-12: org-scoped GET /search (QA floor; top-5 per type across buyers/suppliers/products/POs/inspections; empty q → []; integration-tested cross-org isolation + 401) + a ⌘K/Ctrl-K command palette in the console shell (debounced, keyboard navigation, per-type routing) fed through a server-side /api/search route handler so the JWT stays off the browser.
+- area: Web console
+- refs: [../done/specs/2026-07-12-inspect-dynamic-hardening-design.md](../done/specs/2026-07-12-inspect-dynamic-hardening-design.md) (C.3)
+
+### INS-052 · Preset builder: decorative drag handles, dead reference-image drop zone, impossible AQL levels   [LOW]
+- status: done            # 2026-07-12: loop rows reorder via real ↑/↓ move buttons (keyboard-accessible; positions derive from array order at submit); reference images upload for real (POST /loop-presets/presign → client PUT → storage keys in referenceImageUrls; detail page renders them via viewUrls); the AQL level select offers only II and loop-presets.create rejects any other level with a clear 400 (unit-tested) — the stored field can no longer disagree with the computed sampling.
+- area: Loop presets
+- refs: [../done/specs/2026-07-12-inspect-dynamic-hardening-design.md](../done/specs/2026-07-12-inspect-dynamic-hardening-design.md) (C.4)
 
 ### INS-042 · Login timing side-channel enables active-account enumeration   [LOW]
 - status: done            # 2026-07-11 (security review): fixed. validateUser() now runs an equivalent scrypt (hashPassword, discarded) on the miss/inactive path so a failed login's latency no longer reveals whether the email maps to an active account. auth.service.spec still green.
@@ -426,7 +460,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11
 
 ### INS-031 · Live list screens render lossy data (counts hardcoded to "—")   [LOW]
-- status: todo
+- status: done            # 2026-07-12 (dynamic-data sweep): dashboard directory buyer rows show real PO/inspection/report counts + last activity (updatedAt); supplier rows dropped the fabricated Buyers column and show real PO/inspection counts; presets cards show real "Used by N inspections"/steps/edited; a 6-tile KPI row consumes GET /dashboard/summary; the fabricated industry tag was removed rather than faked. Consumes the INS-005 fields; type-check + next build green.
 - area: Web console
 - evidence: `apps/web/app/(console)/dashboard/directory-client.tsx:259-262` (buyer rows) and `:341-344` (supplier rows) hardcode the count/last-activity columns to "—" even live; `presets/page.tsx:47,51` fabricate `industry: '—'` / `used: '—'`; API list shapes omit counts.
 - problem: Even on the three wired list screens, most columns show "—" because the consumed API response shapes omit counts/relations, making "live" mode look broken.
@@ -435,7 +469,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md) — depends on INS-005.
 
 ### INS-032 · Search inputs and filter chips inert across console   [LOW]
-- status: in-progress     # 2026-07-12: inspections `?status=` filter, presets live search+sort, and the dashboard/users/portal search inputs are all live. Remaining: All/Active chips on the dashboard directory, pagination affordances, and the topbar palette.
+- status: done            # 2026-07-12 (dynamic-data sweep): every remaining inert control is live — dashboard All/Active chips drive ?includeArchived=1 (server refetch, Archived badges), directory + inspections pagination is real Prev/Next over take/skip, search inputs push ?q= to the server (INS-050) on dashboard/users/inspections while keeping the instant client filter, and the fake topbar ⌘K div is the real command palette (INS-051). (Earlier: inspections ?status= filter, presets search+sort, portal search — live since 2026-06-28.)
 - area: Web console
 - evidence: `dashboard/page.tsx:74,77-78`; `presets/page.tsx:67,72`; `users/page.tsx:76`; `portal/page.tsx:58` — inputs/chips/sort dropdowns have no `value`/`onChange`.
 - problem: Search boxes, All/Active chips, sort dropdowns, tabs, and pagination across the console have no handlers, so users cannot filter or navigate large lists.

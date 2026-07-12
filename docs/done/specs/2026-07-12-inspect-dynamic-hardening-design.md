@@ -1,6 +1,6 @@
 # Inspect — Dynamic-Data Hardening Sweep — Design
 
-> **Status:** 🟡 In progress (designed 2026-07-12, scope approved: full A+B+C sweep).
+> **Status:** ✅ Done (designed, approved, and fully delivered 2026-07-12 — all 17 plan tasks; 162 unit / 44 integration tests green; moved to done/ same day).
 > Source inventory: a 4-agent audit (2026-07-12) found **59 stale/hardcoded/static pieces** across the
 > console, web shared layer, API, and docs. This spec turns every one of them functional and dynamic,
 > except the two already-tracked big features that stay separate: PDF rendering
