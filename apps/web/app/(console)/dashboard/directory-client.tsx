@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition, useActionState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   ChevronLeft,
   ChevronRight,
@@ -45,7 +45,19 @@ const chip = (active: boolean) => ({
   fontSize: 12,
   fontWeight: 500,
   cursor: 'pointer',
+  fontFamily: 'inherit',
 });
+
+const DATE_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const fmtDate = (iso?: string) => (iso ? DATE_FMT.format(new Date(iso)) : '—');
+
+function ArchivedBadge() {
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: ui.lineSoft, color: ui.faint, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+      Archived
+    </span>
+  );
+}
 
 const BRANDS = ['#1457A3', '#0B7D6B', '#C2410C', '#7C3AED', '#B5791A', '#0B1220'];
 const initialsOf = (name: string) =>
@@ -126,9 +138,14 @@ export function DirectoryClient({
   presets: ApiLoopPreset[];
   live: boolean;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  /** Reflects the server-side ?includeArchived=1 filter (API default = active only). */
+  const showArchived = searchParams.get('includeArchived') === '1';
+
   const [tab, setTab] = useState<'buyers' | 'suppliers'>('buyers');
   const [search, setSearch] = useState('');
-  const [filterActive] = useState(false);
   const [showAddBuyer, setShowAddBuyer] = useState(false);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
@@ -172,9 +189,12 @@ export function DirectoryClient({
             placeholder={tab === 'buyers' ? 'Search buyers by name…' : 'Search suppliers by name or city…'} />
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <div style={chip(!filterActive)}>All <Mono style={{ opacity: 0.7 }}>{tab === 'buyers' ? buyers.length : suppliers.length}</Mono></div>
-          {/* TODO: wire to ?includeArchived API param when available */}
-          <div style={chip(filterActive)}>Active</div>
+          <button style={chip(showArchived)} onClick={() => router.push(`${pathname}?includeArchived=1`)}>
+            All{showArchived && <Mono style={{ opacity: 0.7 }}>{tab === 'buyers' ? buyers.length : suppliers.length}</Mono>}
+          </button>
+          <button style={chip(!showArchived)} onClick={() => router.push(pathname)}>
+            Active{!showArchived && <Mono style={{ opacity: 0.7 }}>{tab === 'buyers' ? buyers.length : suppliers.length}</Mono>}
+          </button>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11.5, color: ui.faint }}>{live ? 'Live · from API' : 'Demo data · API offline'}</span>
@@ -227,8 +247,8 @@ export function DirectoryClient({
                   <th style={{ ...th, width: 56 }} />
                   <th style={th}>Buyer</th>
                   <th style={th}>Report branding</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Open POs</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Products</th>
+                  <th style={{ ...th, textAlign: 'right' }}>POs</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Inspections</th>
                   <th style={{ ...th, textAlign: 'right' }}>Reports</th>
                   <th style={th}>Last activity</th>
                   <th style={{ ...th, width: 48 }} />
@@ -248,7 +268,10 @@ export function DirectoryClient({
                         )}
                       </td>
                       <td style={td}>
-                        <div style={{ fontWeight: 550 }}>{b.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontWeight: 550 }}>{b.name}</span>
+                          {b.archivedAt && <ArchivedBadge />}
+                        </div>
                       </td>
                       <td style={td}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -256,10 +279,10 @@ export function DirectoryClient({
                           <Mono style={{ fontSize: 12, color: ui.sub }}>{color.toUpperCase()}</Mono>
                         </div>
                       </td>
-                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>—</td>
-                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>—</td>
-                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>—</td>
-                      <td style={{ ...td, color: ui.sub }}>—</td>
+                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{b._count?.purchaseOrders ?? '—'}</td>
+                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{b._count?.inspections ?? '—'}</td>
+                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{b._count?.reports ?? '—'}</td>
+                      <td style={{ ...td, color: ui.sub }}>{fmtDate(b.updatedAt)}</td>
                       <td style={{ ...td, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ position: 'relative', display: 'inline-block' }}>
                           <button onClick={() => setMenuOpen(menuOpen === b.id ? null : b.id)}
@@ -316,9 +339,8 @@ export function DirectoryClient({
                   <th style={{ ...th, width: 56 }} />
                   <th style={th}>Factory</th>
                   <th style={th}>GPS</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Buyers</th>
                   <th style={{ ...th, textAlign: 'right' }}>POs</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Open insp.</th>
+                  <th style={{ ...th, textAlign: 'right' }}>Inspections</th>
                   <th style={th}>Last activity</th>
                   <th style={{ ...th, width: 48 }} />
                 </tr>
@@ -328,7 +350,10 @@ export function DirectoryClient({
                   <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => { if (!menuOpen) window.location.href = `/suppliers/${s.id}`; }}>
                     <td style={td}><Avatar initials={initialsOf(s.name)} size={32} bg="#475467" /></td>
                     <td style={td}>
-                      <div style={{ fontWeight: 550 }}>{s.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 550 }}>{s.name}</span>
+                        {s.archivedAt && <ArchivedBadge />}
+                      </div>
                       <div style={{ color: ui.faint, fontSize: 12, marginTop: 2 }}>{s.address || '—'}</div>
                     </td>
                     <td style={td}>
@@ -338,10 +363,9 @@ export function DirectoryClient({
                         <span style={{ fontSize: 12, color: ui.faint }}>—</span>
                       )}
                     </td>
-                    <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>—</td>
-                    <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>—</td>
-                    <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>—</td>
-                    <td style={{ ...td, color: ui.sub }}>—</td>
+                    <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{s._count?.purchaseOrders ?? '—'}</td>
+                    <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{s._count?.inspections ?? '—'}</td>
+                    <td style={{ ...td, color: ui.sub }}>{fmtDate(s.updatedAt)}</td>
                     <td style={{ ...td, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ position: 'relative', display: 'inline-block' }}>
                         <button onClick={() => setMenuOpen(menuOpen === s.id ? null : s.id)}

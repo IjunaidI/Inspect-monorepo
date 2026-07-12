@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { loadOrFallback, type ApiProduct } from '@/lib/api';
 import { Btn, Mono, PageHead } from '@/components/inspect/shell';
@@ -44,14 +45,14 @@ export default async function ProductsPage() {
                 </td>
                 <td style={{ padding: '14px 20px', fontSize: 13, color: ui.sub }}>{p.description || '—'}</td>
                 <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                  <a href={`/products/${p.id}`} style={{ fontSize: 12.5, color: ui.accent, textDecoration: 'none', fontWeight: 500 }}>Edit →</a>
+                  <Link href={`/products/${p.id}`} style={{ fontSize: 12.5, color: ui.accent, textDecoration: 'none', fontWeight: 500 }}>Edit →</Link>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
         {products.length === 0 && (
-          <div style={{ padding: '40px 0', textAlign: 'center', color: ui.faint, fontSize: 13 }}>No products yet. <a href="/products/new" style={{ color: ui.accent }}>Add one →</a></div>
+          <div style={{ padding: '40px 0', textAlign: 'center', color: ui.faint, fontSize: 13 }}>No products yet. <Link href="/products/new" style={{ color: ui.accent }}>Add one →</Link></div>
         )}
       </div>
     </div>

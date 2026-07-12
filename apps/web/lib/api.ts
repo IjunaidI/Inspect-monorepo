@@ -137,6 +137,15 @@ export const apiPatch = <T>(path: string, body?: unknown): Promise<T> => apiSend
 export const apiDelete = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('DELETE', path, body);
 
 // ── Response shapes (subset of the Prisma models the screens read) ──
+/** GET /dashboard/summary — org-scoped rollups for the console dashboard (INS-005). */
+export interface ApiDashboardSummary {
+  inspectionsByStatus: Record<string, number>;
+  buyers: number;
+  suppliers: number;
+  products: number;
+  purchaseOrders: number;
+  reports: number;
+}
 export interface ApiBuyer {
   id: string;
   name: string;
@@ -144,17 +153,29 @@ export interface ApiBuyer {
   primaryColor?: string | null;
   branding?: Record<string, unknown> | null;
   defaultLoopPresetId?: string | null;
+  archivedAt?: string | null;
+  updatedAt?: string;
+  /** INS-005 list aggregates — present on GET /buyers rows. */
+  _count?: { purchaseOrders: number; inspections: number; reports: number };
 }
 export interface ApiSupplier {
   id: string;
   name: string;
   address?: string | null;
   gps?: { lat: number; lng: number } | null;
+  archivedAt?: string | null;
+  updatedAt?: string;
+  /** INS-005 list aggregates — present on GET /suppliers rows. */
+  _count?: { purchaseOrders: number; inspections: number };
 }
 export interface ApiProduct {
   id: string;
   styleNumber: string;
   description?: string | null;
+  archivedAt?: string | null;
+  updatedAt?: string;
+  /** INS-005 list aggregates — present on GET /products rows. */
+  _count?: { purchaseOrders: number; inspections: number };
 }
 export interface ApiBuyerGuest {
   id: string;
@@ -172,7 +193,8 @@ export interface ApiLoopPreset {
   aqlLevel?: string | null;
   isArchived: boolean;
   updatedAt?: string;
-  _count?: { steps: number };
+  /** INS-005 list aggregates — present on GET /loop-presets rows. */
+  _count?: { steps: number; inspections: number; defaultForBuyers: number };
 }
 
 export interface ApiMeasurementField {
@@ -230,13 +252,17 @@ export interface ApiAqlResult {
 export interface ApiInspection {
   id: string;
   status: string;
+  /** Prisma enum (e.g. PRE_SHIPMENT) — render with underscores replaced. */
+  inspectionType?: string;
   lotSize?: number | null;
   computedSampling?: { sampleSizeCodeLetter: string; sampleSize: number; perClass: Record<string, { aql: number; ac: number; re: number }> } | null;
   aqlResult?: ApiAqlResult | null;
-  buyer?: { id: string; name: string } | null;
-  supplier?: { id: string; name: string } | null;
+  buyer?: { id: string; name: string; primaryColor?: string | null } | null;
+  supplier?: { id: string; name: string; gps?: { lat: number; lng: number } | null } | null;
   product?: { id: string; styleNumber: string } | null;
   purchaseOrder?: { id: string; poNumber: string } | null;
+  /** Present on GET /inspections/:id (safe select: id/name/email). */
+  assignedInspector?: { id: string; name: string | null; email: string } | null;
   createdAt?: string;
   loops?: ApiInspectionLoop[];
   inspectorId?: string | null;

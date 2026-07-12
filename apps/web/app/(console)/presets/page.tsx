@@ -11,7 +11,8 @@ export interface PresetRow {
   desc: string;
   loops: [string, number][];
   loopCount: number;
-  used: number | string;
+  /** How many inspections were created from this preset (`_count.inspections`). */
+  used: number;
   /** Raw ISO timestamp — the sort key for "Last edited". */
   updatedAt: string;
   edited: string;
@@ -37,7 +38,7 @@ export default async function PresetsPage() {
         desc: `v${p.version}${p.description ? ` · ${p.description}` : ''}`,
         loops: [],
         loopCount: p._count?.steps ?? 0,
-        used: '—',
+        used: p._count?.inspections ?? 0,
         updatedAt: p.updatedAt ?? '',
         edited: p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '—',
       }))

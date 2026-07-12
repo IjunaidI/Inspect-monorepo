@@ -143,7 +143,7 @@ export function PresetsList({ presets: initial, live }: { presets: PresetRow[]; 
 
             <div style={{ display: 'flex', alignItems: 'center', borderTop: `1px solid ${ui.lineSoft}`, paddingTop: 12, marginTop: 4 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <div style={{ fontSize: 11, color: ui.sub }}>Used by <span style={{ fontSize: 11.5, fontWeight: 600, color: ui.ink }}>{p.used}</span> buyers</div>
+                <div style={{ fontSize: 11, color: ui.sub }}>Used by <span style={{ fontSize: 11.5, fontWeight: 600, color: ui.ink }}>{p.used}</span> inspection{p.used === 1 ? '' : 's'}</div>
                 <div style={{ fontSize: 11, color: ui.faint }}>Edited {p.edited}</div>
               </div>
               <a

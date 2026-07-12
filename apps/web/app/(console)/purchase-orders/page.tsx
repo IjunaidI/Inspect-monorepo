@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { loadOrFallback, type ApiPurchaseOrder } from '@/lib/api';
 import { Btn, Mono, PageHead } from '@/components/inspect/shell';
@@ -55,14 +56,14 @@ export default async function PurchaseOrdersPage() {
                   <Mono>{po.totalQuantity != null ? po.totalQuantity.toLocaleString() : '—'}</Mono>
                 </td>
                 <td style={{ padding: '14px 20px', textAlign: 'right' }}>
-                  <a href={`/purchase-orders/${po.id}`} style={{ fontSize: 12.5, color: ui.accent, textDecoration: 'none', fontWeight: 500 }}>Edit →</a>
+                  <Link href={`/purchase-orders/${po.id}`} style={{ fontSize: 12.5, color: ui.accent, textDecoration: 'none', fontWeight: 500 }}>Edit →</Link>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
         {pos.length === 0 && (
-          <div style={{ padding: '40px 0', textAlign: 'center', color: ui.faint, fontSize: 13 }}>No purchase orders yet. <a href="/purchase-orders/new" style={{ color: ui.accent }}>Add one →</a></div>
+          <div style={{ padding: '40px 0', textAlign: 'center', color: ui.faint, fontSize: 13 }}>No purchase orders yet. <Link href="/purchase-orders/new" style={{ color: ui.accent }}>Add one →</Link></div>
         )}
       </div>
     </div>
