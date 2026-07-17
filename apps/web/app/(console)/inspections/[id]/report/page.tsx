@@ -47,7 +47,7 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
   const photos: BrandedReportData['photos'] = (inspection.loops ?? [])
     .filter((l) => (l.photos?.length ?? 0) > 0)
     .map((l) => ({
-      loop: l.name,
+      loop: l.zoneName,
       shots: l.photos ?? [],
       flaggedCount: (l.defects ?? []).filter((d) => d.severity === 'MAJOR').length,
     }));
@@ -55,7 +55,7 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
   const measurements: BrandedReportData['measurements'] = (inspection.loops ?? [])
     .filter((l) => (l.measurements?.length ?? 0) > 0)
     .map((l) => ({
-      loop: l.name,
+      loop: l.zoneName,
       items: l.measurements ?? [],
     }));
 

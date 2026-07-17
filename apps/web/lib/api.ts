@@ -368,9 +368,10 @@ export interface ApiMeasurement {
 
 export interface ApiInspectionLoop {
   id: string;
-  name: string;
-  orderIndex: number;
-  requiredPhotoCount?: number | null;
+  /** Wire names are the Prisma-native columns (INS-064) — do NOT re-alias. */
+  zoneName: string;
+  position: number;
+  requiredShotCount: number;
   photos?: ApiPhoto[];
   defects?: ApiDefectInstance[];
   measurements?: ApiMeasurement[];

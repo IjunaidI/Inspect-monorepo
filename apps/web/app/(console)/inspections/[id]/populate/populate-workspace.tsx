@@ -64,7 +64,7 @@ export function PopulateWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loops: ApiInspectionLoop[] = inspection.loops
-    ? [...inspection.loops].sort((a, b) => a.orderIndex - b.orderIndex)
+    ? [...inspection.loops].sort((a, b) => a.position - b.position)
     : [];
 
   const [activeLoopId, setActiveLoopId] = useState<string>(loops[0]?.id ?? '');
@@ -74,7 +74,7 @@ export function PopulateWorkspace({
 
   const activeLoop = loops.find((l) => l.id === activeLoopId) ?? loops[0];
 
-  const totalRequired = loops.reduce((s, l) => s + (l.requiredPhotoCount ?? 0), 0);
+  const totalRequired = loops.reduce((s, l) => s + l.requiredShotCount, 0);
   const totalFilled = loops.reduce((s, l) => s + (l.photos?.length ?? 0), 0);
   const progressPct = totalRequired > 0 ? Math.round((totalFilled / totalRequired) * 100) : 0;
 
@@ -248,7 +248,7 @@ export function PopulateWorkspace({
             {loops.map((l, i) => {
               const isActive = l.id === activeLoopId;
               const filled = l.photos?.length ?? 0;
-              const req = l.requiredPhotoCount ?? 0;
+              const req = l.requiredShotCount;
               const done = req > 0 && filled >= req;
               return (
                 <div
@@ -258,7 +258,7 @@ export function PopulateWorkspace({
                 >
                   <Mono style={{ fontSize: 11, color: ui.faint, minWidth: 18 }}>{String(i + 1).padStart(2, '0')}</Mono>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</div>
+                    <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.zoneName}</div>
                     <div style={{ fontSize: 11, color: ui.faint, marginTop: 1 }}>
                       <Mono>{filled}/{req}</Mono> photos
                     </div>
@@ -289,9 +289,9 @@ export function PopulateWorkspace({
                   <Mono style={{ fontSize: 12, color: ui.sub }}>
                     LOOP {String((loops.findIndex((l) => l.id === activeLoop.id) + 1)).padStart(2, '0')}
                   </Mono>
-                  <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: -0.2, marginTop: 4 }}>{activeLoop.name}</div>
+                  <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: -0.2, marginTop: 4 }}>{activeLoop.zoneName}</div>
                   <div style={{ fontSize: 12.5, color: ui.sub, marginTop: 3 }}>
-                    <Mono>{activeLoop.photos?.length ?? 0}</Mono> of <Mono>{activeLoop.requiredPhotoCount ?? 0}</Mono> required shots uploaded
+                    <Mono>{activeLoop.photos?.length ?? 0}</Mono> of <Mono>{activeLoop.requiredShotCount}</Mono> required shots uploaded
                   </div>
                 </div>
                 <Btn
