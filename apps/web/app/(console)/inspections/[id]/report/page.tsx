@@ -9,10 +9,12 @@ function initials(name: string): string {
     .join('');
 }
 
-function mapConclusion(decision?: string | null): 'pass' | 'fail' | 'hold' {
+function mapConclusion(decision?: string | null): 'pass' | 'fail' | 'hold' | 'pending' {
   if (decision === 'PASS') return 'pass';
+  if (decision === 'FAIL') return 'fail';
   if (decision === 'HOLD') return 'hold';
-  return 'fail';
+  // No decision recorded yet — never fabricate a verdict (INS-056).
+  return 'pending';
 }
 
 /** Prisma enum → readable label: PRE_SHIPMENT → "Pre shipment". */

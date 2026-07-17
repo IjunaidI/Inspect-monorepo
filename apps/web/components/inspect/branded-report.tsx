@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { Check, Lock, X } from 'lucide-react';
+import { Check, Lock, Minus, X } from 'lucide-react';
 import { Mono, SeverityTag, UnverifiedBadge } from './shell';
 import { mono, severity, ui, type SeverityKey } from './tokens';
 import type { ApiMeasurement } from '@/lib/api';
@@ -35,7 +35,7 @@ export interface BrandedReportData {
     date: string;
     gps?: string | null;
   };
-  conclusion: 'pass' | 'fail' | 'hold';
+  conclusion: 'pass' | 'fail' | 'hold' | 'pending';
   qaRemarks?: string | null;
   samplingPlan?: {
     sampleSize: number;
@@ -90,6 +90,7 @@ export function BrandedReport({
   const C = b.color;
   const fail = data.conclusion === 'fail';
   const hold = data.conclusion === 'hold';
+  const pending = data.conclusion === 'pending';
 
   const metaPairs: [string, string, boolean][] = [
     ['Purchase order', m.po, true],
@@ -109,12 +110,12 @@ export function BrandedReport({
     </div>
   );
 
-  const conclusionColor = fail ? severity.critical.fg : hold ? '#B5791A' : '#1F6B43';
-  const conclusionBg = fail ? severity.critical.bg : hold ? '#FAF1E2' : '#EAF6F0';
-  const conclusionBorder = fail ? '#F1C9C5' : hold ? '#EBD9B4' : '#BEE3CD';
-  const conclusionLabel = fail ? 'REJECTED' : hold ? 'HOLD' : 'ACCEPTED';
-  const conclusionIcon = fail || hold ? <X size={17} color="#fff" /> : <Check size={17} color="#fff" />;
-  const conclusionDot = fail ? severity.critical.dot : hold ? '#B5791A' : '#1F8A4C';
+  const conclusionColor = pending ? ui.sub : fail ? severity.critical.fg : hold ? '#B5791A' : '#1F6B43';
+  const conclusionBg = pending ? ui.fill : fail ? severity.critical.bg : hold ? '#FAF1E2' : '#EAF6F0';
+  const conclusionBorder = pending ? ui.line : fail ? '#F1C9C5' : hold ? '#EBD9B4' : '#BEE3CD';
+  const conclusionLabel = pending ? 'PENDING QA DECISION' : fail ? 'REJECTED' : hold ? 'HOLD' : 'ACCEPTED';
+  const conclusionIcon = pending ? <Minus size={17} color="#fff" /> : fail || hold ? <X size={17} color="#fff" /> : <Check size={17} color="#fff" />;
+  const conclusionDot = pending ? ui.faint : fail ? severity.critical.dot : hold ? '#B5791A' : '#1F8A4C';
 
   return (
     <div style={{ width, background: '#fff', fontFamily: ui.font, color: ui.ink, boxSizing: 'border-box', fontFeatureSettings: '"cv11", "ss01"' }}>
