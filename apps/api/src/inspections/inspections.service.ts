@@ -30,6 +30,10 @@ export interface QaDecisionInput {
   decision: QaDecisionValue;
   remarks?: string;
 }
+export interface UpdateInspectionInput {
+  assignedInspectorId?: string | null;
+  lotSize?: number;
+}
 
 const SUBMITTABLE = new Set(['DRAFT', 'ASSIGNED', 'IN_PROGRESS']);
 const DECIDABLE = new Set(['SUBMITTED', 'UNDER_REVIEW', 'HOLD']);
@@ -193,6 +197,69 @@ export class InspectionsService {
         },
       },
       include: { loops: { orderBy: { position: 'asc' } } },
+    });
+  }
+
+  /**
+   * Pre-submission edits only (INS-066): reassign the inspector and/or adjust
+   * lot size. SUBMITTED+ inspections are frozen by the immutability invariant.
+   * aqlPlan editing is deliberately excluded (INS-063).
+   */
+  async update(orgId: string, actor: AuthUser, id: string, input: UpdateInspectionInput) {
+    const inspection = await this.prisma.inspection.findFirst({ where: { id, orgId } });
+    if (!inspection) throw new NotFoundException('Inspection not found');
+    if (!SUBMITTABLE.has(inspection.status)) {
+      throw new BadRequestException(
+        `Cannot modify an inspection in status ${inspection.status} — submitted inspections are frozen`,
+      );
+    }
+
+    const changes: Record<string, unknown> = {};
+    if (input.assignedInspectorId !== undefined) {
+      if (input.assignedInspectorId) {
+        const inspector = await this.prisma.user.findFirst({
+          where: { id: input.assignedInspectorId, orgId },
+        });
+        if (!inspector) throw new BadRequestException('assigned inspector not found in organization');
+      }
+      changes.assignedInspectorId = input.assignedInspectorId;
+      if (inspection.status === 'DRAFT' && input.assignedInspectorId) changes.status = 'ASSIGNED';
+      if (inspection.status === 'ASSIGNED' && input.assignedInspectorId === null) changes.status = 'DRAFT';
+    }
+    if (input.lotSize !== undefined) {
+      if (!Number.isInteger(input.lotSize) || input.lotSize < 2) {
+        throw new BadRequestException('lotSize must be an integer >= 2');
+      }
+      try {
+        changes.computedSampling = computeSampling(
+          input.lotSize,
+          (inspection.aqlPlan ?? {}) as unknown as AqlPlanInput,
+        ) as unknown as Prisma.InputJsonValue;
+      } catch (e) {
+        throw new BadRequestException(e instanceof Error ? e.message : 'AQL plan not available for this lot size');
+      }
+      changes.lotSize = input.lotSize;
+    }
+    if (Object.keys(changes).length === 0) return inspection;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.inspection.update({
+        where: { id },
+        data: changes as Prisma.InspectionUncheckedUpdateInput,
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: 'USER',
+          actorUserId: actor.userId,
+          action: 'inspection.updated',
+          entityType: 'Inspection',
+          entityId: id,
+          metadata: { fields: Object.keys(changes) },
+        },
+        tx,
+      );
+      return updated;
     });
   }
 

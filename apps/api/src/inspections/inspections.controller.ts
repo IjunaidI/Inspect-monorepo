@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
   CreateInspectionInput,
   InspectionsService,
   QaDecisionInput,
   TamperProofInput,
+  UpdateInspectionInput,
 } from './inspections.service';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -80,6 +81,15 @@ export class InspectionsController {
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() body: CreateInspectionInput) {
     return this.inspections.create(requireOrgId(user), user.userId, body);
+  }
+
+  @Patch(':id')
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: UpdateInspectionInput,
+  ) {
+    return this.inspections.update(requireOrgId(user), user, id, body ?? {});
   }
 
   @Post(':id/start')

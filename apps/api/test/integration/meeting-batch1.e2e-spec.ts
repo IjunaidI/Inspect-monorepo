@@ -196,4 +196,39 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(back.some((b: { id: string }) => b.id === buyer.id)).toBe(true);
     });
   });
+
+  describe('INS-066 — PATCH /inspections/:id', () => {
+    it('reassigns pre-submission; SUBMITTED is frozen; foreign inspector 400', async () => {
+      const insp = await createInspection(false);
+
+      const bogus = await client.patch(`/inspections/${insp.id}`, {
+        token: orgA.ownerToken,
+        body: { assignedInspectorId: 'not-a-real-user' },
+      });
+      expect(bogus.status).toBe(400);
+
+      const updated = expect2xx(
+        await client.patch(`/inspections/${insp.id}`, {
+          token: orgA.ownerToken,
+          body: { assignedInspectorId: inspectorId },
+        }),
+        'PATCH reassign',
+      );
+      expect(updated.assignedInspectorId).toBe(inspectorId);
+      expect(updated.status).toBe('ASSIGNED');
+
+      // Verified band boundary (aql.engine.spec.ts): 1200 -> J, 1201 -> K.
+      const resized = expect2xx(
+        await client.patch(`/inspections/${insp.id}`, { token: orgA.ownerToken, body: { lotSize: 1201 } }),
+        'PATCH lotSize',
+      );
+      expect(resized.lotSize).toBe(1201);
+      expect(resized.computedSampling.sampleSizeCodeLetter).toBe('K');
+
+      await registerPhoto(insp.id, insp.loopId, `patch-${tag}`);
+      expect2xx(await client.post(`/inspections/${insp.id}/submit`, { token: orgA.ownerToken, body: {} }), 'submit');
+      const frozen = await client.patch(`/inspections/${insp.id}`, { token: orgA.ownerToken, body: { lotSize: 800 } });
+      expect(frozen.status).toBe(400);
+    });
+  });
 });
