@@ -147,4 +147,24 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(afterSubmit.status).toBe(400);
     });
   });
+
+  describe('INS-056 — submit completeness gate', () => {
+    it('refuses submit while a loop lacks photos, then accepts once uploaded', async () => {
+      const insp = await createInspection(false);
+
+      const refused = await client.post(`/inspections/${insp.id}/submit`, {
+        token: orgA.ownerToken,
+        body: {},
+      });
+      expect(refused.status).toBe(400);
+      expect(String(refused.body.message)).toContain('photo evidence incomplete');
+
+      await registerPhoto(insp.id, insp.loopId, `gate-${tag}`);
+      const ok = expect2xx(
+        await client.post(`/inspections/${insp.id}/submit`, { token: orgA.ownerToken, body: {} }),
+        'submit after required photo',
+      );
+      expect(ok.aqlResult.systemRecommendation).toBe('PASS');
+    });
+  });
 });

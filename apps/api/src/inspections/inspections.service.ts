@@ -221,6 +221,22 @@ export class InspectionsService {
       throw new BadRequestException('lotSize must be set before submitting (required for AQL sampling)');
     }
 
+    // INS-056: a verdict must never be computed from missing evidence. The AQL
+    // engine folds absent counts to zero, so an empty inspection would otherwise
+    // mint a PASS — refuse to submit while any loop lacks its required photos.
+    const loops = await this.prisma.inspectionLoop.findMany({
+      where: { inspectionId: id },
+      select: { zoneName: true, requiredShotCount: true, _count: { select: { photos: true } } },
+      orderBy: { position: 'asc' },
+    });
+    const short = loops.filter((l) => l._count.photos < l.requiredShotCount);
+    if (short.length > 0) {
+      const detail = short.map((l) => `${l.zoneName} (${l._count.photos}/${l.requiredShotCount})`).join(', ');
+      throw new BadRequestException(
+        `Cannot submit: photo evidence incomplete — ${detail}. Upload the required shots first.`,
+      );
+    }
+
     const sampling = computeSampling(
       inspection.lotSize,
       (inspection.aqlPlan ?? {}) as unknown as AqlPlanInput,
