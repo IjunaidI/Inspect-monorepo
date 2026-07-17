@@ -167,4 +167,33 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(ok.aqlResult.systemRecommendation).toBe('PASS');
     });
   });
+
+  describe('INS-061 — archive -> restore round-trip', () => {
+    it('restores an archived buyer; cross-org restore 404s', async () => {
+      const buyer = expect2xx(
+        await client.post('/buyers', { token: orgA.ownerToken, body: { name: `Restore Buyer ${tag}` } }),
+        'POST /buyers (restore fixture)',
+      );
+      expect2xx(await client.delete(`/buyers/${buyer.id}`, { token: orgA.ownerToken }), 'archive buyer');
+
+      const active = expect2xx(await client.get('/buyers', { token: orgA.ownerToken }), 'GET /buyers');
+      expect(active.some((b: { id: string }) => b.id === buyer.id)).toBe(false);
+      const all = expect2xx(
+        await client.get('/buyers?includeArchived=1', { token: orgA.ownerToken }),
+        'GET /buyers?includeArchived=1',
+      );
+      expect(all.some((b: { id: string }) => b.id === buyer.id)).toBe(true);
+
+      const foreign = await client.post(`/buyers/${buyer.id}/restore`, { token: orgB.ownerToken });
+      expect(foreign.status).toBe(404);
+
+      const restored = expect2xx(
+        await client.post(`/buyers/${buyer.id}/restore`, { token: orgA.ownerToken }),
+        'restore buyer',
+      );
+      expect(restored.archivedAt).toBeNull();
+      const back = expect2xx(await client.get('/buyers', { token: orgA.ownerToken }), 'GET /buyers after restore');
+      expect(back.some((b: { id: string }) => b.id === buyer.id)).toBe(true);
+    });
+  });
 });

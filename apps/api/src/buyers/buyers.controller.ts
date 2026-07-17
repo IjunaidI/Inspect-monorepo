@@ -40,6 +40,11 @@ export class BuyersController {
 
   @Delete(':id')
   archive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.buyers.archive(requireOrgId(user), id);
+    return this.buyers.archive(requireOrgId(user), user, id);
+  }
+
+  @Post(':id/restore')
+  restore(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.buyers.restore(requireOrgId(user), user, id);
   }
 }

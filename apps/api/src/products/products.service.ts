@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from '../auth/auth-user';
+import { AuditService } from '../audit/audit.service';
 
 export interface CreateProductInput {
   styleNumber: string;
@@ -12,7 +14,10 @@ export interface UpdateProductInput {
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   list(orgId: string, opts: { includeArchived?: boolean; q?: string; take?: number; skip?: number } = {}) {
     return this.prisma.product.findMany({
@@ -71,11 +76,31 @@ export class ProductsService {
     });
   }
 
-  async archive(orgId: string, id: string) {
-    await this.get(orgId, id);
-    return this.prisma.product.update({
-      where: { id },
-      data: { archivedAt: new Date() },
+  async archive(orgId: string, actor: AuthUser, id: string) {
+    const product = await this.get(orgId, id);
+    // Idempotent: re-archiving must not overwrite the original timestamp (INS-061).
+    if (product.archivedAt) return product;
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({ where: { id }, data: { archivedAt: new Date() } });
+      await this.audit.append(
+        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'product.archived', entityType: 'Product', entityId: id },
+        tx,
+      );
+      return updated;
+    });
+  }
+
+  /** Archive is a reversible state, not a delete — restore clears it (INS-061). */
+  async restore(orgId: string, actor: AuthUser, id: string) {
+    const product = await this.get(orgId, id);
+    if (!product.archivedAt) return product;
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({ where: { id }, data: { archivedAt: null } });
+      await this.audit.append(
+        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'product.restored', entityType: 'Product', entityId: id },
+        tx,
+      );
+      return updated;
     });
   }
 }

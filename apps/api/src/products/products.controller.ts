@@ -44,6 +44,11 @@ export class ProductsController {
 
   @Delete(':id')
   archive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.products.archive(requireOrgId(user), id);
+    return this.products.archive(requireOrgId(user), user, id);
+  }
+
+  @Post(':id/restore')
+  restore(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.products.restore(requireOrgId(user), user, id);
   }
 }

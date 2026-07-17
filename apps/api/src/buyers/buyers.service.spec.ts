@@ -18,16 +18,18 @@ function makeService(presetInOrg: boolean) {
       findFirst: jest.fn(async () => (presetInOrg ? { id: 'p1' } : null)),
     },
   };
+  const audit = { append: jest.fn(async () => ({})) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const service = new BuyersService(prisma as any);
+  const service = new BuyersService(prisma as any, audit as any);
   return { service, buyerCreate, buyerUpdate, prisma };
 }
 
 describe('BuyersService.list aggregates (INS-005)', () => {
   function makeListService() {
     const findMany = jest.fn(async (_args: { where: Record<string, unknown> }) => []);
+    const audit = { append: jest.fn(async () => ({})) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const service = new BuyersService({ buyer: { findMany } } as any);
+    const service = new BuyersService({ buyer: { findMany } } as any, audit as any);
     return { service, findMany };
   }
 
@@ -89,5 +91,41 @@ describe('BuyersService preset tenant scoping', () => {
     await service.update('orgA', 'b1', { defaultLoopPresetId: null });
     expect(prisma.loopPreset.findFirst).not.toHaveBeenCalled();
     expect(buyerUpdate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('BuyersService archive/restore (INS-061)', () => {
+  const ACTOR = { userId: 'u1', orgId: 'org1', role: 'ORG_OWNER' as const };
+
+  function makeArchiveService(row: { id: string; orgId: string; archivedAt: Date | null }) {
+    const update = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...row, ...data }));
+    const tx = { buyer: { update } };
+    const prisma = {
+      buyer: { findFirst: jest.fn(async () => row), update },
+      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    };
+    const audit = { append: jest.fn(async () => ({})) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new BuyersService(prisma as any, audit as any);
+    return { service, prisma, audit, update };
+  }
+
+  it('restore clears archivedAt and appends an audit row', async () => {
+    const { service, audit, update } = makeArchiveService({ id: 'b1', orgId: 'org1', archivedAt: new Date() });
+    const out = await service.restore('org1', ACTOR, 'b1');
+    expect(out.archivedAt).toBeNull();
+    expect(update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { archivedAt: null } });
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'buyer.restored', entityId: 'b1' }),
+      expect.anything(),
+    );
+  });
+
+  it('re-archiving an archived buyer is a no-op that preserves the original timestamp', async () => {
+    const when = new Date('2026-07-01T00:00:00Z');
+    const { service, update } = makeArchiveService({ id: 'b1', orgId: 'org1', archivedAt: when });
+    const out = await service.archive('org1', ACTOR, 'b1');
+    expect(out.archivedAt).toEqual(when);
+    expect(update).not.toHaveBeenCalled();
   });
 });
