@@ -219,6 +219,95 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - verify: Submitting a decision records it on the inspection (status + decision + note) and reflects back on reload.
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§8/§11)
 
+> **Product-feedback batch (2026-07-17 meeting).** INS-055..INS-077 were filed 2026-07-18 from the product
+> review meeting, after a 10-agent read-only code sweep verified every ask against the implementation.
+> Several asks turned out **already shipped** — buyer brand-color picker (native `<input type="color">`),
+> required-shots defaulting to 1, edit-preset already behaving as duplicate-into-new-version, PLATFORM_ADMIN
+> already unassignable/invisible via the org API, inspector create-inspection already blocked server-side —
+> so those items cover only the remaining labels/polish/hardening. Discussed but NOT filed: third-party LLM
+> cost optimization (OpenRouter) — the product has no LLM surface to attach it to yet.
+
+### INS-055 · EPIC: unify Buyer/Supplier into a single Company model (spec first, phased)   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): directed product decision — every inspection gets a company (internal or third-party) attached.
+- area: Data model & schema (epic: api + web + tests)
+- evidence: the split is structural at every layer — `schema.prisma:247-315` separate Buyer/Supplier tables with asymmetric fields (branding/defaultLoopPresetId/guests/reports vs address/gps), `:341-342` PurchaseOrder requires both parties, `:480-481` Inspection denormalizes required buyerId + optional supplierId, `:718-744` Report is buyer-owned with a buyer-derived brandingSnapshot; `guest.service.ts:37` buyer-scoped report visibility (a security boundary); `reports.service.ts:61-62` the Ed25519-signed canonical embeds distinct buyer/supplier keys; ~12 API modules, ~28 web files, 68 integration-test occurrences encode the split.
+- problem: The meeting decided to retire the buyer/supplier split for a unified Company model. A one-shot rename would put tenant-isolation, immutability, and signed-snapshot invariants at risk simultaneously across 25 models and both apps.
+- fix: Write a dedicated spec + phased plan (docs/in-progress/, `superpowers:writing-plans`) BEFORE any code. Recommended strategy (additive): new org-scoped `Company` table (kind INTERNAL|THIRD_PARTY, superset of branding + address/gps fields), 1:1 `companyId` backfill from existing Buyer/Supplier rows (no FK renames yet), repoint consumers module-by-module in shippable phases (directory/search/dashboard → PO → inspections → guests → reports with a VERSIONED canonical payload), explicit dedupe step for same-name `@@unique([orgId,name])` collisions, drop legacy tables only in the final phase. The spec must resolve: PO/Inspection are inherently two-party (client-role + factory-role company FKs, not one "company attached"), where branding + guests live on Company, and canonical-payload versioning.
+- verify: Spec + plan exist answering the role-model/branding/guest/canonical questions before any migration is authored; after the additive phase `prisma migrate diff` shows only ADDs, every Buyer/Supplier row has a backfilled companyId, and the integration suite passes unchanged; after the final phase a pre-migration report still verifies `valid:true` (public verify recomputes from the frozen canonicalSnapshot) and a pre-migration buyer-guest magic link lists exactly the same reports as before.
+- refs: meeting 2026-07-17 · sequence INS-008 (link shared-types) first so the Company DTO exists once, not twice · invariants: [../reference/inspect-schema.md](../reference/inspect-schema.md)
+
+### INS-056 · submit() mints a PASS recommendation from absent evidence — no completeness gate, no third state   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): "system marks pass when fields are empty or images are missing".
+- area: Inspection lifecycle
+- evidence: `inspections.service.ts:198` — submit()'s only data gate is `lotSize != null`; defect counts come solely from a DefectInstance groupBy (`:207-218`) where zero rows → {0,0,0}; `aql.engine.ts:103,107` folds absent counts to 0 and initializes the recommendation to PASS; `AqlClassOutcome` is PASS|FAIL only (`schema.prisma:112-115,695`) — no "not evaluated" state exists; the review page renders a green banner straight from the stored value (`review/page.tsx:47-55`) and offers one-click submit with no completeness warning; the report preview maps a null qaDecision to 'fail' → a definitive REJECTED banner for undecided inspections (`report/page.tsx:12-16,83`).
+- problem: An untouched inspection with only a lotSize submits successfully and is stored + displayed as a green PASS; missing evidence is indistinguishable from a clean sample — poisonous for a tamper-proof product whose signed artifact embeds the verdict. Undecided inspections preview as REJECTED.
+- fix: (1) submit(): load loops with photo counts and reject (400, actionable message listing short loops) when any loop has fewer photos than its `requiredShotCount` — or, per product call, allow submit but persist a distinct non-verdict state (the hard block is simpler: no enum migration, and a signed report should never embed a verdict computed from missing evidence). (2) Review page: render the banner only for a real verdict; amber "evidence incomplete" card otherwise, with photo/defect counts beside Submit. (3) Report preview: null qaDecision → 'pending', never 'fail'. Keep `evaluateInspection` pure — completeness belongs in submit(), not the engine.
+- verify: Integration: submit with 0 photos on loops requiring shots → 400; after uploading the required shots the same call succeeds with a real PASS/FAIL. Review page never shows green PASS for incomplete evidence; the report preview of an undecided inspection shows a pending state.
+- refs: meeting 2026-07-17 (core ask) · depends on INS-064 (the web can't even read requiredShotCount today) · relates INS-021
+
+### INS-057 · INSPECTOR is locked out of all inspection routes; no assigned-to-me scope, no start transition   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17). Create-block for inspectors is ALREADY enforced — but by over-blocking everything.
+- area: Auth & RBAC / Inspection lifecycle
+- evidence: `inspections.controller.ts:20` — class-level `@Roles('QA_MANAGER')` covers EVERY route: create is correctly blocked for INSPECTOR (the meeting ask), but so are GET / (list), GET /:id (open), and POST /:id/submit; `roles.guard.ts:20` getAllAndOverride supports per-handler relaxation — unused here; `inspections.service.ts:32` SUBMITTABLE includes IN_PROGRESS but no code path ever sets it (`schema.prisma:79` is an orphan enum value); list() has no assignedInspectorId scoping.
+- problem: A named MVP role cannot see or act on its own assigned work, and "start inspection" (meeting: with a cannot-be-stopped confirmation) has no backing transition.
+- fix: Per-handler @Roles: GET /, GET /:id, POST /:id/submit at INSPECTOR — with the service scoping INSPECTOR reads/writes to `assignedInspectorId === userId` (QA_MANAGER+ stays org-wide); keep POST / and POST /:id/decision at QA_MANAGER. Add POST /:id/start (ASSIGNED → IN_PROGRESS; assigned inspector or QA_MANAGER+; other statuses 400) and a companion reset (IN_PROGRESS → ASSIGNED) to honor the reset-and-restart model. Audit-log both transitions (INS-006 pattern).
+- verify: Integration: INSPECTOR lists only own-assigned inspections, can GET + start one (status → IN_PROGRESS), gets 403 on create and on another inspector's inspection; start on SUBMITTED → 400; QA_MANAGER unaffected. Extend the negative RBAC matrix in `test/integration/`.
+- refs: meeting 2026-07-17 · relates INS-021 (untested lifecycle) · UI halves: INS-065 (nav gating), INS-066 (start confirmation)
+
+### INS-058 · No server-side guards: self-role-change, self-deactivation, last-active-owner lockout   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): owners/users must not change their own role or deactivate themselves.
+- area: Auth & RBAC (users)
+- evidence: `users.service.ts:98` — updateRole blocks PLATFORM_ADMIN and above-actor roles but never compares actor to target (self-demotion possible via direct API; self-ESCALATION already impossible); `:114` — deactivate(orgId, userId) takes no actor: no self-guard, no last-active-owner guard, and no reactivate endpoint exists anywhere; the web enforces both rules client-side only (`users-client.tsx:89,109`); deactivation bites only at login/refresh — live access tokens survive their TTL (stateless JwtAuthGuard).
+- problem: An ORG_OWNER can demote or deactivate their own account with a direct API call, and nothing stops removing the org's only active owner — permanently locking the org out of user management (recovery only via the re-invite upsert or the DB).
+- fix: Pass the actor into deactivate; 403 when `actor.userId === target` in both updateRole and deactivate; refuse demoting/deactivating the last ACTIVE ORG_OWNER; add PATCH /users/:id/reactivate (owner-only) so deactivation is reversible; audit rows on all three.
+- verify: Integration: owner PATCHes own role → 403; owner DELETEs own id → 403; sole-owner demote/deactivate → 4xx with a clear message; a second owner is still manageable; reactivate restores login.
+- refs: meeting 2026-07-17 · root cause: guards were built into the React row during INS-030 and never mirrored server-side · per-request status check / token revocation is a bigger scope — optional follow-up only
+
+### INS-059 · Direct add-member (name/email/password) — email invite no longer the only onboarding path   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): owners add members via a form, no email round-trip.
+- area: Tenancy & onboarding
+- evidence: POST /users/invite only creates an Invitation row; public POST /invitations/accept is the sole path that sets a passwordHash (`invitations.service.ts:74-93`); the console's only affordance is the invite form (`users-client.tsx:221-240`) and `users/page.tsx:38` states "Onboarding is invite-only."
+- problem: The meeting decided owners can add members directly; no create-user-with-password endpoint exists.
+- fix: POST /users (ORG_OWNER floor) accepting {name, email, password, role}: reuse `hashPassword`, the PLATFORM_ADMIN block + `hasAtLeast` role floor from invite(), and the foreign-org-email guard (INS-035 class; User.email is globally unique); create ACTIVE inside a transaction with an AuditLog row; carry over the min-8-char password rule from accept(). Web: direct-add form on /users (keep invite as a secondary option per product call) + update the invite-only copy.
+- verify: Integration: create → login round-trip works immediately; an email owned by another org → 403; role=PLATFORM_ADMIN or above-own-role → 403.
+- refs: meeting 2026-07-17 · owner-set passwords are shared secrets — a forced first-login password change is a noted follow-up, out of scope here
+
+### INS-060 · Browser→storage presigned PUT fails ("failed to fetch"): dead/unprovisioned storage endpoint, no storage CORS   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17 bug report: reference-image upload always fails). Root-cause hypotheses ranked below.
+- area: Storage / Web console (shared byte path: preset reference images + populate photos)
+- evidence: the browser PUTs directly to the host embedded in the presigned URL (`builder.tsx:214`; `sigv4.ts:101` embeds S3_ENDPOINT verbatim, default `http://localhost:9000` per `storage.service.ts:48`); the presign guard rejects only EMPTY creds — the template's CHANGE_ME placeholders pass (`storage.service.ts:42-46`); `docker-compose.dev.yml:40` has no bucket-init (inspect-photos never created) and no MinIO CORS env; the INS-053 CORS allowlist covers only the API origin (`main.ts:10`); populate shares the identical path, hardcodes "MinIO not running" (`populate-workspace.tsx:95`), and STILL registers photo metadata for bytes that never uploaded (`:98-105`). A fetch network/CORS failure surfaces as exactly "Failed to fetch" (`builder.tsx:234-235`); an HTTP status would render "Image upload failed (NNN)".
+- problem: The byte path has never been exercised browser→storage. Ranked hypotheses: **H1** nothing listening at the signed host (MinIO/Docker unavailable locally; presign mints URLs to a dead host anyway); **H2** storage-host CORS preflight rejection (nothing configures it; the API allowlist is irrelevant there); **H3** non-browser-reachable or http:// endpoint in deployed setups (mixed content, internal hostname); **H4** follow-on once a host answers: missing bucket → 404. Populate masks the failure with phantom photo rows.
+- fix: Make the byte path work end-to-end and fail loudly when it can't: (1) dev stack — bucket-init sidecar (mc mb + `MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:3001`) in docker-compose; (2) API — presign rejects placeholder config (CHANGE_ME) and a boot-time storage health check warns, so presign never signs for a dead host; (3) deploy config — require a browser-reachable https S3_ENDPOINT and document the bucket CORS policy (PUT+GET, console origin, Content-Type header); (4) web — distinguish network vs HTTP failure in the error copy, and stop populate from registering photos whose bytes never landed.
+- verify: With the dev stack up: builder upload completes (OPTIONS+PUT 200 in the Network tab), the key chip appears, save persists referenceImageUrls, the preset detail renders the thumbnail via viewUrl; the populate photo upload passes the same round-trip; presign returns 400 (not a signed URL) with CHANGE_ME/unset creds; the CI byte spec stays green with REQUIRE_STORAGE=1.
+- refs: meeting 2026-07-17 · diagnostics: devtools Network first (which hop fails), then `curl -X PUT` the uploadUrl — curl-fails ⇒ unreachable (H1/H3), curl-succeeds ⇒ CORS (H2) · relates INS-052 (built the flow), INS-023, INS-002
+
+### INS-061 · Archive is irreversible: no unarchive/restore path (buyers, suppliers, products)   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): archived buyers can't be seen or recovered.
+- area: Workspace CRUD
+- evidence: DELETE /buyers/:id sets archivedAt (`buyers.service.ts:103`) with no audit row; UpdateBuyerInput/UpdateSupplierInput exclude archivedAt so PATCH can't clear it either (`buyers.service.ts:11`, `suppliers.service.ts:9-13`); grep restore|unarchive = zero hits across API + web; the web archive action fires with no confirmation (`dashboard/actions.ts:47`); Product has the identical gap (`schema.prisma:323`).
+- problem: One misclick permanently removes a buyer from the working view; recovery requires direct DB access — violating the product's own "no hard-deletes, status/archive only" invariant, which presumes archive is a reversible state.
+- fix: POST /buyers/:id/restore + /suppliers/:id/restore (+ products for parity) — QA_MANAGER+, org-scoped via the existing get() guard, archivedAt → null, audit rows for both archive and restore; make archive() a no-op/409 when already archived (preserve the original timestamp). Web: Restore in RowMenu for archived rows (replacing Archive), a confirm step on Archive, archived state + Restore on detail pages. Keep restore an explicit route — don't widen PATCH.
+- verify: Integration: archive → absent from the default list, present with ?includeArchived=1 → restore → back in the default list with archivedAt null; cross-org restore 404s. Console round-trip via the row menu.
+- refs: meeting 2026-07-17 · pairs with INS-067 (archived-only view) · audit via the INS-006 pattern
+
+### INS-062 · Reports are invisible to the org: no GET /reports list, no sidebar entry, no console screen   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): dedicated left-nav Reports section listing all completed reports.
+- area: Reports & verification
+- evidence: `reports.controller.ts:13` exposes only generate / get-by-id / public verify — no org-scoped list; buyer guests have MORE visibility (GET /guest/reports, `guest.controller.ts:15`) than the org's own QA managers; the NAV has no Reports item (`shell.tsx:200-207`); `/report` is a bare redirect to /inspections.
+- problem: Completed signed reports — the product's deliverable — can only be found by knowing an inspection id and visiting /inspections/[id]/report.
+- fix: API: GET /reports (@Roles('QA_MANAGER'), requireOrgId-scoped, newest-first, q/take/skip per the INS-050 conventions) returning id/inspectionId/buyer name/poNumber/status/generatedAt/contentHash/pdfStorageKey/verificationToken — never canonicalSnapshot in the list payload. Web: NAV entry + `app/(console)/reports/page.tsx` with rows linking to the report preview and the public /r/[token] verify page; Download column gated on pdfStorageKey (enabled once INS-003 lands — reference, don't duplicate).
+- verify: A QA Manager sees Reports in the sidebar; GET /reports is tenant-isolated (integration test beside the dashboard-summary one); rows open the preview; Download renders disabled while pdfStorageKey is null.
+- refs: meeting 2026-07-17 · INS-003 (PDF download itself) · INS-020 (a delivery-status column can join ReportDelivery later)
+
+### INS-063 · AQL is not configurable end-to-end: expose per-class AQL within the verified band + validate it   [HIGH]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): "AQL level not configurable — fix it". The knob is per-class AQL VALUES, not the inspection level.
+- area: Loop presets / Inspection lifecycle (UI + validation — NOT an engine extension)
+- evidence: the preset stores only an AqlLevel enum locked to 'II' (guard `loop-presets.service.ts:69-73`; single-option select `builder.tsx:453-459`) and no per-class fields (`schema.prisma:368-389`); the API already accepts `aqlPlan` on POST /inspections and per-class params on GET /inspections/aql-preview (`inspections.service.ts:18,144`, `inspections.controller.ts:45-53`) but the web never sends them (`create-form.tsx:26`, `inspections/actions.ts:33`) — every inspection uses the defaults (critical 0 / major 2.5 / minor 4.0, `aql-tables.ts:75`); `inspections.service.ts:145` calls computeSampling UNWRAPPED, so an out-of-band aqlPlan today surfaces as a 500, not a 400; the verified grid has holes (G lacks 1.0/1.5; M/N lack 4.0/6.5; letters A–F have no non-zero-AQL cells) and planFor throws outside it (`aql.engine.ts:56-65`).
+- problem: The QA-configurable AQL knob (per-class values — `aql.types.ts:26-35` was designed for exactly this) has zero UI, and the API's error path for invalid plans is a 500.
+- fix: (a) inspections/new: per-class AQL selects restricted to {0, 1.0, 1.5, 2.5, 4.0, 6.5} (critical defaults 0), fed into the live previewAql (params already supported) so the plan panel reflects the choice and hole-cells surface a clean error; include aqlPlan in the create POST. (b) API hardening: validate aqlPlan values against the allowed set in create and wrap computeSampling in BadRequestException (mirroring aqlPreview). (c) Optional second step: per-class default columns on LoopPreset surfaced in the builder, used as prefill on inspections/new (aqlPlan snapshots onto the inspection, so preset edits can't mutate history). (d) Keep aqlLevel locked to II — only LEVEL_II_LOT_RANGES exists; other levels need authoritative new Z1.4 tables.
+- verify: major=1.5 at lot 1000 (letter J) stores aqlPlan and computedSampling shows major ac=3/re=4; POST /inspections with major=3.0 → 400 naming the allowed values (not 500); lot 100 (letter F) with any non-zero AQL → clean 400 from both preview and create; omitted aqlPlan → spec defaults; submit() re-derives the same plan from the snapshot.
+- refs: meeting 2026-07-17 · INS-052's level-II guard stays (it was correct) · extending ACCEPTANCE_NUMBERS (small-lot arrow rules, levels I/III/S) is a separate verification-heavy engine item — do not bundle
+
 ---
 
 ## Medium
@@ -402,6 +491,93 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - area: Tenancy & onboarding
 - refs: [../done/specs/2026-07-12-inspect-dynamic-hardening-design.md](../done/specs/2026-07-12-inspect-dynamic-hardening-design.md) (C.6)
 
+> **Product-feedback batch (2026-07-17 meeting), MEDIUM tier** — see the batch note under ## High.
+
+### INS-064 · Loop payload contract drift: web reads requiredPhotoCount/orderIndex/name, wire has requiredShotCount/position/zoneName   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (found by the meeting-triage sweep — the reason the UI can't warn about missing photos).
+- area: Web console / API contract (inspection loops)
+- evidence: `lib/api.ts:369-377` declares ApiInspectionLoop as {name, orderIndex, requiredPhotoCount} but GET /inspections/:id spreads raw Prisma loops {zoneName, position, requiredShotCount} (`inspections.controller.ts:60-71`, `schema.prisma:556-576`); the populate meter therefore computes totalRequired=0 (`populate-workspace.tsx:77-79`), renders a permanently-empty progress bar and "N of 0 required shots" (`:294`), sorts on an undefined orderIndex (`:67`); the report preview labels photo groups with undefined loop names (`report/page.tsx:50`).
+- problem: The populate UI is structurally blind to missing photos — the exact completeness signal INS-056 depends on; the progress meter has been dead since it was wired.
+- fix: Align the contract: map the fields in the controller's GET /:id response, or (better) fix the web type + readers to the wire names — ideally by finally consuming `@inspect/shared-types` (INS-008) for this DTO. Then drive the meter, per-loop counts, and any submit-gate warning from the real requiredShotCount.
+- verify: A 3-loop × 2-shot inspection shows "Photos uploaded 0 / 6" and per-loop "0/2", counts increment on upload; the report preview shows real loop names above photo groups.
+- refs: concrete instance of the INS-008 drift class · prerequisite for INS-056's UI half
+
+### INS-065 · Sidebar nav + create-inspection screen not role-aware; QA_MANAGER's inspector dropdown 403s empty   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): role-filtered sidebar; inspectors must not see create.
+- area: Web console / RBAC UX
+- evidence: NAV is a static const rendered identically for every role (`shell.tsx:200-207`; the role prop is used only for the RoleBadge); the "New inspection" button renders unconditionally and list 403s are swallowed by `.catch(() => [])` (`inspections/page.tsx:64,98`); `/inspections/new` has no server-side role gate; side finding: the create screen fetches /users for the inspector dropdown but `users.controller.ts:11` requires ORG_OWNER — even a QA_MANAGER gets an EMPTY dropdown, so assignment is silently broken for the role meant to assign.
+- problem: Inspectors see owner-only nav and dead screens that render empty instead of erroring; the QA assignment flow is quietly broken.
+- fix: Add a minRole to each NAV entry and filter in Sidebar with the role ConsoleShell already receives (`layout.tsx:24`) — fail closed to inspector visibility (the DEFAULT_USER fallback is 'owner'); render the New-inspection button only for QA+ and add a server-side role gate/redirect in `inspections/new/page.tsx`; fix the dropdown by lowering a read-only users listing to QA_MANAGER or adding a scoped `/users?role=INSPECTOR`.
+- verify: As INSPECTOR: only role-appropriate nav items, no create button, direct /inspections/new navigation redirects. As QA_MANAGER: the inspector dropdown is populated (currently empty).
+- refs: meeting 2026-07-17 · web gating is UX only — the API stays the RBAC authority (CLAUDE.md) · pairs with INS-057 (API relaxation) — the dropdown fix touches the API users floor, don't skip it as "web-only"
+
+### INS-066 · Inspections rows: action menu (share/change/reassign) + PATCH endpoint + start-confirmation dialog   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): action menu on the inspections table; start warns it can't be stopped.
+- area: Web console + Inspection lifecycle
+- evidence: each row is a bare Link to the review page (`inspections/page.tsx:146-154`) — no per-row menu, unlike the MoreVertical pattern used on directory/presets/users; InspectionsController has no PATCH/PUT route at all; zero confirm()/AlertDialog usages exist anywhere in the console.
+- problem: No way to reassign, share, or amend an inspection from the table, and the meeting's "starting cannot be stopped — only reset and restarted" notice has no home (no confirmation primitive exists).
+- fix: API: PATCH /inspections/:id accepting {assignedInspectorId?, lotSize?, aqlPlan?}, permitted only in DRAFT/ASSIGNED/IN_PROGRESS (immutability: SUBMITTED+ is frozen), @Roles('QA_MANAGER'), org-validating the inspector like create() does, with an audit row. Web: per-row MoreVertical — Share (copy review link; portal/report share only once REPORT_ISSUED), Change (pre-filled edit for pre-submission statuses; disabled after submit with an explanatory tooltip), Reassign (inspector picker → PATCH). Build the first modal-confirm in components/inspect/ and use it for the INS-057 start action ("Starting cannot be stopped — only reset and restarted").
+- verify: QA reassigns a DRAFT inspection from the row menu (persists, audit row appended); PATCH on a SUBMITTED inspection → 400; the assigned inspector's start shows the confirmation and cancel leaves status ASSIGNED.
+- refs: meeting 2026-07-17 · depends on INS-057 (start transition) — sequence that first · "Change" scope bounded by INS-014/CLAUDE.md immutability
+
+### INS-067 · No archived-only view; archived rows nearly indistinguishable; archive-menu red off-token   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): a place to see + recover archived buyers; font-color inconsistency confirmed.
+- area: Web console
+- evidence: chips are only All/Active (`directory-client.tsx:254`) so archived rows can only be found interleaved in "All"; the ArchivedBadge is ~2.2:1 contrast (#9AA3AE on #F0F3F7 at 10.5px, `:54-60`) — under WCAG AA — and archived rows are otherwise pixel-identical to active ones; the RowMenu Archive item hardcodes #DC2626 (`:152`) vs the token danger red #B42318 (`tokens.ts:34`) — the meeting's reported font-color inconsistency (same literal in InlineForm error text at `:277/:376`).
+- problem: The meeting's actual ask — review and recover archived entities — has no view, and archived state is easy to miss entirely.
+- fix: Add an "Archived" chip filtering archivedAt != null (client-side over the includeArchived=1 result set is sufficient at current page sizes), pairing with INS-061's Restore action; dim archived rows and restyle the badge with an AA-passing pair from the existing vocabulary (e.g. severity.minor #475467 on #EFF2F6); replace the #DC2626 literals with the tokenized danger red.
+- verify: With one archived buyer: the Archived chip shows only that row; in All it renders visibly dimmed with a ≥4.5:1 badge; grep of directory-client.tsx finds no #DC2626.
+- refs: meeting 2026-07-17 · sequence with INS-061 (worthless without Restore) · stay within components/inspect tokens (CLAUDE.md)
+
+### INS-068 · KPI dashboard: render the inspection status breakdown + add an org quality metric to /dashboard/summary   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): in-progress/passed/failed counts + average quality level.
+- area: Web console + API (dashboard)
+- evidence: GET /dashboard/summary (INS-005, done) already returns per-status `inspectionsByStatus`, but StatTiles sums it into ONE "Inspections" total (`dashboard/page.tsx:35`) — the breakdown is computed then thrown away; no quality metric exists anywhere: defect counts live inside AqlResult.perClass Json (`schema.prisma:690`) and sampleSize inside Inspection.computedSampling Json (`:495`), neither SQL-aggregatable.
+- fix: API: extend summary with (a) a qaDecision rollup via `groupBy` (backed by the existing @@index([orgId, qaDecision])) and (b) app-code quality metrics — DPHU = 100·Σfound/ΣsampleSize over decided inspections + passRate (bounded Json scan; do NOT attempt SQL over Json). Web: tiles for In progress (DRAFT+ASSIGNED+IN_PROGRESS), Awaiting review (SUBMITTED+UNDER_REVIEW+HOLD), Passed (APPROVED+REPORT_ISSUED), Failed (REJECTED) + the quality tile; update DEMO_SUMMARY and ApiDashboardSummary.
+- verify: Summary returns the rollup + DPHU/passRate matching a hand-computed fixture (tenant-isolated integration test); the dashboard renders the tiles with sensible zero-states when nothing is decided.
+- refs: meeting 2026-07-17 · extends INS-005 (done) — not a duplicate · product picks the headline metric (DPHU vs pass rate); denormalize onto AqlResult only if the Json scan ever gets slow
+
+### INS-069 · Internal status-change notification emails on inspection submit + QA decision   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): stakeholders emailed automatically on inspection status changes.
+- area: Inspection lifecycle / Mail
+- evidence: submit() (`inspections.service.ts:192`) and decide() (`:270`) have no MailService dependency, and there is no event/notification infrastructure in apps/api/src at all; MailService (INS-004, done) is production-shaped (SMTP_URL transport, never-throws contract) but only sends invitations + guest magic links (`mail.service.ts:33`).
+- problem: QA managers don't learn an inspection awaits review; inspectors/owners don't learn the binding pass/fail/hold call was made. INS-020 covers only the buyer-facing report-delivery email — these internal transitions are untracked.
+- fix: Add sendInspectionStatusChange to MailService (per-transition subject/body, deep link to the review page). Hook post-commit — the `orgs.service.ts:74` pattern: after the $transaction resolves, never inside it, never throwing. On submit → all ACTIVE org users with role ≥ QA_MANAGER; on decide → the assigned inspector + owners, including decision + remarks. Fire-and-forget, no queue for MVP; recipients orgId-scoped (tenant invariant).
+- verify: Unit specs (mirroring users.service.spec.ts mail assertions): submit mails each QA+ recipient exactly once; decide mails the assigned inspector with the decision in the body; a failed SMTP send logs {sent:false} without failing the write; no mail on rejected (status-guard) transitions.
+- refs: meeting 2026-07-17 · builds on INS-004 (done) · coordinate copy with INS-020 so buyer + internal mails read as one system
+
+### INS-070 · Scrub PLATFORM_ADMIN from the org-facing users UI; fix the DEACTIVATED→"Cross-tenant" badge bug   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17). The API half is ALREADY done — platform admins are org-invisible/unassignable.
+- area: Web console (users screen)
+- evidence: the API already hides/blocks platform admins everywhere (org-scoped list `users.service.ts:36`; unassignable `:99-101`; uninvitable `:60-62`; requireOrgId locks them out of /users entirely) — but the page still renders a "platform / Cross-tenant" role legend card in the org console (`users/page.tsx:42-52`); real bug: mapUser maps every non-ACTIVE/non-INVITED status to 'crosstenant' (`users-client.tsx:37`), so a DEACTIVATED user renders a "Cross-tenant" badge and keeps a live role select + deactivate menu.
+- fix: Remove (or gate to platform sessions) the platform legend card and the dead 'platform' row paths; add proper Deactivated/Suspended badge styles; on deactivated rows disable the role select and swap deactivate for a reactivate affordance (pairs with INS-058's endpoint).
+- verify: An org owner's /users shows only the three org roles in the legend; a deactivated user shows "Deactivated" (not "Cross-tenant") with the role select disabled; no PLATFORM_ADMIN string appears in the org-facing DOM.
+- refs: meeting 2026-07-17 · pairs with INS-058
+
+### INS-071 · Supplier GPS: structured lat/lng + map picker; stop silently dropping bad input   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): map option for supplier location.
+- area: Workspace CRUD (suppliers, web + api)
+- evidence: both supplier forms ask for hand-typed '{"lat":0,"lng":0}' JSON (`suppliers/[id]/edit-form.tsx:38`, `directory-client.tsx:383`); the server actions JSON.parse with an EMPTY catch — a typo saves the supplier with no coordinates and no error (`dashboard/actions.ts:66,84-88`); the API types gps as `unknown` and persists anything (`suppliers.service.ts:7,12` → `schema.prisma:302` Json?), while the web type assumes {lat,lng} (`lib/api.ts:176`); no map library exists in apps/web.
+- fix: Structured numeric lat/lng inputs as the source of truth (drop gpsJson) + optional click-to-pin map (leaflet/OSM as a client component — NOTE: first external runtime dep, mind CSP/offline; the numeric pair alone is the low-risk MVP cut); API validates finite lat ∈ [-90,90], lng ∈ [-180,180] else 400 (replacing `unknown`); render the coordinates on the supplier detail page instead of only the "Pinned" badge.
+- verify: Picking/typing coords round-trips as {lat,lng}; lat=999 or malformed input shows an inline error (not a silent save); POST /suppliers with gps {"foo":1} → 400 (integration spec).
+- refs: meeting 2026-07-17
+
+### INS-072 · Buyer logo: file upload via the existing presign pattern (today: raw URL, hotlinked + frozen into signed reports)   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): logo should be a file select, not a link.
+- area: Workspace CRUD (buyers) / Storage
+- evidence: plain URL text input in both buyer forms (`buyers/[id]/edit-form.tsx:33`, `directory-client.tsx:279`), stored verbatim (`buyers.service.ts:59,75`) and hotlinked in an `<img src>` (`directory-client.tsx:327`); the value freezes into the Ed25519-signed report brandingSnapshot (`reports.service.ts:122-126`) — a dead external link permanently degrades a tamper-proof artifact; the full presign-PUT-attach + viewUrl-decoration pattern already exists (INS-052/INS-049: `loop-presets.controller.ts:27,41-57`, `storage.service.ts:17-30`, `builder.tsx:203`).
+- fix: Reuse the pattern end-to-end: StorageService.keyForBuyerLogo → `orgs/{orgId}/buyers/{uuid}.{ext}` + POST /buyers/presign (copy the loop-presets template; route above /:id); decorate buyer GET/list with a short-lived logoViewUrl (keep the org-prefix guard); web file input + preview via the builder flow, legacy https:// URLs still working (prefix-discriminated — no migration); STORE THE DURABLE KEY in Buyer.logoUrl/brandingSnapshot, never the ~900s presigned URL — presign at render time; INS-003's PDF must embed fetched bytes, not a URL.
+- verify: A PNG upload PUTs to storage, saves an `orgs/{orgId}/buyers/…` key, and the directory row + form preview render via a fresh presigned GET after the original would have expired; a legacy https logoUrl still renders; a crafted foreign-org key gets viewUrl:null. Extend the byte-upload integration spec.
+- refs: meeting 2026-07-17 · depends on INS-060 (the byte path must actually work) · BrandedReport renders no logo today — display wiring is directory-only until INS-003
+
+### INS-073 · Preset builder: required-shots control is buried under decorative rows   [MEDIUM]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17). Default-1 + stepper ALREADY exist — the layout hides them.
+- area: Loop presets (web UX)
+- evidence: requiredShotCount already defaults to 1 (`builder.tsx:67`, service fallback `loop-presets.service.ts:131`, `schema.prisma:401` @default(1)) and a +/- stepper exists (`builder.tsx:624-640`) — but the card first renders one decorative, non-interactive "Shot 01/02…" row per shot (`:616-623`) with the actual controls as two small unlabeled 28px icon buttons underneath, so users mistake the rows for editable slots and never find the +.
+- fix: Collapse the card to a single prominent labeled stepper (clamped ≥ 1) with an explicit "+ Add shot" text button; drop the placeholder rows (or replace with a caption "N photos will be required during populate").
+- verify: A newly added loop shows "1 shot" with a visible "+ Add shot" affordance; one click yields 2; the count round-trips through save → GET /loop-presets/:id; no non-interactive faux-editable rows remain.
+- refs: meeting 2026-07-17 · pure builder.tsx change — per-shot labels/instructions would be a schema change (PresetLoopStep stores only a count): separate item, don't smuggle it in
+
 ## Low
 
 ### INS-051 · Topbar search was a fake div; no global search exists   [LOW]
@@ -503,3 +679,38 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - fix: Migrate `apps/api` to an ESLint 9 flat config (typescript-eslint + prettier); migrate `apps/web` off `next lint` via `next-lint-to-eslint-cli`; then enable the commented-out Lint step in `.github/workflows/ci.yml`.
 - verify: `pnpm lint` passes at the repo root; the CI Lint step is enabled and green.
 - refs: —
+
+> **Product-feedback batch (2026-07-17 meeting), LOW tier** — see the batch note under ## High.
+
+### INS-074 · Product description: room to write + room to read; fix clear-on-edit   [LOW]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): product page feels empty; allow richer descriptions.
+- area: Web console (products) + one-line API touch
+- evidence: the data layer already supports arbitrary-length descriptions (Postgres TEXT, no API cap) — the gap is presentational: both forms render a 3-row resize-none textarea placeholder'd "Short product description" (`create-form.tsx:28`, `edit-form.tsx:32`); the detail page shows the description only as the one-line PageHead subtitle (`products/[id]/page.tsx:19`); the list cell has no clamp and collapses newlines (`products/page.tsx:46`); real bug: updateProduct coerces an empty textarea to undefined (`products/actions.ts:29`), which Prisma treats as "leave unchanged" (`products.service.ts:69`) — a description can never be cleared from the console.
+- fix: Grow the textarea (rows 6-8, resize vertical, drop "Short"); render the full description as a whitespace-preserving body block on the detail page; line-clamp the list cell; fix the clear path (send explicit null on empty, map it through the service).
+- verify: A 500+ char multi-paragraph description saves, renders fully with line breaks on the detail page, and the list row stays bounded; emptying the textarea and saving returns description:null on GET.
+- refs: meeting 2026-07-17 · no migration, no new fields (styleNumber stays the display key; plain text, not markdown — don't touch the report pipeline) · fold a clear-path regression spec into INS-034
+
+### INS-075 · Rename "Loop" in UI copy (recommend "Angle"; schema/API/signed snapshots untouched)   [LOW]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): users don't understand "loops"; presets are shots/angles.
+- area: Loop presets (web copy)
+- evidence: "Add Loop" `builder.tsx:538`, "Loop name" `:552`, sidebar "Loops · N" `:478`, nav "Loop Presets" `shell.tsx:203`, "Loop preset" label `create-form.tsx:62`, populate "Loops · N"/"LOOP NN" `populate-workspace.tsx:246,290`. CAUTION: "shot" is already a DIFFERENT concept in the same UI (each loop has a requiredShotCount) — renaming loop→shot collides; the schema calls the step's name zoneName, so "Angle" or "Zone" maps cleanly (one angle = N required shots).
+- problem: A deep rename is high-risk/no-user-value: `Inspection.loopPresetSnapshot` and `Report.canonicalSnapshot` embed "loops" keys inside Ed25519-SIGNED artifacts — a key rename breaks hash verification of historical reports — and the REST paths/Prisma models are load-bearing.
+- fix: Pick the term with product ("Angle" recommended), then sweep user-facing strings only: builder, presets list/detail, nav label, inspections-create label, populate workspace. Keep ALL identifiers, routes, API/schema names, and snapshot JSON shapes unchanged.
+- verify: User-facing strings show the new term; `pnpm type-check` green; zero diffs under apps/api and prisma/.
+- refs: meeting 2026-07-17 · if product insists on "Shot", the per-step shot counter must be renamed too ("photos required") — flag in the decision · INS-008 note: a contract rename would currently have to be made twice
+
+### INS-076 · Preset detail: relabel "Edit (new version)" → "Duplicate"; duplicate framing in the seeded builder   [LOW]
+- status: todo            # NEW 2026-07-18 (meeting 2026-07-17). Behavior ALREADY matches the ask — only the copy is inconsistent.
+- area: Loop presets (web UX)
+- evidence: no update path exists at all (controller is GET/POST/DELETE only; save always POSTs and the service auto-increments version per trimmed name, `loop-presets.service.ts:109-115`) — but the detail page's primary button says "Edit (new version)" (`presets/[id]/page.tsx:33-35`) while the card menu says "Duplicate (new version)" (`presets-list.tsx:111`), and the seeded builder still titles itself "New Preset" (`builder.tsx:413`).
+- fix: Rename the detail button to "Duplicate"; when seeded via ?from=, header the builder "Duplicate of <name> (vN)" and surface the rule near Save: same name ⇒ saves as v(N+1); changed name ⇒ brand-new preset at v1.
+- verify: Labels consistent across detail + list; same-name save produces vN+1 on the list card; new-name save produces v1 of a new preset.
+- refs: meeting 2026-07-17 · adjacent papercut (file separately if pursued): the inspections/new preset dropdown lists EVERY version of every preset (`create-form.tsx:63-65`; list() has no latest-per-name filter) — consider latest-per-name or auto-archive on re-version
+
+### INS-077 · Buyer primaryColor: server-side hex validation (+ synced hex text field)   [LOW]
+- status: todo            # NEW 2026-07-18. The meeting's color-picker ask is ALREADY SHIPPED — this is the remaining hardening/polish.
+- area: Workspace CRUD (buyers)
+- evidence: both buyer forms already use a native `<input type="color">` picker (`buyers/[id]/edit-form.tsx:38`, `directory-client.tsx:283`); remaining gaps: the API accepts any string for primaryColor (`buyers.service.ts:7,14`) which later freezes into the signed brandingSnapshot (`reports.service.ts:124`), and a bare swatch makes it hard to paste an exact brand hex.
+- fix: Reject primaryColor not matching `/^#[0-9a-fA-F]{6}$/` with a 400 in create/update (normalize case); add a small synced hex text input beside the swatch in both forms (picker ↔ text two-way).
+- verify: PATCH with primaryColor:'red' → 400; '#1457A3' saves; typing a hex updates the swatch and persists; unit test in buyers.service.spec.ts.
+- refs: meeting 2026-07-17 · the invalid path is only reachable via direct API calls (native pickers always emit #rrggbb) — hence LOW
