@@ -16,6 +16,11 @@ interface PhotoLike {
   storageKey: string;
 }
 
+/**
+ * Class floor: QA_MANAGER. Read + inspector-workflow routes relax to INSPECTOR
+ * per-handler (RolesGuard resolves handler-over-class, INS-057); the service
+ * then scopes INSPECTOR access to their own assigned inspections.
+ */
 @Controller('inspections')
 @Roles('QA_MANAGER')
 export class InspectionsController {
@@ -38,8 +43,9 @@ export class InspectionsController {
   }
 
   @Get()
+  @Roles('INSPECTOR')
   list(@CurrentUser() user: AuthUser, @Query() query: RawListQuery & { status?: string }) {
-    return this.inspections.list(requireOrgId(user), query.status, parseListQuery(query));
+    return this.inspections.list(requireOrgId(user), user, query.status, parseListQuery(query));
   }
 
   @Get('aql-preview')
@@ -58,8 +64,9 @@ export class InspectionsController {
   }
 
   @Get(':id')
+  @Roles('INSPECTOR')
   async get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    const inspection = await this.inspections.get(requireOrgId(user), id);
+    const inspection = await this.inspections.get(requireOrgId(user), user, id);
     return {
       ...inspection,
       photos: inspection.photos?.map((p) => this.withViewUrl(p)),
@@ -75,13 +82,26 @@ export class InspectionsController {
     return this.inspections.create(requireOrgId(user), user.userId, body);
   }
 
+  @Post(':id/start')
+  @Roles('INSPECTOR')
+  start(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.inspections.start(requireOrgId(user), user, id);
+  }
+
+  @Post(':id/reset')
+  @Roles('INSPECTOR')
+  reset(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.inspections.reset(requireOrgId(user), user, id);
+  }
+
   @Post(':id/submit')
+  @Roles('INSPECTOR')
   submit(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() body: TamperProofInput,
   ) {
-    return this.inspections.submit(requireOrgId(user), user.userId, id, body ?? {});
+    return this.inspections.submit(requireOrgId(user), user, id, body ?? {});
   }
 
   @Post(':id/decision')

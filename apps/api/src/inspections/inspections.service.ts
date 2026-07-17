@@ -10,6 +10,8 @@ import {
   qaDecisionToStatus,
   toDefectCounts,
 } from './inspection-mapping';
+import { AuthUser } from '../auth/auth-user';
+import { AuditService } from '../audit/audit.service';
 
 export interface CreateInspectionInput {
   poId: string;
@@ -34,12 +36,30 @@ const DECIDABLE = new Set(['SUBMITTED', 'UNDER_REVIEW', 'HOLD']);
 
 @Injectable()
 export class InspectionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
-  list(orgId: string, status?: string, opts: { q?: string; take?: number; skip?: number } = {}) {
+  /**
+   * INSPECTOR sees/acts only on inspections assigned to them (INS-057);
+   * QA_MANAGER+ keeps org-wide access. Applied inside the org-scoped where, so
+   * a foreign id resolves to 404 — no existence oracle.
+   */
+  private inspectorScope(actor: AuthUser): { assignedInspectorId?: string } {
+    return actor.role === 'INSPECTOR' ? { assignedInspectorId: actor.userId } : {};
+  }
+
+  list(
+    orgId: string,
+    actor: AuthUser,
+    status?: string,
+    opts: { q?: string; take?: number; skip?: number } = {},
+  ) {
     return this.prisma.inspection.findMany({
       where: {
         orgId,
+        ...this.inspectorScope(actor),
         ...(status ? { status: status as never } : {}),
         ...(opts.q
           ? {
@@ -58,9 +78,9 @@ export class InspectionsService {
     });
   }
 
-  async get(orgId: string, id: string) {
+  async get(orgId: string, actor: AuthUser, id: string) {
     const inspection = await this.prisma.inspection.findFirst({
-      where: { id, orgId },
+      where: { id, orgId, ...this.inspectorScope(actor) },
       include: {
         buyer: true,
         supplier: true,
@@ -189,8 +209,10 @@ export class InspectionsService {
   }
 
   /** Lock the inspection, compute the AQL result, record the billable event (spec §8/§9/§14#16). */
-  async submit(orgId: string, userId: string, id: string, tamper: TamperProofInput) {
-    const inspection = await this.prisma.inspection.findFirst({ where: { id, orgId } });
+  async submit(orgId: string, actor: AuthUser, id: string, tamper: TamperProofInput) {
+    const inspection = await this.prisma.inspection.findFirst({
+      where: { id, orgId, ...this.inspectorScope(actor) },
+    });
     if (!inspection) throw new NotFoundException('Inspection not found');
     if (!SUBMITTABLE.has(inspection.status)) {
       throw new BadRequestException(`Cannot submit an inspection in status ${inspection.status}`);
@@ -219,7 +241,7 @@ export class InspectionsService {
 
     const submittedAt = new Date();
     const tamperProof = {
-      inspectorId: userId,
+      inspectorId: actor.userId,
       deviceId: tamper?.deviceId,
       submittedAt: submittedAt.toISOString(),
       gps: tamper?.gps,
@@ -263,6 +285,44 @@ export class InspectionsService {
         });
       }
       return tx.inspection.findUnique({ where: { id }, include: { aqlResult: true } });
+    });
+  }
+
+  /** ASSIGNED -> IN_PROGRESS (INS-057). Allowed for the assigned inspector or QA_MANAGER+. */
+  async start(orgId: string, actor: AuthUser, id: string) {
+    const inspection = await this.prisma.inspection.findFirst({
+      where: { id, orgId, ...this.inspectorScope(actor) },
+    });
+    if (!inspection) throw new NotFoundException('Inspection not found');
+    if (inspection.status !== 'ASSIGNED') {
+      throw new BadRequestException(`Cannot start an inspection in status ${inspection.status} (only ASSIGNED)`);
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.inspection.update({ where: { id }, data: { status: 'IN_PROGRESS' } });
+      await this.audit.append(
+        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'inspection.started', entityType: 'Inspection', entityId: id },
+        tx,
+      );
+      return updated;
+    });
+  }
+
+  /** IN_PROGRESS -> ASSIGNED (the "reset and restart" model — nothing submitted is touched). */
+  async reset(orgId: string, actor: AuthUser, id: string) {
+    const inspection = await this.prisma.inspection.findFirst({
+      where: { id, orgId, ...this.inspectorScope(actor) },
+    });
+    if (!inspection) throw new NotFoundException('Inspection not found');
+    if (inspection.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(`Cannot reset an inspection in status ${inspection.status} (only IN_PROGRESS)`);
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.inspection.update({ where: { id }, data: { status: 'ASSIGNED' } });
+      await this.audit.append(
+        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'inspection.reset', entityType: 'Inspection', entityId: id },
+        tx,
+      );
+      return updated;
     });
   }
 
