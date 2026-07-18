@@ -165,10 +165,29 @@ describe('UsersService guards (INS-058)', () => {
     );
   });
 
+  it('changes another user\'s role inside a transaction with an audit row', async () => {
+    const { service, prisma, audit } = makeService(
+      { sent: true },
+      null,
+      { id: 'u-target', orgId: 'org1', role: 'INSPECTOR', status: 'ACTIVE' },
+    );
+    const out = await service.updateRole('org1', OWNER, 'u-target', 'QA_MANAGER');
+    expect(out.role).toBe('QA_MANAGER');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'user.role_changed', entityId: 'u-target', metadata: { role: 'QA_MANAGER' } }),
+      expect.anything(),
+    );
+  });
+
   it('reactivate flips DEACTIVATED back to ACTIVE; INVITED is refused', async () => {
     const deact = makeService({ sent: true }, null, { id: 'u-target', orgId: 'org1', role: 'INSPECTOR', status: 'DEACTIVATED' });
     const out = await deact.service.reactivate('org1', OWNER, 'u-target');
     expect(out.status).toBe('ACTIVE');
+    expect(deact.audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'user.reactivated', entityId: 'u-target' }),
+      expect.anything(),
+    );
 
     const invited = makeService({ sent: true }, null, { id: 'u-target', orgId: 'org1', role: 'INSPECTOR', status: 'INVITED' });
     await expect(invited.service.reactivate('org1', OWNER, 'u-target')).rejects.toThrow(/pending invitation/);
