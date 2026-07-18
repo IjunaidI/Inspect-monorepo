@@ -30,6 +30,20 @@ export interface BuyerGuestMagicLinkMail {
   buyerName?: string;
 }
 
+export interface InspectionSubmittedMail {
+  to: string;
+  poNumber: string | null;
+  inspectionId: string;
+}
+
+export interface InspectionDecidedMail {
+  to: string;
+  poNumber: string | null;
+  inspectionId: string;
+  decision: string;
+  remarks?: string | null;
+}
+
 /**
  * Outbound email for onboarding (INS-004): user/org-owner invitations and
  * buyer-guest magic links. Report-delivery email is INS-020 (needs INS-003 PDF).
@@ -142,6 +156,33 @@ export class MailService {
     ].join('\n');
 
     return this.send({ to: input.to, subject: 'Your Inspect report portal access', text });
+  }
+
+  /** Internal notification: an inspection awaits QA review (INS-069). */
+  async sendInspectionSubmitted(input: InspectionSubmittedMail): Promise<SendResult> {
+    const link = `${this.webBaseUrl}/inspections/${encodeURIComponent(input.inspectionId)}/review`;
+    const po = input.poNumber ?? input.inspectionId.slice(0, 8);
+    const text = [
+      `Inspection ${po} was submitted on Inspect and is awaiting QA review.`,
+      '',
+      'Review it here:',
+      link,
+    ].join('\n');
+    return this.send({ to: input.to, subject: `Inspection ${po} awaits QA review`, text });
+  }
+
+  /** Internal notification: the binding QA decision was recorded (INS-069). */
+  async sendInspectionDecided(input: InspectionDecidedMail): Promise<SendResult> {
+    const link = `${this.webBaseUrl}/inspections/${encodeURIComponent(input.inspectionId)}/review`;
+    const po = input.poNumber ?? input.inspectionId.slice(0, 8);
+    const text = [
+      `The QA decision for inspection ${po} on Inspect is: ${input.decision}.`,
+      ...(input.remarks ? ['', `Remarks: ${input.remarks}`] : []),
+      '',
+      'View the inspection:',
+      link,
+    ].join('\n');
+    return this.send({ to: input.to, subject: `Inspection ${po} decision: ${input.decision}`, text });
   }
 
   /** Shared send path — logs failures and resolves {sent:false}; never throws. */

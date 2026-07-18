@@ -2,8 +2,8 @@ import { BadRequestException } from '@nestjs/common';
 import { InspectionsService } from './inspections.service';
 
 describe('InspectionsService.aqlPreview', () => {
-  // aqlPreview is pure (no Prisma/audit access) — pass null clients.
-  const svc = new InspectionsService(null as never, null as never);
+  // aqlPreview is pure (no Prisma/audit/mail access) — pass null clients.
+  const svc = new InspectionsService(null as never, null as never, null as never);
 
   it('returns the computed plan for an in-band lot (1000 -> code J, n 80)', () => {
     const out = svc.aqlPreview(1000, {});

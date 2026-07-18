@@ -12,6 +12,7 @@ import {
 } from './inspection-mapping';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
+import { MailService } from '../mail/mail.service';
 
 export interface CreateInspectionInput {
   poId: string;
@@ -43,6 +44,7 @@ export class InspectionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly mail: MailService,
   ) {}
 
   /**
@@ -279,6 +281,7 @@ export class InspectionsService {
   async submit(orgId: string, actor: AuthUser, id: string, tamper: TamperProofInput) {
     const inspection = await this.prisma.inspection.findFirst({
       where: { id, orgId, ...this.inspectorScope(actor) },
+      include: { purchaseOrder: { select: { poNumber: true } } },
     });
     if (!inspection) throw new NotFoundException('Inspection not found');
     if (!SUBMITTABLE.has(inspection.status)) {
@@ -330,7 +333,7 @@ export class InspectionsService {
       gps: tamper?.gps,
     };
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.inspection.update({
         where: { id },
         data: {
@@ -369,6 +372,20 @@ export class InspectionsService {
       }
       return tx.inspection.findUnique({ where: { id }, include: { aqlResult: true } });
     });
+
+    // INS-069: notify reviewers AFTER the commit — never inside the tx, never
+    // throwing (MailService resolves {sent:false} on failure). The submitter is excluded.
+    const reviewers = await this.prisma.user.findMany({
+      where: { orgId, status: 'ACTIVE', id: { not: actor.userId }, role: { in: ['QA_MANAGER', 'ORG_OWNER'] } },
+      select: { email: true },
+    });
+    const poNumber = inspection.purchaseOrder?.poNumber ?? null;
+    await Promise.all(
+      [...new Set(reviewers.map((r) => r.email))].map((to) =>
+        this.mail.sendInspectionSubmitted({ to, poNumber, inspectionId: id }),
+      ),
+    );
+    return result;
   }
 
   /** ASSIGNED -> IN_PROGRESS (INS-057). Allowed for the assigned inspector or QA_MANAGER+. */
@@ -414,7 +431,7 @@ export class InspectionsService {
     if (!input?.decision) throw new BadRequestException('decision is required');
     const inspection = await this.prisma.inspection.findFirst({
       where: { id, orgId },
-      include: { aqlResult: true },
+      include: { aqlResult: true, purchaseOrder: { select: { poNumber: true } } },
     });
     if (!inspection) throw new NotFoundException('Inspection not found');
     if (!inspection.aqlResult) {
@@ -426,7 +443,7 @@ export class InspectionsService {
 
     const status = qaDecisionToStatus(input.decision);
     const decidedAt = new Date();
-    return this.prisma.$transaction(async (tx) => {
+    const decided = await this.prisma.$transaction(async (tx) => {
       await tx.aqlResult.update({
         where: { inspectionId: id },
         data: {
@@ -442,5 +459,26 @@ export class InspectionsService {
         include: { aqlResult: true },
       });
     });
+
+    // INS-069: assigned inspector + active owners learn the binding call (post-commit).
+    const recipients = await this.prisma.user.findMany({
+      where: {
+        orgId,
+        status: 'ACTIVE',
+        id: { not: userId },
+        OR: [
+          { role: 'ORG_OWNER' },
+          ...(inspection.assignedInspectorId ? [{ id: inspection.assignedInspectorId }] : []),
+        ],
+      },
+      select: { email: true },
+    });
+    const poNumber = inspection.purchaseOrder?.poNumber ?? null;
+    await Promise.all(
+      [...new Set(recipients.map((r) => r.email))].map((to) =>
+        this.mail.sendInspectionDecided({ to, poNumber, inspectionId: id, decision: input.decision, remarks: input.remarks }),
+      ),
+    );
+    return decided;
   }
 }
