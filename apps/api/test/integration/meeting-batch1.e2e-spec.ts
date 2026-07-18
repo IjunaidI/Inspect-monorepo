@@ -297,4 +297,33 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect2xx(await client.post('/auth/login', { body: { email, password } }), 'second owner login after reactivate');
     });
   });
+
+  describe('INS-059 — direct add-member', () => {
+    it('creates an ACTIVE member who logs in immediately; guards hold', async () => {
+      const email = `direct+${tag}@e2e.local`;
+      const password = `E2eDirect!${tag}`;
+      const created = expect2xx(
+        await client.post('/users', {
+          token: orgA.ownerToken,
+          body: { name: 'Direct Member', email, password, role: 'QA_MANAGER' },
+        }),
+        'POST /users (direct add)',
+      );
+      expect(created.status).toBe('ACTIVE');
+      expect(created.passwordHash).toBeUndefined();
+      expect2xx(await client.post('/auth/login', { body: { email, password } }), 'direct member login');
+
+      const foreign = await client.post('/users', {
+        token: orgB.ownerToken,
+        body: { email, password: 'Whatever123!' },
+      });
+      expect(foreign.status).toBe(403);
+
+      const admin = await client.post('/users', {
+        token: orgA.ownerToken,
+        body: { email: `x+${tag}@e2e.local`, password: 'Whatever123!', role: 'PLATFORM_ADMIN' },
+      });
+      expect(admin.status).toBe(403);
+    });
+  });
 });

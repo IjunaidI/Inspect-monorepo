@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { InviteUserInput, UsersService } from './users.service';
+import { CreateMemberInput, InviteUserInput, UsersService } from './users.service';
 import { parseListQuery, RawListQuery } from '../common/list-query';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -20,6 +20,11 @@ export class UsersController {
   @Post('invite')
   invite(@CurrentUser() user: AuthUser, @Body() body: InviteUserInput) {
     return this.users.invite(requireOrgId(user), user, body);
+  }
+
+  @Post()
+  create(@CurrentUser() user: AuthUser, @Body() body: CreateMemberInput) {
+    return this.users.createMember(requireOrgId(user), user, body);
   }
 
   @Patch(':id/role')

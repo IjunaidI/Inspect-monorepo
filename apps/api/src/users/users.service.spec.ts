@@ -193,3 +193,40 @@ describe('UsersService guards (INS-058)', () => {
     await expect(invited.service.reactivate('org1', OWNER, 'u-target')).rejects.toThrow(/pending invitation/);
   });
 });
+
+describe('UsersService.createMember (INS-059)', () => {
+  it('creates an ACTIVE member with a scrypt hash and an audit row', async () => {
+    const { service, txUser, audit } = makeService();
+    const out = await service.createMember('org1', OWNER, {
+      name: 'Direct Member',
+      email: '  Direct@Example.COM ',
+      password: 'longenough1',
+      role: 'QA_MANAGER',
+    });
+    expect(out).toMatchObject({ email: 'direct@example.com', role: 'QA_MANAGER', status: 'ACTIVE' });
+    const created = txUser.create.mock.calls[0][0].data as Record<string, string>;
+    expect(created.passwordHash).toMatch(/^scrypt\$/);
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'user.member_added' }),
+      expect.anything(),
+    );
+  });
+
+  it('rejects short passwords, platform-admin role, above-own-role, and existing emails', async () => {
+    const { service } = makeService();
+    await expect(
+      service.createMember('org1', OWNER, { email: 'a@b.com', password: 'short' }),
+    ).rejects.toThrow(/min 8 characters/);
+    await expect(
+      service.createMember('org1', OWNER, { email: 'a@b.com', password: 'longenough1', role: 'PLATFORM_ADMIN' }),
+    ).rejects.toThrow('Cannot create a platform admin');
+    await expect(
+      service.createMember('org1', QA, { email: 'a@b.com', password: 'longenough1', role: 'ORG_OWNER' }),
+    ).rejects.toThrow('Cannot create a role above your own');
+
+    const dup = makeService({ sent: true }, { orgId: 'org2' });
+    await expect(
+      dup.service.createMember('org1', OWNER, { email: 'a@b.com', password: 'longenough1' }),
+    ).rejects.toThrow('An account already exists for this email');
+  });
+});

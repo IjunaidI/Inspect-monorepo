@@ -10,6 +10,7 @@ import { MailService } from '../mail/mail.service';
 import { AuditService } from '../audit/audit.service';
 import { AuthUser } from '../auth/auth-user';
 import { hasAtLeast, Role } from '../auth/rbac';
+import { hashPassword } from '../auth/password';
 import { inviteTtlMs } from '../common/config';
 const SAFE_SELECT = {
   id: true,
@@ -24,6 +25,13 @@ const SAFE_SELECT = {
 export interface InviteUserInput {
   email: string;
   role: Role;
+}
+
+export interface CreateMemberInput {
+  name?: string;
+  email: string;
+  password: string;
+  role?: Role;
 }
 
 /** Org Owner user management within their own org (spec §4). */
@@ -95,6 +103,38 @@ export class UsersService {
       role: invitation.role,
     });
     return { ...invitation, emailSent: sent };
+  }
+
+  /**
+   * Direct add-member (INS-059): the owner sets name/email/password and the
+   * account is ACTIVE immediately — no email round-trip. Reuses the invite()
+   * guard set; a duplicate email (same or foreign org) gets one generic refusal
+   * so this endpoint is not an account-existence oracle.
+   */
+  async createMember(orgId: string, actor: AuthUser, input: CreateMemberInput) {
+    if (!input?.email?.trim()) throw new BadRequestException('email is required');
+    if (!input?.password || input.password.length < 8) {
+      throw new BadRequestException('password (min 8 characters) is required');
+    }
+    const email = input.email.trim().toLowerCase();
+    const role = input.role ?? 'INSPECTOR';
+    if (role === 'PLATFORM_ADMIN') throw new ForbiddenException('Cannot create a platform admin');
+    if (!hasAtLeast(actor.role, role)) throw new ForbiddenException('Cannot create a role above your own');
+    const existing = await this.prisma.user.findUnique({ where: { email }, select: { orgId: true } });
+    if (existing) throw new ForbiddenException('An account already exists for this email');
+
+    const passwordHash = await hashPassword(input.password);
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { orgId, email, name: input.name?.trim() || email, role, status: 'ACTIVE', passwordHash },
+        select: SAFE_SELECT,
+      });
+      await this.audit.append(
+        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'user.member_added', entityType: 'User', entityId: user.id, metadata: { role } },
+        tx,
+      );
+      return user;
+    });
   }
 
   /**
