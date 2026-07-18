@@ -171,6 +171,46 @@ export class ReportsService {
     }
   }
 
+  /**
+   * Org-scoped report list (INS-062). Metadata + joins only — canonicalSnapshot
+   * is large and stays out of list payloads by design.
+   */
+  list(orgId: string, opts: { q?: string; take?: number; skip?: number } = {}) {
+    return this.prisma.report.findMany({
+      where: {
+        orgId,
+        ...(opts.q
+          ? {
+              OR: [
+                { buyer: { name: { contains: opts.q, mode: 'insensitive' as const } } },
+                { inspection: { purchaseOrder: { poNumber: { contains: opts.q, mode: 'insensitive' as const } } } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { generatedAt: 'desc' },
+      take: opts.take,
+      skip: opts.skip,
+      select: {
+        id: true,
+        inspectionId: true,
+        status: true,
+        generatedAt: true,
+        contentHash: true,
+        pdfStorageKey: true,
+        verificationToken: true,
+        buyer: { select: { id: true, name: true } },
+        inspection: {
+          select: {
+            status: true,
+            purchaseOrder: { select: { poNumber: true } },
+            product: { select: { styleNumber: true } },
+          },
+        },
+      },
+    });
+  }
+
   async getForOrg(orgId: string, reportId: string) {
     const report = await this.prisma.report.findFirst({
       where: { id: reportId, orgId },

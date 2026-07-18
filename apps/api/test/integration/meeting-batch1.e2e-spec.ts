@@ -231,4 +231,36 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(frozen.status).toBe(400);
     });
   });
+
+  describe('INS-062 — org-scoped reports list', () => {
+    it('lists org A reports (no snapshot); org B sees none; INSPECTOR 403', async () => {
+      const insp = await createInspection(false);
+      await registerPhoto(insp.id, insp.loopId, `report-${tag}`);
+      expect2xx(await client.post(`/inspections/${insp.id}/submit`, { token: orgA.ownerToken, body: {} }), 'submit');
+      expect2xx(
+        await client.post(`/inspections/${insp.id}/decision`, {
+          token: orgA.ownerToken,
+          body: { decision: 'PASS', remarks: 'mb1 report fixture' },
+        }),
+        'decision',
+      );
+      const report = expect2xx(
+        await client.post(`/inspections/${insp.id}/report`, { token: orgA.ownerToken }),
+        'generate report',
+      );
+
+      const listA = expect2xx(await client.get('/reports', { token: orgA.ownerToken }), 'GET /reports (A)');
+      const row = listA.find((r: { id: string }) => r.id === report.id);
+      expect(row).toBeTruthy();
+      expect(row.canonicalSnapshot).toBeUndefined();
+      expect(row.inspection.purchaseOrder.poNumber).toBe(`PO-${tag}`);
+      expect(row.buyer.name).toBe(`E2E Buyer ${tag}`);
+
+      const listB = expect2xx(await client.get('/reports', { token: orgB.ownerToken }), 'GET /reports (B)');
+      expect(listB.some((r: { id: string }) => r.id === report.id)).toBe(false);
+
+      const inspRes = await client.get('/reports', { token: inspectorToken });
+      expect(inspRes.status).toBe(403);
+    });
+  });
 });
