@@ -31,8 +31,13 @@ export class UsersController {
     return this.users.updateRole(requireOrgId(user), user, id, body?.role);
   }
 
+  @Patch(':id/reactivate')
+  reactivate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.users.reactivate(requireOrgId(user), user, id);
+  }
+
   @Delete(':id')
   deactivate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.users.deactivate(requireOrgId(user), id);
+    return this.users.deactivate(requireOrgId(user), user, id);
   }
 }

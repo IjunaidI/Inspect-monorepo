@@ -263,4 +263,38 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(inspRes.status).toBe(403);
     });
   });
+
+  describe('INS-058 — self-guards, last-owner, reactivate', () => {
+    it('owner cannot change own role or deactivate self', async () => {
+      const selfRole = await client.patch(`/users/${orgA.ownerId}/role`, {
+        token: orgA.ownerToken,
+        body: { role: 'QA_MANAGER' },
+      });
+      expect(selfRole.status).toBe(403);
+      const selfOff = await client.delete(`/users/${orgA.ownerId}`, { token: orgA.ownerToken });
+      expect(selfOff.status).toBe(403);
+    });
+
+    it('last active owner is protected; reactivate restores login', async () => {
+      const email = `second-owner+${tag}@e2e.local`;
+      const password = `E2eOwner2!${tag}`;
+      const { token: secondToken, userId: secondId } = await inviteAndActivate(client, orgA.ownerToken, {
+        email,
+        role: 'ORG_OWNER',
+        password,
+      });
+
+      const off = expect2xx(await client.delete(`/users/${secondId}`, { token: orgA.ownerToken }), 'deactivate second owner');
+      expect(off.status).toBe('DEACTIVATED');
+
+      // Stateless-guard caveat: the deactivated owner's access token stays valid
+      // until expiry — the last-owner guard is what stops the org lockout here.
+      const lockout = await client.delete(`/users/${orgA.ownerId}`, { token: secondToken });
+      expect(lockout.status).toBe(400);
+
+      const back = expect2xx(await client.patch(`/users/${secondId}/reactivate`, { token: orgA.ownerToken }), 'reactivate');
+      expect(back.status).toBe('ACTIVE');
+      expect2xx(await client.post('/auth/login', { body: { email, password } }), 'second owner login after reactivate');
+    });
+  });
 });

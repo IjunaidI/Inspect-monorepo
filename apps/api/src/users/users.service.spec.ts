@@ -7,12 +7,19 @@ const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER' };
 function makeService(
   mailResult: { sent: boolean; messageId?: string } = { sent: true },
   existingUser: { orgId: string | null } | null = null,
+  targetUser: Record<string, unknown> | null = null,
+  otherActiveOwners = 1,
 ) {
+  const txUser = {
+    update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'u-target', ...data })),
+    create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'u-new', ...data })),
+  };
+  const tx = { user: txUser };
   const prisma = {
-    // The invite path re-checks the email against existing accounts (INS-035
-    // defense-in-depth); default stub: no account exists for the email.
     user: {
       findUnique: jest.fn(async () => existingUser),
+      findFirst: jest.fn(async () => targetUser),
+      count: jest.fn(async () => otherActiveOwners),
     },
     invitation: {
       create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
@@ -23,13 +30,13 @@ function makeService(
         ...data,
       })),
     },
+    $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
   };
-  const mail = {
-    sendUserInvitation: jest.fn(async () => mailResult),
-  };
+  const mail = { sendUserInvitation: jest.fn(async () => mailResult) };
+  const audit = { append: jest.fn(async () => ({})) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const service = new UsersService(prisma as any, mail as any);
-  return { service, prisma, mail };
+  const service = new UsersService(prisma as any, mail as any, audit as any);
+  return { service, prisma, mail, audit, txUser };
 }
 
 describe('UsersService.invite', () => {
@@ -113,5 +120,57 @@ describe('UsersService.invite', () => {
     expect(invitation).toMatchObject({ email: 'same@y.com' });
     expect(invitation.token).toBeTruthy();
     expect(mail.sendUserInvitation).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('UsersService guards (INS-058)', () => {
+  it('rejects changing your own role', async () => {
+    const { service } = makeService();
+    await expect(service.updateRole('org1', OWNER, OWNER.userId, 'QA_MANAGER')).rejects.toThrow(
+      'You cannot change your own role',
+    );
+  });
+
+  it('rejects deactivating your own account', async () => {
+    const { service } = makeService();
+    await expect(service.deactivate('org1', OWNER, OWNER.userId)).rejects.toThrow(
+      'You cannot deactivate your own account',
+    );
+  });
+
+  it("refuses to demote the organization's only active owner", async () => {
+    const { service } = makeService(
+      { sent: true },
+      null,
+      { id: 'u-target', orgId: 'org1', role: 'ORG_OWNER', status: 'ACTIVE' },
+      0,
+    );
+    await expect(service.updateRole('org1', OWNER, 'u-target', 'QA_MANAGER')).rejects.toThrow(
+      /only active owner/,
+    );
+  });
+
+  it('deactivates a non-last owner inside a transaction with an audit row', async () => {
+    const { service, audit } = makeService(
+      { sent: true },
+      null,
+      { id: 'u-target', orgId: 'org1', role: 'ORG_OWNER', status: 'ACTIVE' },
+      1,
+    );
+    const out = await service.deactivate('org1', OWNER, 'u-target');
+    expect(out.status).toBe('DEACTIVATED');
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'user.deactivated', entityId: 'u-target' }),
+      expect.anything(),
+    );
+  });
+
+  it('reactivate flips DEACTIVATED back to ACTIVE; INVITED is refused', async () => {
+    const deact = makeService({ sent: true }, null, { id: 'u-target', orgId: 'org1', role: 'INSPECTOR', status: 'DEACTIVATED' });
+    const out = await deact.service.reactivate('org1', OWNER, 'u-target');
+    expect(out.status).toBe('ACTIVE');
+
+    const invited = makeService({ sent: true }, null, { id: 'u-target', orgId: 'org1', role: 'INSPECTOR', status: 'INVITED' });
+    await expect(invited.service.reactivate('org1', OWNER, 'u-target')).rejects.toThrow(/pending invitation/);
   });
 });
