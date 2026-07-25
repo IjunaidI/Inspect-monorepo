@@ -326,4 +326,19 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(admin.status).toBe(403);
     });
   });
+
+  describe('INS-065 — QA_MANAGER reads the users list', () => {
+    it('QA lists users (inspector assignment needs it); INSPECTOR still 403', async () => {
+      const { token: qaToken } = await inviteAndActivate(client, orgA.ownerToken, {
+        email: `mb1-qa+${tag}@e2e.local`,
+        role: 'QA_MANAGER',
+        password: `E2eQa!${tag}`,
+      });
+      const res = await client.get('/users', { token: qaToken });
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      const insp = await client.get('/users', { token: inspectorToken });
+      expect(insp.status).toBe(403);
+    });
+  });
 });

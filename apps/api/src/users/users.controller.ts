@@ -12,7 +12,10 @@ import { requireOrgId } from '../common/tenant';
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
+  /** Read-only listing relaxed to QA_MANAGER (INS-065): the create-inspection
+   *  screen needs the inspector roster; all management stays ORG_OWNER. */
   @Get()
+  @Roles('QA_MANAGER')
   list(@CurrentUser() user: AuthUser, @Query() query: RawListQuery) {
     return this.users.list(requireOrgId(user), parseListQuery(query));
   }
