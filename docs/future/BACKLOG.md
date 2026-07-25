@@ -237,7 +237,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · sequence INS-008 (link shared-types) first so the Company DTO exists once, not twice · invariants: [../reference/inspect-schema.md](../reference/inspect-schema.md)
 
 ### INS-056 · submit() mints a PASS recommendation from absent evidence — no completeness gate, no third state   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): "system marks pass when fields are empty or images are missing".
+- status: done            # 2026-07-18: submit() now loads loops with photo counts and rejects (400, naming every short loop) when any loop has fewer photos than its requiredShotCount (3e375c1); the report preview maps a null/undecided qaDecision to PENDING instead of fabricating REJECTED (e2d30eb). Verified: meeting-batch1.e2e-spec.ts integration coverage (0-photo submit 400, success after the required shots upload); unit 183 passing, integration 56 passing, type-check clean.
 - area: Inspection lifecycle
 - evidence: `inspections.service.ts:198` — submit()'s only data gate is `lotSize != null`; defect counts come solely from a DefectInstance groupBy (`:207-218`) where zero rows → {0,0,0}; `aql.engine.ts:103,107` folds absent counts to 0 and initializes the recommendation to PASS; `AqlClassOutcome` is PASS|FAIL only (`schema.prisma:112-115,695`) — no "not evaluated" state exists; the review page renders a green banner straight from the stored value (`review/page.tsx:47-55`) and offers one-click submit with no completeness warning; the report preview maps a null qaDecision to 'fail' → a definitive REJECTED banner for undecided inspections (`report/page.tsx:12-16,83`).
 - problem: An untouched inspection with only a lotSize submits successfully and is stored + displayed as a green PASS; missing evidence is indistinguishable from a clean sample — poisonous for a tamper-proof product whose signed artifact embeds the verdict. Undecided inspections preview as REJECTED.
@@ -246,7 +246,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 (core ask) · depends on INS-064 (the web can't even read requiredShotCount today) · relates INS-021
 
 ### INS-057 · INSPECTOR is locked out of all inspection routes; no assigned-to-me scope, no start transition   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17). Create-block for inspectors is ALREADY enforced — but by over-blocking everything.
+- status: done            # 2026-07-18: per-handler @Roles('INSPECTOR') on GET /, GET /:id, POST /:id/submit, service-scoped to assignedInspectorId (foreign rows 404; QA_MANAGER+ stays org-wide); POST /:id/start (ASSIGNED→IN_PROGRESS) and POST /:id/reset (IN_PROGRESS→ASSIGNED) added, both audited (07e5afa). Verified: negative RBAC matrix extended in the integration suite; unit 183 passing, integration 56 passing.
 - area: Auth & RBAC / Inspection lifecycle
 - evidence: `inspections.controller.ts:20` — class-level `@Roles('QA_MANAGER')` covers EVERY route: create is correctly blocked for INSPECTOR (the meeting ask), but so are GET / (list), GET /:id (open), and POST /:id/submit; `roles.guard.ts:20` getAllAndOverride supports per-handler relaxation — unused here; `inspections.service.ts:32` SUBMITTABLE includes IN_PROGRESS but no code path ever sets it (`schema.prisma:79` is an orphan enum value); list() has no assignedInspectorId scoping.
 - problem: A named MVP role cannot see or act on its own assigned work, and "start inspection" (meeting: with a cannot-be-stopped confirmation) has no backing transition.
@@ -255,7 +255,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · relates INS-021 (untested lifecycle) · UI halves: INS-065 (nav gating), INS-066 (start confirmation)
 
 ### INS-058 · No server-side guards: self-role-change, self-deactivation, last-active-owner lockout   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): owners/users must not change their own role or deactivate themselves.
+- status: done            # 2026-07-18: updateRole/deactivate now compare actor to target and 403 on self-role-change/self-deactivate; demoting or deactivating the last ACTIVE ORG_OWNER is blocked; PATCH /users/:id/reactivate added; audit rows on all three (4d6a704, with the updateRole success-path + reactivate-audit assertions added in 2216288). Verified: unit 183 passing, integration 56 passing.
 - area: Auth & RBAC (users)
 - evidence: `users.service.ts:98` — updateRole blocks PLATFORM_ADMIN and above-actor roles but never compares actor to target (self-demotion possible via direct API; self-ESCALATION already impossible); `:114` — deactivate(orgId, userId) takes no actor: no self-guard, no last-active-owner guard, and no reactivate endpoint exists anywhere; the web enforces both rules client-side only (`users-client.tsx:89,109`); deactivation bites only at login/refresh — live access tokens survive their TTL (stateless JwtAuthGuard).
 - problem: An ORG_OWNER can demote or deactivate their own account with a direct API call, and nothing stops removing the org's only active owner — permanently locking the org out of user management (recovery only via the re-invite upsert or the DB).
@@ -264,7 +264,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · root cause: guards were built into the React row during INS-030 and never mirrored server-side · per-request status check / token revocation is a bigger scope — optional follow-up only
 
 ### INS-059 · Direct add-member (name/email/password) — email invite no longer the only onboarding path   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): owners add members via a form, no email round-trip.
+- status: done            # 2026-07-18: POST /users creates an ACTIVE user immediately, reusing invite()'s guard set (PLATFORM_ADMIN block, hasAtLeast role floor, foreign-org-email guard) with a generic 403 on any duplicate email, inside a transaction with an audit row (0354d34); web direct-add form added on /users (INS-070, e119fda). Verified: unit 183 passing, integration 56 passing.
 - area: Tenancy & onboarding
 - evidence: POST /users/invite only creates an Invitation row; public POST /invitations/accept is the sole path that sets a passwordHash (`invitations.service.ts:74-93`); the console's only affordance is the invite form (`users-client.tsx:221-240`) and `users/page.tsx:38` states "Onboarding is invite-only."
 - problem: The meeting decided owners can add members directly; no create-user-with-password endpoint exists.
@@ -282,7 +282,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · diagnostics: devtools Network first (which hop fails), then `curl -X PUT` the uploadUrl — curl-fails ⇒ unreachable (H1/H3), curl-succeeds ⇒ CORS (H2) · relates INS-052 (built the flow), INS-023, INS-002
 
 ### INS-061 · Archive is irreversible: no unarchive/restore path (buyers, suppliers, products)   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): archived buyers can't be seen or recovered.
+- status: done            # 2026-07-18: POST /:id/restore on buyers/suppliers/products — archive() becomes a no-op/409 once already archived (preserving the original archivedAt), audit rows on both archive and restore (2809e56); web pairing (Archived chip, dimmed rows, Restore in the row menu, confirm-before-archive) shipped as INS-067 (0f335a2). Verified: unit 183 passing, integration 56 passing.
 - area: Workspace CRUD
 - evidence: DELETE /buyers/:id sets archivedAt (`buyers.service.ts:103`) with no audit row; UpdateBuyerInput/UpdateSupplierInput exclude archivedAt so PATCH can't clear it either (`buyers.service.ts:11`, `suppliers.service.ts:9-13`); grep restore|unarchive = zero hits across API + web; the web archive action fires with no confirmation (`dashboard/actions.ts:47`); Product has the identical gap (`schema.prisma:323`).
 - problem: One misclick permanently removes a buyer from the working view; recovery requires direct DB access — violating the product's own "no hard-deletes, status/archive only" invariant, which presumes archive is a reversible state.
@@ -291,7 +291,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · pairs with INS-067 (archived-only view) · audit via the INS-006 pattern
 
 ### INS-062 · Reports are invisible to the org: no GET /reports list, no sidebar entry, no console screen   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): dedicated left-nav Reports section listing all completed reports.
+- status: done            # 2026-07-18: org-scoped GET /reports (@Roles('QA_MANAGER'), requireOrgId-scoped, q/take/skip, joins for buyer/PO/etc., canonicalSnapshot never in the list payload) (48c8c78); web /reports screen with rows linking to the preview + public /r/[token] verify link, wired into the sidebar (6f75952). Verified: unit 183 passing, integration 56 passing.
 - area: Reports & verification
 - evidence: `reports.controller.ts:13` exposes only generate / get-by-id / public verify — no org-scoped list; buyer guests have MORE visibility (GET /guest/reports, `guest.controller.ts:15`) than the org's own QA managers; the NAV has no Reports item (`shell.tsx:200-207`); `/report` is a bare redirect to /inspections.
 - problem: Completed signed reports — the product's deliverable — can only be found by knowing an inspection id and visiting /inspections/[id]/report.
@@ -494,7 +494,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 > **Product-feedback batch (2026-07-17 meeting), MEDIUM tier** — see the batch note under ## High.
 
 ### INS-064 · Loop payload contract drift: web reads requiredPhotoCount/orderIndex/name, wire has requiredShotCount/position/zoneName   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (found by the meeting-triage sweep — the reason the UI can't warn about missing photos).
+- status: done            # 2026-07-18: ApiInspectionLoop adopts the real wire field names (zoneName/position/requiredShotCount) instead of the invented ones, so the populate photo meter now reads real required counts instead of a permanently-empty 0 (cad1bfc) — the prerequisite INS-056's submit gate needed. Verified: type-check clean, unit 183 passing, integration 56 passing.
 - area: Web console / API contract (inspection loops)
 - evidence: `lib/api.ts:369-377` declares ApiInspectionLoop as {name, orderIndex, requiredPhotoCount} but GET /inspections/:id spreads raw Prisma loops {zoneName, position, requiredShotCount} (`inspections.controller.ts:60-71`, `schema.prisma:556-576`); the populate meter therefore computes totalRequired=0 (`populate-workspace.tsx:77-79`), renders a permanently-empty progress bar and "N of 0 required shots" (`:294`), sorts on an undefined orderIndex (`:67`); the report preview labels photo groups with undefined loop names (`report/page.tsx:50`).
 - problem: The populate UI is structurally blind to missing photos — the exact completeness signal INS-056 depends on; the progress meter has been dead since it was wired.
@@ -503,7 +503,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: concrete instance of the INS-008 drift class · prerequisite for INS-056's UI half
 
 ### INS-065 · Sidebar nav + create-inspection screen not role-aware; QA_MANAGER's inspector dropdown 403s empty   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): role-filtered sidebar; inspectors must not see create.
+- status: done            # 2026-07-18: GET /users relaxed to QA_MANAGER floor, fixing the empty inspector dropdown (4320b19); role-filtered sidebar nav, fail-closed to inspector visibility (e5a31f7), plus a server-side role gate on /inspections/new (part of 7210986). Verified: unit 183 passing, integration 56 passing, type-check clean.
 - area: Web console / RBAC UX
 - evidence: NAV is a static const rendered identically for every role (`shell.tsx:200-207`; the role prop is used only for the RoleBadge); the "New inspection" button renders unconditionally and list 403s are swallowed by `.catch(() => [])` (`inspections/page.tsx:64,98`); `/inspections/new` has no server-side role gate; side finding: the create screen fetches /users for the inspector dropdown but `users.controller.ts:11` requires ORG_OWNER — even a QA_MANAGER gets an EMPTY dropdown, so assignment is silently broken for the role meant to assign.
 - problem: Inspectors see owner-only nav and dead screens that render empty instead of erroring; the QA assignment flow is quietly broken.
@@ -512,7 +512,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · web gating is UX only — the API stays the RBAC authority (CLAUDE.md) · pairs with INS-057 (API relaxation) — the dropdown fix touches the API users floor, don't skip it as "web-only"
 
 ### INS-066 · Inspections rows: action menu (share/change/reassign) + PATCH endpoint + start-confirmation dialog   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): action menu on the inspections table; start warns it can't be stopped.
+- status: done            # 2026-07-18: PATCH /inspections/:id for pre-submission reassign + lotSize with sampling recompute (BadRequestException, not 500, on an out-of-band plan), permitted only pre-SUBMITTED, @Roles('QA_MANAGER'), audited (452ca7a); web per-row action menu (Open/Copy link/Start/Reset/Reassign) plus the cannot-be-stopped start confirmation built on the new ConfirmDialog (7210986, papercuts fixed in d9fd1f1). Verified: unit 183 passing, integration 56 passing.
 - area: Web console + Inspection lifecycle
 - evidence: each row is a bare Link to the review page (`inspections/page.tsx:146-154`) — no per-row menu, unlike the MoreVertical pattern used on directory/presets/users; InspectionsController has no PATCH/PUT route at all; zero confirm()/AlertDialog usages exist anywhere in the console.
 - problem: No way to reassign, share, or amend an inspection from the table, and the meeting's "starting cannot be stopped — only reset and restarted" notice has no home (no confirmation primitive exists).
@@ -521,7 +521,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · depends on INS-057 (start transition) — sequence that first · "Change" scope bounded by INS-014/CLAUDE.md immutability
 
 ### INS-067 · No archived-only view; archived rows nearly indistinguishable; archive-menu red off-token   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): a place to see + recover archived buyers; font-color inconsistency confirmed.
+- status: done            # 2026-07-18: Archived chip + dimmed rows + an AA-passing badge pair replace the ~2.2:1 ArchivedBadge, and the #DC2626 literal is replaced with the tokenized ui.danger red; ConfirmDialog — the design system's first modal, with dialog semantics/Escape-to-cancel/initial focus — gates Archive (0f335a2, dialog hardening in 11fdeab). Verified: web build clean, type-check clean.
 - area: Web console
 - evidence: chips are only All/Active (`directory-client.tsx:254`) so archived rows can only be found interleaved in "All"; the ArchivedBadge is ~2.2:1 contrast (#9AA3AE on #F0F3F7 at 10.5px, `:54-60`) — under WCAG AA — and archived rows are otherwise pixel-identical to active ones; the RowMenu Archive item hardcodes #DC2626 (`:152`) vs the token danger red #B42318 (`tokens.ts:34`) — the meeting's reported font-color inconsistency (same literal in InlineForm error text at `:277/:376`).
 - problem: The meeting's actual ask — review and recover archived entities — has no view, and archived state is easy to miss entirely.
@@ -538,7 +538,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · extends INS-005 (done) — not a duplicate · product picks the headline metric (DPHU vs pass rate); denormalize onto AqlResult only if the Json scan ever gets slow
 
 ### INS-069 · Internal status-change notification emails on inspection submit + QA decision   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): stakeholders emailed automatically on inspection status changes.
+- status: done            # 2026-07-18: sendInspectionStatusChange added to MailService; submit() mails every ACTIVE QA_MANAGER+ recipient, decide() mails the assigned inspector + owners with the decision + remarks; fired post-commit (never inside the $transaction), never-throwing, recipient lookups guarded (122cda3, hardened in 284c722). Verified: unit 183 passing, integration 56 passing.
 - area: Inspection lifecycle / Mail
 - evidence: submit() (`inspections.service.ts:192`) and decide() (`:270`) have no MailService dependency, and there is no event/notification infrastructure in apps/api/src at all; MailService (INS-004, done) is production-shaped (SMTP_URL transport, never-throws contract) but only sends invitations + guest magic links (`mail.service.ts:33`).
 - problem: QA managers don't learn an inspection awaits review; inspectors/owners don't learn the binding pass/fail/hold call was made. INS-020 covers only the buyer-facing report-delivery email — these internal transitions are untracked.
@@ -547,7 +547,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · builds on INS-004 (done) · coordinate copy with INS-020 so buyer + internal mails read as one system
 
 ### INS-070 · Scrub PLATFORM_ADMIN from the org-facing users UI; fix the DEACTIVATED→"Cross-tenant" badge bug   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17). The API half is ALREADY done — platform admins are org-invisible/unassignable.
+- status: done            # 2026-07-18: platform legend card + dead 'platform' mapUser paths removed from /users; real Deactivated/Suspended badge styles replace the "Cross-tenant" mislabel; deactivated rows disable the role select and swap in a reactivate affordance wired to INS-058's PATCH /users/:id/reactivate; direct-add form (invite-mode toggle) added alongside the existing invite flow (e119fda). Verified: web build clean, type-check clean.
 - area: Web console (users screen)
 - evidence: the API already hides/blocks platform admins everywhere (org-scoped list `users.service.ts:36`; unassignable `:99-101`; uninvitable `:60-62`; requireOrgId locks them out of /users entirely) — but the page still renders a "platform / Cross-tenant" role legend card in the org console (`users/page.tsx:42-52`); real bug: mapUser maps every non-ACTIVE/non-INVITED status to 'crosstenant' (`users-client.tsx:37`), so a DEACTIVATED user renders a "Cross-tenant" badge and keeps a live role select + deactivate menu.
 - fix: Remove (or gate to platform sessions) the platform legend card and the dead 'platform' row paths; add proper Deactivated/Suspended badge styles; on deactivated rows disable the role select and swap deactivate for a reactivate affordance (pairs with INS-058's endpoint).

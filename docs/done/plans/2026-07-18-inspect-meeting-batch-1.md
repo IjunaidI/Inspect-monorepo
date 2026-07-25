@@ -952,10 +952,10 @@ Append to `meeting-batch1.e2e-spec.ts`:
       expect(updated.status).toBe('ASSIGNED');
 
       const resized = expect2xx(
-        await client.patch(`/inspections/${insp.id}`, { token: orgA.ownerToken, body: { lotSize: 1200 } }),
+        await client.patch(`/inspections/${insp.id}`, { token: orgA.ownerToken, body: { lotSize: 1201 } }),
         'PATCH lotSize',
       );
-      expect(resized.lotSize).toBe(1200);
+      expect(resized.lotSize).toBe(1201);
       expect(resized.computedSampling.sampleSizeCodeLetter).toBe('K');
 
       await registerPhoto(insp.id, insp.loopId, `patch-${tag}`);
