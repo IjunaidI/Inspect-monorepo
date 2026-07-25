@@ -13,9 +13,9 @@ const DEMO_USERS: ApiUser[] = [
   { id: 'demo-u4', name: 'Meera Nair', email: 'meera@asha-inspect.com', role: 'INSPECTOR', status: 'INVITED', lastLoginAt: null },
 ];
 
-type RoleKey = 'inspector' | 'qa' | 'owner' | 'platform';
+type RoleKey = 'inspector' | 'qa' | 'owner';
 const ROLE_KEY: Record<string, RoleKey> = {
-  INSPECTOR: 'inspector', QA_MANAGER: 'qa', ORG_OWNER: 'owner', PLATFORM_ADMIN: 'platform',
+  INSPECTOR: 'inspector', QA_MANAGER: 'qa', ORG_OWNER: 'owner',
 };
 
 export default async function UsersPage({
@@ -35,7 +35,7 @@ export default async function UsersPage({
     <div style={{ padding: '28px 32px' }}>
       <PageHead
         title="Users & roles"
-        sub="Roles are additive — Org Owner includes QA Manager, which includes Inspector. Onboarding is invite-only."
+        sub="Roles are additive — Org Owner includes QA Manager, which includes Inspector."
       />
 
       <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
@@ -43,7 +43,6 @@ export default async function UsersPage({
           ['inspector', 'Populate & view their inspections'],
           ['qa', 'Inspector + make binding Pass / Fail / Hold'],
           ['owner', 'QA + manage users, buyers, suppliers'],
-          ['platform', 'Cross-tenant · the only role that can upload photos'],
         ] as [RoleKey, string][]).map(([r, desc]) => (
           <div key={r} style={{ flex: '1 1 240px', display: 'flex', gap: 10, alignItems: 'flex-start', padding: 14, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10 }}>
             <RoleBadge role={r} />

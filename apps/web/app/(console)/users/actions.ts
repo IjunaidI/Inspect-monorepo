@@ -53,3 +53,32 @@ export async function deactivateUser(userId: string): Promise<{ error?: string }
   revalidatePath('/users');
   return {};
 }
+
+export async function addMember(
+  _prev: unknown,
+  formData: FormData,
+): Promise<{ error?: string; data?: { email: string } }> {
+  const name = (formData.get('name') as string)?.trim();
+  const email = (formData.get('email') as string)?.trim();
+  const password = formData.get('password') as string;
+  const role = (formData.get('role') as string) || 'INSPECTOR';
+  if (!email) return { error: 'Email is required' };
+  if (!password || password.length < 8) return { error: 'Password must be at least 8 characters' };
+  try {
+    await apiPost('/users', { name, email, password, role });
+  } catch (e) {
+    return { error: msg(e, 'Failed to add member') };
+  }
+  revalidatePath('/users');
+  return { data: { email } };
+}
+
+export async function reactivateUser(userId: string): Promise<{ error?: string }> {
+  try {
+    await apiPatch(`/users/${userId}/reactivate`);
+  } catch (e) {
+    return { error: msg(e, 'Failed to reactivate user') };
+  }
+  revalidatePath('/users');
+  return {};
+}

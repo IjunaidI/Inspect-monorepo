@@ -2,21 +2,22 @@
 
 import { useActionState, useTransition, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Copy, Check, Lock, Plus, Search, MoreVertical } from 'lucide-react';
+import { Copy, Check, Plus, Search, MoreVertical } from 'lucide-react';
 import { Avatar, Mono, RoleBadge } from '@/components/inspect/shell';
 import { severity, ui, type RoleKey } from '@/components/inspect/tokens';
 import type { ApiUser } from '@/lib/api';
-import { deactivateUser, inviteUser, updateUserRole } from './actions';
+import { addMember, deactivateUser, inviteUser, reactivateUser, updateUserRole } from './actions';
 
-type StatusKey = 'active' | 'invited' | 'crosstenant';
+type StatusKey = 'active' | 'invited' | 'deactivated' | 'suspended';
 const statusStyle: Record<StatusKey, { label: string; fg: string; bg: string; dot: string }> = {
   active: { label: 'Active', fg: '#1F6B43', bg: '#EAF6F0', dot: '#1F8A4C' },
   invited: { label: 'Invited', fg: severity.major.fg, bg: severity.major.bg, dot: severity.major.dot },
-  crosstenant: { label: 'Cross-tenant', fg: '#475467', bg: '#EFF2F6', dot: '#8A93A1' },
+  deactivated: { label: 'Deactivated', fg: '#475467', bg: '#EFF2F6', dot: '#8A93A1' },
+  suspended: { label: 'Suspended', fg: severity.major.fg, bg: severity.major.bg, dot: severity.major.dot },
 };
 const BG_PALETTE = ['#0B1220', '#1457A3', '#0B7D6B', '#7C3AED', '#B5791A', '#475467'];
-const ROLE_MAP: Record<ApiUser['role'], RoleKey> = {
-  INSPECTOR: 'inspector', QA_MANAGER: 'qa', ORG_OWNER: 'owner', PLATFORM_ADMIN: 'platform',
+const ROLE_MAP: Partial<Record<ApiUser['role'], RoleKey>> = {
+  INSPECTOR: 'inspector', QA_MANAGER: 'qa', ORG_OWNER: 'owner',
 };
 
 function initialsOf(name: string) {
@@ -34,7 +35,11 @@ function mapUser(u: ApiUser, i: number): UserRow {
     email: u.email,
     role: ROLE_MAP[u.role] ?? 'inspector',
     apiRole: u.role,
-    status: u.status === 'ACTIVE' ? 'active' : u.status === 'INVITED' ? 'invited' : 'crosstenant',
+    status:
+      u.status === 'ACTIVE' ? 'active'
+      : u.status === 'INVITED' ? 'invited'
+      : u.status === 'SUSPENDED' ? 'suspended'
+      : 'deactivated',
     last: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
   };
 }
@@ -57,7 +62,6 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
   const [pending, start] = useTransition();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deactivating, startDeactivate] = useTransition();
-  const locked = row.role === 'platform';
   const ss = statusStyle[row.status];
 
   const th = { fontSize: 11, fontWeight: 550, color: ui.sub, textTransform: 'uppercase' as const, letterSpacing: 0.4, padding: '13px 20px', textAlign: 'left' as const, borderBottom: `1px solid ${ui.line}`, background: ui.fill };
@@ -78,26 +82,19 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
         </div>
       </td>
       <td style={td}>
-        {locked ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <RoleBadge role={row.role} />
-            <Lock size={13} color={ui.faint} />
-          </div>
-        ) : (
-          <select
-            defaultValue={row.apiRole}
-            disabled={pending || row.you}
-            onChange={(e) => start(async () => {
-              const r = await updateUserRole(row.id, e.target.value);
-              if (r.error) alert(r.error);
-            })}
-            style={{ height: 32, padding: '0 8px', fontSize: 12.5, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, background: '#fff', cursor: row.you ? 'default' : 'pointer', opacity: pending ? 0.6 : 1 }}
-          >
-            <option value="INSPECTOR">Inspector</option>
-            <option value="QA_MANAGER">QA Manager</option>
-            <option value="ORG_OWNER">Org Owner</option>
-          </select>
-        )}
+        <select
+          defaultValue={row.apiRole}
+          disabled={pending || row.you || row.status === 'deactivated'}
+          onChange={(e) => start(async () => {
+            const r = await updateUserRole(row.id, e.target.value);
+            if (r.error) alert(r.error);
+          })}
+          style={{ height: 32, padding: '0 8px', fontSize: 12.5, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, background: '#fff', cursor: row.you ? 'default' : 'pointer', opacity: pending ? 0.6 : 1 }}
+        >
+          <option value="INSPECTOR">Inspector</option>
+          <option value="QA_MANAGER">QA Manager</option>
+          <option value="ORG_OWNER">Org Owner</option>
+        </select>
       </td>
       <td style={td}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: ss.fg, fontWeight: 500 }}>
@@ -106,7 +103,7 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
       </td>
       <td style={{ ...td, color: ui.sub }}>{row.last}</td>
       <td style={{ ...td, textAlign: 'right' }}>
-        {!row.you && !locked && (
+        {!row.you && (
           <div style={{ position: 'relative', display: 'inline-block' }}>
             <button
               onClick={() => setMenuOpen(!menuOpen)}
@@ -116,19 +113,35 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
             </button>
             {menuOpen && (
               <div style={{ position: 'absolute', right: 0, top: 32, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 50, minWidth: 160, overflow: 'hidden' }}>
-                <button
-                  onClick={() => {
-                    setMenuOpen(false);
-                    startDeactivate(async () => {
-                      const r = await deactivateUser(row.id);
-                      if (r.error) alert(r.error);
-                    });
-                  }}
-                  disabled={deactivating}
-                  style={{ display: 'block', width: '100%', padding: '10px 14px', fontSize: 13, color: '#DC2626', background: 'transparent', borderWidth: 0, fontFamily: 'inherit', textAlign: 'left', cursor: deactivating ? 'default' : 'pointer', opacity: deactivating ? 0.6 : 1 }}
-                >
-                  Deactivate
-                </button>
+                {row.status === 'deactivated' ? (
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      startDeactivate(async () => {
+                        const r = await reactivateUser(row.id);
+                        if (r.error) alert(r.error);
+                      });
+                    }}
+                    disabled={deactivating}
+                    style={{ display: 'block', width: '100%', padding: '10px 14px', fontSize: 13, color: ui.accent, background: 'transparent', borderWidth: 0, fontFamily: 'inherit', textAlign: 'left', cursor: deactivating ? 'default' : 'pointer', opacity: deactivating ? 0.6 : 1 }}
+                  >
+                    Reactivate
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      startDeactivate(async () => {
+                        const r = await deactivateUser(row.id);
+                        if (r.error) alert(r.error);
+                      });
+                    }}
+                    disabled={deactivating}
+                    style={{ display: 'block', width: '100%', padding: '10px 14px', fontSize: 13, color: ui.danger, background: 'transparent', borderWidth: 0, fontFamily: 'inherit', textAlign: 'left', cursor: deactivating ? 'default' : 'pointer', opacity: deactivating ? 0.6 : 1 }}
+                  >
+                    Deactivate
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -145,6 +158,8 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
   const [search, setSearch] = useState(serverQuery);
   const [showInvite, setShowInvite] = useState(false);
   const [state, action, pending] = useActionState(inviteUser, {});
+  const [mode, setMode] = useState<'direct' | 'invite'>('direct');
+  const [addState, addAction, addPending] = useActionState(addMember, {} as { error?: string; data?: { email: string } });
 
   const rows = users.map((u, i) => ({ ...mapUser(u, i), you: u.id === currentUserId }));
   const filtered = rows.filter((r) =>
@@ -179,65 +194,123 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
             onClick={() => setShowInvite(!showInvite)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 14px', borderRadius: 8, fontWeight: 550, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0 }}
           >
-            <Plus size={15} /> Invite user
+            <Plus size={15} /> Add member
           </button>
         </div>
       </div>
 
-      {/* Inline invite form */}
+      {/* Inline add-member panel */}
       {showInvite && (
         <div style={{ background: ui.accentSoft, border: `1px solid #CFE5FD`, borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>Invite a team member</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Add a team member</div>
             <button onClick={() => setShowInvite(false)} style={{ marginLeft: 'auto', background: 'transparent', borderWidth: 0, cursor: 'pointer', fontSize: 18, color: ui.sub, lineHeight: 1 }}>×</button>
           </div>
 
-          {state.error && (
-            <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12.5, color: '#DC2626' }}>
-              {state.error}
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            {(['direct', 'invite'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                style={{ height: 30, padding: '0 14px', borderRadius: 999, fontSize: 12.5, fontWeight: mode === m ? 600 : 500, fontFamily: 'inherit', cursor: 'pointer', background: mode === m ? '#fff' : 'transparent', color: mode === m ? ui.accent : ui.sub, border: `1px solid ${mode === m ? ui.accent : ui.line}` }}
+              >
+                {m === 'direct' ? 'Add directly' : 'Invite by email'}
+              </button>
+            ))}
+          </div>
 
-          {state.data ? (
-            <div style={{ padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#16A34A', marginBottom: 8 }}>
-                {state.data.emailSent
-                  ? `Invitation emailed to ${state.data.email} — link below as backup.`
-                  : `Invitation created for ${state.data.email}`}
-              </div>
-              <div style={{ fontSize: 12, color: ui.sub, marginBottom: 10 }}>
-                {state.data.emailSent
-                  ? 'Share the link below only if the email doesn’t arrive:'
-                  : 'Email could not be sent — share this link manually:'}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, padding: '8px 12px' }}>
-                <Mono style={{ fontSize: 11.5, flex: 1, wordBreak: 'break-all', color: ui.ink }}>
-                  {typeof window !== 'undefined' ? window.location.origin : ''}/invite?token={state.data.token}&email={encodeURIComponent(state.data.email)}&role={state.data.role}
-                </Mono>
-                <CopyButton text={`${typeof window !== 'undefined' ? window.location.origin : ''}/invite?token=${state.data.token}&email=${encodeURIComponent(state.data.email)}&role=${state.data.role}`} />
-              </div>
-            </div>
+          {mode === 'invite' ? (
+            <>
+              {state.error && (
+                <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12.5, color: ui.danger }}>
+                  {state.error}
+                </div>
+              )}
+
+              {state.data ? (
+                <div style={{ padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#16A34A', marginBottom: 8 }}>
+                    {state.data.emailSent
+                      ? `Invitation emailed to ${state.data.email} — link below as backup.`
+                      : `Invitation created for ${state.data.email}`}
+                  </div>
+                  <div style={{ fontSize: 12, color: ui.sub, marginBottom: 10 }}>
+                    {state.data.emailSent
+                      ? 'Share the link below only if the email doesn’t arrive:'
+                      : 'Email could not be sent — share this link manually:'}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, padding: '8px 12px' }}>
+                    <Mono style={{ fontSize: 11.5, flex: 1, wordBreak: 'break-all', color: ui.ink }}>
+                      {typeof window !== 'undefined' ? window.location.origin : ''}/invite?token={state.data.token}&email={encodeURIComponent(state.data.email)}&role={state.data.role}
+                    </Mono>
+                    <CopyButton text={`${typeof window !== 'undefined' ? window.location.origin : ''}/invite?token=${state.data.token}&email=${encodeURIComponent(state.data.email)}&role=${state.data.role}`} />
+                  </div>
+                </div>
+              ) : (
+                <form action={action}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'flex-end' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Email *</label>
+                      <input name="email" type="email" required style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} placeholder="colleague@example.com" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Role</label>
+                      <select name="role" defaultValue="INSPECTOR" style={{ height: 36, padding: '0 8px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8 }}>
+                        <option value="INSPECTOR">Inspector</option>
+                        <option value="QA_MANAGER">QA Manager</option>
+                        <option value="ORG_OWNER">Org Owner</option>
+                      </select>
+                    </div>
+                    <button type="submit" disabled={pending}
+                      style={{ height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 550, fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.65 : 1, marginBottom: 1 }}>
+                      {pending ? 'Sending…' : 'Send invite'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </>
           ) : (
-            <form action={action}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'flex-end' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Email *</label>
-                  <input name="email" type="email" required style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} placeholder="colleague@example.com" />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Role</label>
-                  <select name="role" defaultValue="INSPECTOR" style={{ height: 36, padding: '0 8px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8 }}>
-                    <option value="INSPECTOR">Inspector</option>
-                    <option value="QA_MANAGER">QA Manager</option>
-                    <option value="ORG_OWNER">Org Owner</option>
-                  </select>
-                </div>
-                <button type="submit" disabled={pending}
-                  style={{ height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 550, fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.65 : 1, marginBottom: 1 }}>
-                  {pending ? 'Sending…' : 'Send invite'}
-                </button>
+            addState.data ? (
+              <div style={{ padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#16A34A' }}>
+                {addState.data.email} was added and can sign in now with the password you set.
               </div>
-            </form>
+            ) : (
+              <form action={addAction}>
+                {addState.error && (
+                  <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12.5, color: ui.danger }}>
+                    {addState.error}
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Name</label>
+                    <input name="name" style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} placeholder="Full name" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Email *</label>
+                    <input name="email" type="email" required style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} placeholder="colleague@example.com" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Password * (min 8)</label>
+                    <input name="password" type="password" required minLength={8} style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Role</label>
+                    <select name="role" defaultValue="INSPECTOR" style={{ width: '100%', height: 36, padding: '0 8px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8 }}>
+                      <option value="INSPECTOR">Inspector</option>
+                      <option value="QA_MANAGER">QA Manager</option>
+                      <option value="ORG_OWNER">Org Owner</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                  <button type="submit" disabled={addPending}
+                    style={{ height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 550, fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0, cursor: addPending ? 'default' : 'pointer', opacity: addPending ? 0.65 : 1 }}>
+                    {addPending ? 'Adding…' : 'Add member'}
+                  </button>
+                </div>
+              </form>
+            )
           )}
         </div>
       )}
