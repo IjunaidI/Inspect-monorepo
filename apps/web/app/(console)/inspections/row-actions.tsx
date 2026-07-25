@@ -52,6 +52,7 @@ export function RowActions({
       if (r.error) alert(r.error);
       router.refresh();
       setOpen(false);
+      setReassigning(false);
     });
   }
 
@@ -70,7 +71,14 @@ export function RowActions({
             Open
           </button>
           <button
-            onClick={async () => { await navigator.clipboard.writeText(`${window.location.origin}/inspections/${id}/review`); setOpen(false); }}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(`${window.location.origin}/inspections/${id}/review`);
+              } catch {
+                alert('Could not copy the link — copy it from the address bar after opening the inspection.');
+              }
+              setOpen(false);
+            }}
             style={item}
           >
             Copy link

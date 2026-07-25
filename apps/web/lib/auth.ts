@@ -87,6 +87,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const u = user as unknown as Record<string, unknown>;
         return {
           ...token,
+          userId: u.id,
           accessToken: u.accessToken,
           refreshToken: u.refreshToken,
           role: u.role,
@@ -109,6 +110,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       s.accessToken = token.accessToken;
       s.role = token.role;
       s.orgId = token.orgId;
+      // Project the API user id explicitly (RowActions gates the assigned
+      // inspector's Start/Reset on it) instead of relying on Auth.js's implicit
+      // token.sub -> session.user.id default.
+      if (session.user) {
+        (session.user as { id?: string }).id =
+          (token.userId as string | undefined) ?? (token.sub as string | undefined);
+      }
       if (token.error) s.error = token.error;
       return session;
     }
