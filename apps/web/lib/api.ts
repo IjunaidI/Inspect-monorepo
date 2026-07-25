@@ -390,6 +390,23 @@ export interface ApiReport {
   generatedBy?: { id: string; name: string } | null;
 }
 
+/** GET /reports row (INS-062) — list metadata only, never canonicalSnapshot. */
+export interface ApiReportListItem {
+  id: string;
+  inspectionId: string;
+  status: string;
+  generatedAt: string;
+  contentHash?: string | null;
+  pdfStorageKey?: string | null;
+  verificationToken?: string | null;
+  buyer?: { id: string; name: string } | null;
+  inspection?: {
+    status: string;
+    purchaseOrder?: { poNumber: string } | null;
+    product?: { styleNumber: string } | null;
+  } | null;
+}
+
 export interface ApiVerifyResult {
   valid: boolean;
   hashMatches: boolean;
