@@ -30,8 +30,10 @@ export default async function UsersPage({
   // Web-side UX gate only (INS-065 relaxed GET /users to QA_MANAGER for the
   // create-inspection dropdown) — every management route here still floors at
   // ORG_OWNER, so anything below that role gets redirected before it can load
-  // a screen full of controls that would 403.
-  if (!apiRoleAtLeast(session?.role, 'ORG_OWNER')) redirect('/dashboard');
+  // a screen full of controls that would 403. /dashboard is itself a QA-floor
+  // screen with no gate, so send below-owner roles to /inspections instead
+  // (same destination inspections/new uses for the same situation).
+  if (!apiRoleAtLeast(session?.role, 'ORG_OWNER')) redirect('/inspections');
   const currentUserId = session?.user?.id;
 
   // Server-side search (INS-050) — the client keeps its instant filter for the loaded page.

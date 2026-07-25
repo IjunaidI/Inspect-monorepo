@@ -354,7 +354,7 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
   describe('final-review fixes', () => {
     it('C1: Platform Admin loads the populate read for an org inspection; ORG_OWNER is refused', async () => {
       const insp = await createInspection(false);
-      await registerPhoto(insp.id, insp.loopId, `populate-read-${tag}`);
+      const photoId = await registerPhoto(insp.id, insp.loopId, `populate-read-${tag}`);
 
       const admin = expect2xx(
         await client.get(`/inspections/${insp.id}/populate`, { token: adminToken }),
@@ -362,7 +362,13 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       );
       expect(Array.isArray(admin.loops)).toBe(true);
       expect(admin.loops.length).toBeGreaterThan(0);
-      expect(admin.loops[0].requiredShotCount).toBeGreaterThan(0);
+      const loop = admin.loops.find((l: { id: string }) => l.id === insp.loopId);
+      expect(loop.requiredShotCount).toBeGreaterThan(0);
+      // The regression this guards: the loop's `include` dropping photos/defects/
+      // measurements would still leave `loops` non-empty — assert the registered
+      // photo actually rides along on its loop.
+      expect(loop.photos.length).toBe(1);
+      expect(loop.photos[0].id).toBe(photoId);
 
       const owner = await client.get(`/inspections/${insp.id}/populate`, { token: orgA.ownerToken });
       expect(owner.status).toBe(403);
