@@ -17,6 +17,8 @@ export const ui = {
   fill: '#FAFBFC',
   accent: '#037BF4',
   accentSoft: '#F0F8FF',
+  /** Destructive-action red — same hue as severity.critical.fg; never hardcode #DC2626. */
+  danger: '#B42318',
   font: 'var(--font-sans), Inter, -apple-system, system-ui, sans-serif',
 } as const;
 

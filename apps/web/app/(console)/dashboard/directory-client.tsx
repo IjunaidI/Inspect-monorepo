@@ -10,9 +10,10 @@ import {
   Plus,
 } from 'lucide-react';
 import { Avatar, Btn, Mono } from '@/components/inspect/shell';
+import { ConfirmDialog } from '@/components/inspect/confirm-dialog';
 import { mono as monoStyle, ui } from '@/components/inspect/tokens';
 import type { ApiBuyer, ApiLoopPreset, ApiSupplier } from '@/lib/api';
-import { archiveBuyer, archiveSupplier, createBuyer, createSupplier } from './actions';
+import { archiveBuyer, archiveSupplier, createBuyer, createSupplier, restoreBuyer, restoreSupplier } from './actions';
 
 const th = {
   fontSize: 11,
@@ -53,7 +54,7 @@ const fmtDate = (iso?: string) => (iso ? DATE_FMT.format(new Date(iso)) : '—')
 
 function ArchivedBadge() {
   return (
-    <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: ui.lineSoft, color: ui.faint, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+    <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: '#EFF2F6', color: '#475467', textTransform: 'uppercase', letterSpacing: 0.4 }}>
       Archived
     </span>
   );
@@ -114,9 +115,10 @@ function InlineForm({ title, onClose, children }: { title: string; onClose: () =
   );
 }
 
-function RowMenu({ id, type, onClose }: { id: string; type: 'buyer' | 'supplier'; onClose: () => void }) {
+function RowMenu({ id, type, archived, onClose }: { id: string; type: 'buyer' | 'supplier'; archived: boolean; onClose: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -127,31 +129,50 @@ function RowMenu({ id, type, onClose }: { id: string; type: 'buyer' | 'supplier'
     return () => document.removeEventListener('mousedown', h);
   }, [onClose]);
 
+  const item = (color: string): React.CSSProperties => ({
+    display: 'block', width: '100%', padding: '10px 14px', fontSize: 13, color,
+    background: 'transparent', borderWidth: '1px 0 0 0', borderStyle: 'solid', borderColor: ui.lineSoft,
+    fontFamily: 'inherit', textAlign: 'left', cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.6 : 1,
+  });
+
+  function runArchiveOrRestore(fn: (id: string) => Promise<{ error?: string } | undefined>) {
+    startTransition(async () => {
+      const r = await fn(id);
+      if (r?.error) alert(r.error);
+      router.refresh();
+      onClose();
+    });
+  }
+
   return (
     <div ref={ref} style={{ position: 'absolute', right: 0, top: 32, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 50, minWidth: 180, overflow: 'hidden' }}>
-      <button onClick={() => { router.push(`/${type === 'buyer' ? 'buyers' : 'suppliers'}/${id}`); onClose(); }}
-        style={{ display: 'block', width: '100%', padding: '10px 14px', fontSize: 13, color: ui.ink, background: 'transparent', borderWidth: 0, fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+      <button onClick={() => { router.push(`/${type === 'buyer' ? 'buyers' : 'suppliers'}/${id}`); onClose(); }} style={{ ...item(ui.ink), borderWidth: 0 }}>
         Edit
       </button>
       {type === 'buyer' && (
-        <button onClick={() => { router.push(`/buyers/${id}/guests`); onClose(); }}
-          style={{ display: 'block', width: '100%', padding: '10px 14px', fontSize: 13, color: ui.ink, background: 'transparent', borderWidth: '1px 0 0 0', borderStyle: 'solid', borderColor: ui.lineSoft, fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer' }}>
+        <button onClick={() => { router.push(`/buyers/${id}/guests`); onClose(); }} style={item(ui.ink)}>
           Manage guests
         </button>
       )}
-      <button
-        onClick={() => {
-          startTransition(async () => {
-            const fn = type === 'buyer' ? archiveBuyer : archiveSupplier;
-            const r = await fn(id);
-            if (r?.error) alert(r.error);
-            onClose();
-          });
-        }}
-        disabled={pending}
-        style={{ display: 'block', width: '100%', padding: '10px 14px', fontSize: 13, color: '#DC2626', background: 'transparent', borderWidth: '1px 0 0 0', borderStyle: 'solid', borderColor: ui.lineSoft, fontFamily: 'inherit', textAlign: 'left', cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.6 : 1 }}>
-        Archive
-      </button>
+      {archived ? (
+        <button disabled={pending} onClick={() => runArchiveOrRestore(type === 'buyer' ? restoreBuyer : restoreSupplier)} style={item(ui.accent)}>
+          Restore
+        </button>
+      ) : (
+        <button disabled={pending} onClick={() => setConfirming(true)} style={item(ui.danger)}>
+          Archive
+        </button>
+      )}
+      {confirming && (
+        <ConfirmDialog
+          title={`Archive this ${type}?`}
+          body="Archived records leave the active views but stay recoverable from the Archived tab."
+          confirmLabel="Archive"
+          danger
+          onConfirm={() => { setConfirming(false); runArchiveOrRestore(type === 'buyer' ? archiveBuyer : archiveSupplier); }}
+          onCancel={() => { setConfirming(false); onClose(); }}
+        />
+      )}
     </div>
   );
 }
@@ -174,8 +195,10 @@ export function DirectoryClient({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  /** Reflects the server-side ?includeArchived=1 filter (API default = active only). */
+  /** Server filter: ?includeArchived=1 widens the result set; ?view=archived narrows the display. */
   const showArchived = searchParams.get('includeArchived') === '1';
+  const view: 'all' | 'active' | 'archived' =
+    searchParams.get('view') === 'archived' ? 'archived' : showArchived ? 'all' : 'active';
   /** The server-side search term currently applied (INS-050). */
   const serverQuery = searchParams.get('q') ?? '';
 
@@ -188,11 +211,11 @@ export function DirectoryClient({
   const [buyerState, buyerAction, buyerPending] = useActionState(createBuyer, {});
   const [supplierState, supplierAction, supplierPending] = useActionState(createSupplier, {});
 
-  /** Push new server-side params (search/page/archived), preserving the others. */
-  function pushListParams(next: { q?: string; page?: number; includeArchived?: boolean }) {
+  function pushListParams(next: { q?: string; page?: number; view?: 'all' | 'active' | 'archived' }) {
     const sp = new URLSearchParams();
-    const archived = next.includeArchived !== undefined ? next.includeArchived : showArchived;
-    if (archived) sp.set('includeArchived', '1');
+    const v = next.view ?? view;
+    if (v !== 'active') sp.set('includeArchived', '1');
+    if (v === 'archived') sp.set('view', 'archived');
     const q = next.q !== undefined ? next.q : serverQuery;
     if (q) sp.set('q', q);
     if (next.page && next.page > 1) sp.set('page', String(next.page));
@@ -220,6 +243,9 @@ export function DirectoryClient({
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     (s.address ?? '').toLowerCase().includes(search.toLowerCase()),
   );
+
+  const visibleBuyers = view === 'archived' ? filteredBuyers.filter((b) => b.archivedAt) : filteredBuyers;
+  const visibleSuppliers = view === 'archived' ? filteredSuppliers.filter((s) => s.archivedAt) : filteredSuppliers;
 
   /** Real Prev/Next (INS-050): next exists when the server returned a full page. */
   const hasPrev = page > 1;
@@ -251,12 +277,9 @@ export function DirectoryClient({
             placeholder={tab === 'buyers' ? 'Search buyers by name… (Enter searches all)' : 'Search suppliers by name or city… (Enter searches all)'} />
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button style={chip(showArchived)} onClick={() => pushListParams({ includeArchived: true })}>
-            All{showArchived && <Mono style={{ opacity: 0.7 }}>{tab === 'buyers' ? buyers.length : suppliers.length}</Mono>}
-          </button>
-          <button style={chip(!showArchived)} onClick={() => pushListParams({ includeArchived: false })}>
-            Active{!showArchived && <Mono style={{ opacity: 0.7 }}>{tab === 'buyers' ? buyers.length : suppliers.length}</Mono>}
-          </button>
+          <button style={chip(view === 'all')} onClick={() => pushListParams({ view: 'all' })}>All</button>
+          <button style={chip(view === 'active')} onClick={() => pushListParams({ view: 'active' })}>Active</button>
+          <button style={chip(view === 'archived')} onClick={() => pushListParams({ view: 'archived' })}>Archived</button>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11.5, color: ui.faint }}>{live ? 'Live · from API' : 'Demo data · API offline'}</span>
@@ -274,7 +297,7 @@ export function DirectoryClient({
           {showAddBuyer && (
             <InlineForm title="Add Buyer" onClose={() => setShowAddBuyer(false)}>
               <form action={buyerAction}>
-                {buyerState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: '#DC2626' }}>{buyerState.error}</div>}
+                {buyerState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: ui.danger }}>{buyerState.error}</div>}
                 <InputRow label="Name *" name="name" placeholder="Buyer company name" />
                 <InputRow label="Logo URL" name="logoUrl" placeholder="https://…" />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -317,11 +340,11 @@ export function DirectoryClient({
                 </tr>
               </thead>
               <tbody>
-                {filteredBuyers.map((b, i) => {
+                {visibleBuyers.map((b, i) => {
                   const color = b.primaryColor || BRANDS[i % BRANDS.length];
                   const initials = initialsOf(b.name);
                   return (
-                    <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => { if (!menuOpen) window.location.href = `/buyers/${b.id}`; }}>
+                    <tr key={b.id} style={{ cursor: 'pointer', opacity: b.archivedAt ? 0.6 : 1 }} onClick={() => { if (!menuOpen) window.location.href = `/buyers/${b.id}`; }}>
                       <td style={td}>
                         {b.logoUrl ? (
                           <img src={b.logoUrl} alt={b.name} style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain', border: `1px solid ${ui.lineSoft}` }} />
@@ -351,7 +374,7 @@ export function DirectoryClient({
                             style={{ width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, background: 'transparent', border: 'none', cursor: 'pointer' }}>
                             <MoreVertical size={16} />
                           </button>
-                          {menuOpen === b.id && <RowMenu id={b.id} type="buyer" onClose={() => setMenuOpen(null)} />}
+                          {menuOpen === b.id && <RowMenu id={b.id} type="buyer" archived={!!b.archivedAt} onClose={() => setMenuOpen(null)} />}
                         </div>
                       </td>
                     </tr>
@@ -360,7 +383,7 @@ export function DirectoryClient({
               </tbody>
             </table>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: `1px solid ${ui.lineSoft}`, color: ui.sub, fontSize: 12.5 }}>
-              <span>Showing <Mono>{filteredBuyers.length}</Mono> buyer{filteredBuyers.length === 1 ? '' : 's'}</span>
+              <span>Showing <Mono>{visibleBuyers.length}</Mono> buyer{visibleBuyers.length === 1 ? '' : 's'}</span>
               <Pager page={page} hasPrev={hasPrev} hasNext={hasNext} onPage={(n) => pushListParams({ page: n })} />
             </div>
           </div>
@@ -373,7 +396,7 @@ export function DirectoryClient({
           {showAddSupplier && (
             <InlineForm title="Add Supplier" onClose={() => setShowAddSupplier(false)}>
               <form action={supplierAction}>
-                {supplierState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: '#DC2626' }}>{supplierState.error}</div>}
+                {supplierState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: ui.danger }}>{supplierState.error}</div>}
                 <InputRow label="Name *" name="name" placeholder="Factory / supplier name" />
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>Address</label>
@@ -405,8 +428,8 @@ export function DirectoryClient({
                 </tr>
               </thead>
               <tbody>
-                {filteredSuppliers.map((s) => (
-                  <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => { if (!menuOpen) window.location.href = `/suppliers/${s.id}`; }}>
+                {visibleSuppliers.map((s) => (
+                  <tr key={s.id} style={{ cursor: 'pointer', opacity: s.archivedAt ? 0.6 : 1 }} onClick={() => { if (!menuOpen) window.location.href = `/suppliers/${s.id}`; }}>
                     <td style={td}><Avatar initials={initialsOf(s.name)} size={32} bg="#475467" /></td>
                     <td style={td}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -431,7 +454,7 @@ export function DirectoryClient({
                           style={{ width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, background: 'transparent', border: 'none', cursor: 'pointer' }}>
                           <MoreVertical size={16} />
                         </button>
-                        {menuOpen === s.id && <RowMenu id={s.id} type="supplier" onClose={() => setMenuOpen(null)} />}
+                        {menuOpen === s.id && <RowMenu id={s.id} type="supplier" archived={!!s.archivedAt} onClose={() => setMenuOpen(null)} />}
                       </div>
                     </td>
                   </tr>
@@ -439,7 +462,7 @@ export function DirectoryClient({
               </tbody>
             </table>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: `1px solid ${ui.lineSoft}`, color: ui.sub, fontSize: 12.5 }}>
-              <span>Showing <Mono>{filteredSuppliers.length}</Mono> supplier{filteredSuppliers.length === 1 ? '' : 's'}</span>
+              <span>Showing <Mono>{visibleSuppliers.length}</Mono> supplier{visibleSuppliers.length === 1 ? '' : 's'}</span>
               <Pager page={page} hasPrev={hasPrev} hasNext={hasNext} onPage={(n) => pushListParams({ page: n })} />
             </div>
           </div>

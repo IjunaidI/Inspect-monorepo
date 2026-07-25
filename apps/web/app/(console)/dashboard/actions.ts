@@ -105,3 +105,23 @@ export async function archiveSupplier(id: string): Promise<{ error?: string }> {
   revalidatePath('/dashboard');
   redirect('/dashboard');
 }
+
+export async function restoreBuyer(id: string): Promise<{ error?: string }> {
+  try {
+    await apiPost(`/buyers/${id}/restore`);
+  } catch (e) {
+    return { error: msg(e, 'restore failed') };
+  }
+  revalidatePath('/dashboard');
+  return {};
+}
+
+export async function restoreSupplier(id: string): Promise<{ error?: string }> {
+  try {
+    await apiPost(`/suppliers/${id}/restore`);
+  } catch (e) {
+    return { error: msg(e, 'restore failed') };
+  }
+  revalidatePath('/dashboard');
+  return {};
+}
