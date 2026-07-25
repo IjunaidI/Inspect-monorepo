@@ -6,6 +6,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import {
   Building2,
   ClipboardList,
+  FileCheck2,
   FileText,
   LogOut,
   Package,
@@ -197,14 +198,17 @@ export function PageHead({ title, sub, actions }: { title: string; sub?: string;
 }
 
 // ─── Shell ───────────────────────────────────────────────────
-const NAV = [
-  { key: 'directory', label: 'Buyers & Suppliers', icon: Building2, href: '/dashboard' },
-  { key: 'inspections', label: 'Inspections', icon: ClipboardList, href: '/inspections' },
-  { key: 'presets', label: 'Loop Presets', icon: Repeat, href: '/presets' },
-  { key: 'products', label: 'Products', icon: Package, href: '/products' },
-  { key: 'purchase-orders', label: 'Purchase Orders', icon: FileText, href: '/purchase-orders' },
-  { key: 'users', label: 'Users & Roles', icon: Users, href: '/users' },
-] as const;
+const ROLE_FLOOR: Record<RoleKey, number> = { inspector: 1, qa: 2, owner: 3, platform: 4 };
+
+const NAV: { key: string; label: string; icon: typeof Building2; href: string; minRole: RoleKey }[] = [
+  { key: 'directory', label: 'Buyers & Suppliers', icon: Building2, href: '/dashboard', minRole: 'qa' },
+  { key: 'inspections', label: 'Inspections', icon: ClipboardList, href: '/inspections', minRole: 'inspector' },
+  { key: 'reports', label: 'Reports', icon: FileCheck2, href: '/reports', minRole: 'qa' },
+  { key: 'presets', label: 'Loop Presets', icon: Repeat, href: '/presets', minRole: 'qa' },
+  { key: 'products', label: 'Products', icon: Package, href: '/products', minRole: 'qa' },
+  { key: 'purchase-orders', label: 'Purchase Orders', icon: FileText, href: '/purchase-orders', minRole: 'qa' },
+  { key: 'users', label: 'Users & Roles', icon: Users, href: '/users', minRole: 'owner' },
+];
 
 const DEFAULT_USER = { name: 'Riya Saraf', initials: 'RS', role: 'owner' as RoleKey };
 const DEFAULT_ORG = 'Asha Inspection Services';
@@ -259,7 +263,7 @@ function Sidebar({ org, user }: { org: string; user: typeof DEFAULT_USER }) {
         </div>
       </div>
 
-      {NAV.map((n) => {
+      {NAV.filter((n) => ROLE_FLOOR[user.role] >= ROLE_FLOOR[n.minRole]).map((n) => {
         const on = pathname === n.href || (n.href !== '/dashboard' && pathname.startsWith(n.href));
         const NavIcon = n.icon;
         return (
