@@ -85,7 +85,12 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
     await service.submit('org1', QA, 'insp1', {});
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ orgId: 'org1', status: 'ACTIVE', id: { not: QA.userId } }),
+        where: expect.objectContaining({
+          orgId: 'org1',
+          status: 'ACTIVE',
+          id: { not: QA.userId },
+          role: { in: ['QA_MANAGER', 'ORG_OWNER'] },
+        }),
       }),
     );
     expect(mail.sendInspectionSubmitted).toHaveBeenCalledTimes(2);
@@ -93,7 +98,7 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
   });
 
   it('decide mails the recipients with the decision', async () => {
-    const { service, mail } = makeService({
+    const { service, mail, prisma } = makeService({
       inspection: {
         id: 'insp1',
         orgId: 'org1',
@@ -105,6 +110,16 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
       users: [{ email: 'insp@x.com' }],
     });
     await service.decide('org1', 'u-qa', 'insp1', { decision: 'FAIL', remarks: 'seams' });
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          orgId: 'org1',
+          status: 'ACTIVE',
+          id: { not: 'u-qa' },
+          OR: [{ role: 'ORG_OWNER' }, { id: 'u-insp' }],
+        }),
+      }),
+    );
     expect(mail.sendInspectionDecided).toHaveBeenCalledWith({
       to: 'insp@x.com',
       poNumber: 'PO-1',
@@ -112,5 +127,23 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
       decision: 'FAIL',
       remarks: 'seams',
     });
+  });
+
+  it('decide with no assigned inspector notifies owners only', async () => {
+    const { service, prisma } = makeService({
+      inspection: {
+        id: 'insp1',
+        orgId: 'org1',
+        status: 'SUBMITTED',
+        assignedInspectorId: null,
+        purchaseOrder: { poNumber: 'PO-1' },
+        aqlResult: { id: 'aql1' },
+      },
+      users: [{ email: 'owner@x.com' }],
+    });
+    await service.decide('org1', 'u-qa', 'insp1', { decision: 'PASS', remarks: 'ok' });
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ OR: [{ role: 'ORG_OWNER' }] }) }),
+    );
   });
 });

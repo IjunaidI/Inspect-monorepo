@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeSampling, evaluateInspection } from '../aql/aql.engine';
@@ -41,6 +41,8 @@ const DECIDABLE = new Set(['SUBMITTED', 'UNDER_REVIEW', 'HOLD']);
 
 @Injectable()
 export class InspectionsService {
+  private readonly logger = new Logger(InspectionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -375,16 +377,26 @@ export class InspectionsService {
 
     // INS-069: notify reviewers AFTER the commit — never inside the tx, never
     // throwing (MailService resolves {sent:false} on failure). The submitter is excluded.
-    const reviewers = await this.prisma.user.findMany({
-      where: { orgId, status: 'ACTIVE', id: { not: actor.userId }, role: { in: ['QA_MANAGER', 'ORG_OWNER'] } },
-      select: { email: true },
-    });
-    const poNumber = inspection.purchaseOrder?.poNumber ?? null;
-    await Promise.all(
-      [...new Set(reviewers.map((r) => r.email))].map((to) =>
-        this.mail.sendInspectionSubmitted({ to, poNumber, inspectionId: id }),
-      ),
-    );
+    try {
+      const reviewers = await this.prisma.user.findMany({
+        where: { orgId, status: 'ACTIVE', id: { not: actor.userId }, role: { in: ['QA_MANAGER', 'ORG_OWNER'] } },
+        select: { email: true },
+      });
+      const poNumber = inspection.purchaseOrder?.poNumber ?? null;
+      await Promise.all(
+        [...new Set(reviewers.map((r) => r.email))].map((to) =>
+          this.mail.sendInspectionSubmitted({ to, poNumber, inspectionId: id }),
+        ),
+      );
+    } catch (err) {
+      // The inspection IS submitted — a notification problem must never turn a
+      // successful commit into a 500 (MailService already swallows send
+      // failures; this covers the recipient lookup itself).
+      this.logger.error(
+        `Failed to notify reviewers that inspection ${id} was submitted`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
     return result;
   }
 
@@ -461,24 +473,32 @@ export class InspectionsService {
     });
 
     // INS-069: assigned inspector + active owners learn the binding call (post-commit).
-    const recipients = await this.prisma.user.findMany({
-      where: {
-        orgId,
-        status: 'ACTIVE',
-        id: { not: userId },
-        OR: [
-          { role: 'ORG_OWNER' },
-          ...(inspection.assignedInspectorId ? [{ id: inspection.assignedInspectorId }] : []),
-        ],
-      },
-      select: { email: true },
-    });
-    const poNumber = inspection.purchaseOrder?.poNumber ?? null;
-    await Promise.all(
-      [...new Set(recipients.map((r) => r.email))].map((to) =>
-        this.mail.sendInspectionDecided({ to, poNumber, inspectionId: id, decision: input.decision, remarks: input.remarks }),
-      ),
-    );
+    try {
+      const recipients = await this.prisma.user.findMany({
+        where: {
+          orgId,
+          status: 'ACTIVE',
+          id: { not: userId },
+          OR: [
+            { role: 'ORG_OWNER' },
+            ...(inspection.assignedInspectorId ? [{ id: inspection.assignedInspectorId }] : []),
+          ],
+        },
+        select: { email: true },
+      });
+      const poNumber = inspection.purchaseOrder?.poNumber ?? null;
+      await Promise.all(
+        [...new Set(recipients.map((r) => r.email))].map((to) =>
+          this.mail.sendInspectionDecided({ to, poNumber, inspectionId: id, decision: input.decision, remarks: input.remarks }),
+        ),
+      );
+    } catch (err) {
+      // The decision IS recorded — see the submit() note above.
+      this.logger.error(
+        `Failed to notify stakeholders of the decision on inspection ${id}`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
     return decided;
   }
 }
