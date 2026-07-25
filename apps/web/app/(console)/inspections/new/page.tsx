@@ -1,10 +1,17 @@
 import { ChevronRight, ClipboardList } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { auth } from '@/lib/auth';
+import { apiRoleAtLeast } from '@/lib/roles';
 import { apiGet, type ApiPurchaseOrder, type ApiLoopPreset, type ApiUser } from '@/lib/api';
 import { PageHead } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
 import { CreateInspectionForm } from './create-form';
 
 export default async function CreateInspectionPage() {
+  const session = (await auth()) as unknown as { role?: string } | null;
+  // Web-side UX gate only (INS-065) — the API's QA floor on POST /inspections is the authority.
+  if (!apiRoleAtLeast(session?.role, 'QA_MANAGER')) redirect('/inspections');
+
   const [pos, presets, users] = await Promise.all([
     apiGet<ApiPurchaseOrder[]>('/purchase-orders').catch(() => []),
     apiGet<ApiLoopPreset[]>('/loop-presets').catch(() => []),

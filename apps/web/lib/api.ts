@@ -279,6 +279,8 @@ export interface ApiInspection {
   createdAt?: string;
   loops?: ApiInspectionLoop[];
   inspectorId?: string | null;
+  /** Scalar FK on list rows (INS-057) — assignedInspector object only on GET /:id. */
+  assignedInspectorId?: string | null;
   supersedesInspectionId?: string | null;
 }
 export interface ApiPurchaseOrder {

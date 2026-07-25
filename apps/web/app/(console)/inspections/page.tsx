@@ -1,8 +1,11 @@
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, ClipboardList, Search } from 'lucide-react';
-import { apiGet, type ApiInspection } from '@/lib/api';
+import { auth } from '@/lib/auth';
+import { apiGet, type ApiInspection, type ApiUser } from '@/lib/api';
+import { apiRoleAtLeast } from '@/lib/roles';
 import { Btn, Mono, PageHead } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
+import { RowActions } from './row-actions';
 
 const STATUS_CHIPS = [
   { label: 'All', value: undefined },
@@ -55,6 +58,16 @@ export default async function InspectionsListPage({
   const { status, q, page } = await searchParams;
   const pageNum = Math.max(parseInt(page ?? '1', 10) || 1, 1);
 
+  const session = (await auth()) as unknown as { user?: { id?: string }; role?: string } | null;
+  const role = session?.role;
+  const canManage = apiRoleAtLeast(role, 'QA_MANAGER');
+  const currentUserId = session?.user?.id;
+  const inspectors = canManage
+    ? (await apiGet<ApiUser[]>('/users?take=100').catch(() => []))
+        .filter((u) => u.role === 'INSPECTOR')
+        .map((u) => ({ id: u.id, name: u.name || u.email }))
+    : [];
+
   // Server-side search + pagination (INS-050): forward q/take/skip to the API.
   const apiParams = new URLSearchParams();
   if (status) apiParams.set('status', status);
@@ -95,7 +108,7 @@ export default async function InspectionsListPage({
                 style={{ width: 280, height: 36, padding: '0 12px 0 36px', fontSize: 13, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
               />
             </form>
-            <Btn kind="primary" href="/inspections/new">New inspection</Btn>
+            {canManage && <Btn kind="primary" href="/inspections/new">New inspection</Btn>}
           </>
         }
       />
@@ -140,17 +153,27 @@ export default async function InspectionsListPage({
         </div>
       ) : (
         <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 1fr 1fr', padding: '10px 20px', fontSize: 11, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, background: ui.fill, borderBottom: `1px solid ${ui.line}` }}>
-            <span>PO</span><span>Buyer</span><span>Product</span><span>Status</span><span>System</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 1fr 1fr 48px', padding: '10px 20px', fontSize: 11, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, background: ui.fill, borderBottom: `1px solid ${ui.line}` }}>
+            <span>PO</span><span>Buyer</span><span>Product</span><span>Status</span><span>System</span><span />
           </div>
           {inspections.map((i) => (
-            <Link key={i.id} href={`/inspections/${i.id}/review`} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 1fr 1fr', alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${ui.lineSoft}`, textDecoration: 'none', color: ui.ink }}>
-              <Mono style={{ fontWeight: 600 }}>{i.purchaseOrder?.poNumber ?? i.id.slice(0, 8)}</Mono>
-              <span>{i.buyer?.name ?? '—'}</span>
-              <span>{i.product?.styleNumber ?? '—'}</span>
-              <span style={{ fontSize: 12.5, color: ui.sub }}>{i.status}</span>
-              <span style={{ fontSize: 12.5, color: ui.sub }}>{i.aqlResult?.systemRecommendation ?? '—'}</span>
-            </Link>
+            <div key={i.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 1fr 1fr 48px', alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${ui.lineSoft}` }}>
+              <Link href={`/inspections/${i.id}/review`} style={{ display: 'contents', textDecoration: 'none', color: ui.ink }}>
+                <Mono style={{ fontWeight: 600 }}>{i.purchaseOrder?.poNumber ?? i.id.slice(0, 8)}</Mono>
+                <span>{i.buyer?.name ?? '—'}</span>
+                <span>{i.product?.styleNumber ?? '—'}</span>
+                <span style={{ fontSize: 12.5, color: ui.sub }}>{i.status}</span>
+                <span style={{ fontSize: 12.5, color: ui.sub }}>{i.aqlResult?.systemRecommendation ?? '—'}</span>
+              </Link>
+              <RowActions
+                id={i.id}
+                status={i.status}
+                assignedInspectorId={i.assignedInspectorId}
+                currentUserId={currentUserId}
+                canManage={canManage}
+                inspectors={inspectors}
+              />
+            </div>
           ))}
         </div>
       )}

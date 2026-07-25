@@ -21,3 +21,15 @@ export function initialsFrom(label: string): string {
   const b = parts[1]?.[0] ?? '';
   return (a + b).toUpperCase();
 }
+
+const API_ROLE_RANK: Record<string, number> = {
+  INSPECTOR: 1,
+  QA_MANAGER: 2,
+  ORG_OWNER: 3,
+  PLATFORM_ADMIN: 4,
+};
+
+/** Additive-hierarchy check on API role strings; unknown/missing role fails closed. */
+export function apiRoleAtLeast(role: string | undefined, min: 'INSPECTOR' | 'QA_MANAGER' | 'ORG_OWNER'): boolean {
+  return (API_ROLE_RANK[role ?? ''] ?? 0) >= API_ROLE_RANK[min];
+}

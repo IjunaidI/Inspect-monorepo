@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { apiGet, apiPost, ApiError, type AqlPreview, type ApiInspection } from '@/lib/api';
+import { apiGet, apiPost, apiPatch, ApiError, type AqlPreview, type ApiInspection } from '@/lib/api';
 
 const msg = (e: unknown, fallback: string) => (e instanceof ApiError || e instanceof Error ? e.message : fallback);
 
@@ -88,4 +88,34 @@ export async function reInspection(id: string): Promise<{ error?: string }> {
     return { error: msg(e, 're-inspection create failed') };
   }
   redirect(`/inspections/${newId}/review`);
+}
+
+export async function startInspection(id: string): Promise<{ error?: string }> {
+  try {
+    await apiPost(`/inspections/${id}/start`);
+  } catch (e) {
+    return { error: msg(e, 'start failed') };
+  }
+  revalidatePath('/inspections');
+  return {};
+}
+
+export async function resetInspection(id: string): Promise<{ error?: string }> {
+  try {
+    await apiPost(`/inspections/${id}/reset`);
+  } catch (e) {
+    return { error: msg(e, 'reset failed') };
+  }
+  revalidatePath('/inspections');
+  return {};
+}
+
+export async function reassignInspection(id: string, inspectorId: string): Promise<{ error?: string }> {
+  try {
+    await apiPatch(`/inspections/${id}`, { assignedInspectorId: inspectorId });
+  } catch (e) {
+    return { error: msg(e, 'reassign failed') };
+  }
+  revalidatePath('/inspections');
+  return {};
 }
