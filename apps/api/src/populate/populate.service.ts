@@ -200,6 +200,64 @@ export class PopulateService {
     }
   }
 
+  /**
+   * Read for the populate console (final-review C1): the Platform Admin is
+   * cross-tenant (orgId=null), so the org-scoped `InspectionsService.get()`
+   * (which runs `requireOrgId(user)`) 403s for them — the only role allowed
+   * to populate could never load the workspace. This mirrors that read's
+   * include shape (spec §6) but looks the inspection up by id only, matching
+   * the write routes' established cross-tenant populate contract (see the
+   * controller's class doc comment). It deliberately skips the LOCKED guard
+   * so a submitted inspection can still be viewed read-only.
+   */
+  async loadForPopulate(inspectionId: string) {
+    const inspection = await this.prisma.inspection.findUnique({
+      where: { id: inspectionId },
+      include: {
+        buyer: true,
+        supplier: true,
+        product: true,
+        purchaseOrder: true,
+        loops: {
+          orderBy: { position: 'asc' },
+          include: {
+            photos: true,
+            defects: { include: { defectCatalog: true } },
+            measurements: true,
+          },
+        },
+        assignedInspector: { select: { id: true, name: true, email: true } },
+        photos: { orderBy: { createdAt: 'asc' } },
+        aqlResult: true,
+        report: true,
+      },
+    });
+    if (!inspection) {
+      throw new NotFoundException('Inspection not found');
+    }
+    return {
+      ...inspection,
+      photos: inspection.photos?.map((p) => this.withViewUrl(p)),
+      loops: inspection.loops?.map((loop) => ({
+        ...loop,
+        photos: loop.photos?.map((p) => this.withViewUrl(p)),
+      })),
+    };
+  }
+
+  /**
+   * Decorate a photo with a short-lived presigned GET URL (INS-049 / mirrors
+   * InspectionsController.withViewUrl). Must never fail the read — a presign
+   * problem degrades to viewUrl:null rather than 500ing the whole workspace.
+   */
+  private withViewUrl<T extends { storageKey: string }>(photo: T): T & { viewUrl: string | null } {
+    try {
+      return { ...photo, viewUrl: this.storage.presignDownload(photo.storageKey) };
+    } catch {
+      return { ...photo, viewUrl: null };
+    }
+  }
+
   async addMeasurement(inspectionId: string, input: AddMeasurementInput) {
     await this.loadOpenInspection(inspectionId);
     if (!input?.inspectionLoopId) throw new BadRequestException('inspectionLoopId is required');

@@ -149,7 +149,7 @@ export class InspectionsService {
 
     if (input.assignedInspectorId) {
       const inspector = await this.prisma.user.findFirst({
-        where: { id: input.assignedInspectorId, orgId },
+        where: { id: input.assignedInspectorId, orgId, status: 'ACTIVE' },
       });
       if (!inspector) throw new BadRequestException('assigned inspector not found in organization');
     }
@@ -220,15 +220,28 @@ export class InspectionsService {
 
     const changes: Record<string, unknown> = {};
     if (input.assignedInspectorId !== undefined) {
-      if (input.assignedInspectorId) {
+      // A blank string is an explicit unassign, same as null — without this an
+      // empty-string payload skips the existence check (falsy) and writes ''
+      // straight into the FK column, producing a raw 500. `undefined` (field
+      // absent) still means "no change" and never reaches this branch.
+      const assignedInspectorId = input.assignedInspectorId === '' ? null : input.assignedInspectorId;
+      if (assignedInspectorId) {
         const inspector = await this.prisma.user.findFirst({
-          where: { id: input.assignedInspectorId, orgId },
+          where: { id: assignedInspectorId, orgId, status: 'ACTIVE' },
         });
         if (!inspector) throw new BadRequestException('assigned inspector not found in organization');
       }
-      changes.assignedInspectorId = input.assignedInspectorId;
-      if (inspection.status === 'DRAFT' && input.assignedInspectorId) changes.status = 'ASSIGNED';
-      if (inspection.status === 'ASSIGNED' && input.assignedInspectorId === null) changes.status = 'DRAFT';
+      // An IN_PROGRESS inspection has no DRAFT/ASSIGNED fallback: clearing the
+      // assignee here would strand it in a status that claims work is underway
+      // with nobody assigned, invisible to every inspector. Reset first (INS-057).
+      if (inspection.status === 'IN_PROGRESS' && assignedInspectorId === null) {
+        throw new BadRequestException(
+          'Cannot unassign an in-progress inspection; reset it first (POST /:id/reset)',
+        );
+      }
+      changes.assignedInspectorId = assignedInspectorId;
+      if (inspection.status === 'DRAFT' && assignedInspectorId) changes.status = 'ASSIGNED';
+      if (inspection.status === 'ASSIGNED' && assignedInspectorId === null) changes.status = 'DRAFT';
     }
     if (input.lotSize !== undefined) {
       if (!Number.isInteger(input.lotSize) || input.lotSize < 2) {

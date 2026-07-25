@@ -230,6 +230,15 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       const frozen = await client.patch(`/inspections/${insp.id}`, { token: orgA.ownerToken, body: { lotSize: 800 } });
       expect(frozen.status).toBe(400);
     });
+
+    it('INSPECTOR is refused PATCH even on their own assigned inspection (class QA floor)', async () => {
+      const mine = await createInspection(true);
+      const res = await client.patch(`/inspections/${mine.id}`, {
+        token: inspectorToken,
+        body: { lotSize: 800 },
+      });
+      expect(res.status).toBe(403);
+    });
   });
 
   describe('INS-062 — org-scoped reports list', () => {
@@ -339,6 +348,67 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(Array.isArray(res.body)).toBe(true);
       const insp = await client.get('/users', { token: inspectorToken });
       expect(insp.status).toBe(403);
+    });
+  });
+
+  describe('final-review fixes', () => {
+    it('C1: Platform Admin loads the populate read for an org inspection; ORG_OWNER is refused', async () => {
+      const insp = await createInspection(false);
+      await registerPhoto(insp.id, insp.loopId, `populate-read-${tag}`);
+
+      const admin = expect2xx(
+        await client.get(`/inspections/${insp.id}/populate`, { token: adminToken }),
+        'admin GET /inspections/:id/populate',
+      );
+      expect(Array.isArray(admin.loops)).toBe(true);
+      expect(admin.loops.length).toBeGreaterThan(0);
+      expect(admin.loops[0].requiredShotCount).toBeGreaterThan(0);
+
+      const owner = await client.get(`/inspections/${insp.id}/populate`, { token: orgA.ownerToken });
+      expect(owner.status).toBe(403);
+    });
+
+    it('I3: assigning a DEACTIVATED user via PATCH /inspections/:id is refused (400)', async () => {
+      const insp = await createInspection(false);
+      const { userId: throwawayId } = await inviteAndActivate(client, orgA.ownerToken, {
+        email: `mb1-throwaway+${tag}@e2e.local`,
+        role: 'INSPECTOR',
+        password: `E2eThrowaway!${tag}`,
+      });
+      expect2xx(
+        await client.delete(`/users/${throwawayId}`, { token: orgA.ownerToken }),
+        'deactivate throwaway inspector',
+      );
+
+      const res = await client.patch(`/inspections/${insp.id}`, {
+        token: orgA.ownerToken,
+        body: { assignedInspectorId: throwawayId },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('I5: unassigning an IN_PROGRESS inspection 400s; unassigning ASSIGNED succeeds -> DRAFT', async () => {
+      const inProgress = await createInspection(true);
+      expect2xx(
+        await client.post(`/inspections/${inProgress.id}/start`, { token: inspectorToken }),
+        'start inspection',
+      );
+      const refused = await client.patch(`/inspections/${inProgress.id}`, {
+        token: orgA.ownerToken,
+        body: { assignedInspectorId: null },
+      });
+      expect(refused.status).toBe(400);
+
+      const assigned = await createInspection(true);
+      const unassigned = expect2xx(
+        await client.patch(`/inspections/${assigned.id}`, {
+          token: orgA.ownerToken,
+          body: { assignedInspectorId: null },
+        }),
+        'unassign ASSIGNED inspection',
+      );
+      expect(unassigned.assignedInspectorId).toBeNull();
+      expect(unassigned.status).toBe('DRAFT');
     });
   });
 });

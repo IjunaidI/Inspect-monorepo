@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import {
   AddDefectInput,
   AddMeasurementInput,
@@ -19,6 +19,11 @@ import { AuthUser } from '../auth/auth-user';
 @Roles('PLATFORM_ADMIN')
 export class PopulateController {
   constructor(private readonly populate: PopulateService) {}
+
+  @Get()
+  load(@Param('inspectionId') inspectionId: string) {
+    return this.populate.loadForPopulate(inspectionId);
+  }
 
   @Post('photos/presign')
   presign(@Param('inspectionId') inspectionId: string, @Body() body: PresignInput) {
