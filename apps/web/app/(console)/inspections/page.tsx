@@ -64,7 +64,7 @@ export default async function InspectionsListPage({
   const currentUserId = session?.user?.id;
   const inspectors = canManage
     ? (await apiGet<ApiUser[]>('/users?take=100').catch(() => []))
-        .filter((u) => u.role === 'INSPECTOR')
+        .filter((u) => u.role === 'INSPECTOR' && u.status === 'ACTIVE')
         .map((u) => ({ id: u.id, name: u.name || u.email }))
     : [];
 

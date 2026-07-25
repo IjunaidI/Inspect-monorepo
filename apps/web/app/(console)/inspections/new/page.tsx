@@ -17,7 +17,7 @@ export default async function CreateInspectionPage() {
     apiGet<ApiLoopPreset[]>('/loop-presets').catch(() => []),
     apiGet<ApiUser[]>('/users').catch(() => []),
   ]);
-  const inspectors = users.filter((u) => u.role === 'INSPECTOR');
+  const inspectors = users.filter((u) => u.role === 'INSPECTOR' && u.status === 'ACTIVE');
 
   return (
     <div style={{ padding: '24px 32px 40px' }}>

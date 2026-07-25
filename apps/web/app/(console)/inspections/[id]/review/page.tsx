@@ -1,4 +1,6 @@
 import { ChevronRight, ClipboardList } from 'lucide-react';
+import { auth } from '@/lib/auth';
+import { apiRoleAtLeast } from '@/lib/roles';
 import { apiGet, type ApiInspection } from '@/lib/api';
 import { Btn, Mono, PageHead, SeverityTag } from '@/components/inspect/shell';
 import { severity, ui, type SeverityKey } from '@/components/inspect/tokens';
@@ -14,6 +16,15 @@ const CLASSES: SeverityKey[] = ['critical', 'major', 'minor'];
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  const session = (await auth()) as unknown as { role?: string } | null;
+  const role = session?.role;
+  // Web-side UX gate only (INS-057 relaxed GET /inspections/:id to INSPECTOR,
+  // so an inspector can land here) — the API remains the RBAC authority on
+  // POST /:id/decision, the populate screen, and POST /inspections.
+  const canDecide = apiRoleAtLeast(role, 'QA_MANAGER');
+  const canPopulate = role === 'PLATFORM_ADMIN';
+
   let inspection: ApiInspection | null = null;
   try {
     inspection = await apiGet<ApiInspection>(`/inspections/${id}`);
@@ -25,6 +36,9 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   }
   const r = inspection.aqlResult;
   const fail = r?.systemRecommendation === 'FAIL';
+  const showDecisionForm = DECIDABLE.has(inspection.status) && canDecide;
+  const showPopulateLink = POPULATABLE.has(inspection.status) && canPopulate;
+  const showReInspect = REINSPECTABLE.has(inspection.status) && canDecide;
 
   return (
     <div style={{ padding: '24px 32px 40px' }}>
@@ -82,17 +96,23 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         <div style={{ position: 'sticky', top: 0, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ padding: '18px 20px', borderBottom: `1px solid ${ui.line}`, fontSize: 14, fontWeight: 600 }}>QA decision</div>
           {SUBMITTABLE.has(inspection.status) && <SubmitForReview id={id} />}
-          {DECIDABLE.has(inspection.status) && <DecisionForm id={id} />}
-          {!SUBMITTABLE.has(inspection.status) && !DECIDABLE.has(inspection.status) && (
+          {showDecisionForm && <DecisionForm id={id} />}
+          {!SUBMITTABLE.has(inspection.status) && !showDecisionForm && (
             <div style={{ padding: 20, fontSize: 13, color: ui.sub }}>
-              Final decision: <strong>{r?.qaDecision ?? inspection.status}</strong>
-              {r?.qaRemarks ? <div style={{ marginTop: 8, color: ui.ink }}>{r.qaRemarks}</div> : null}
+              {DECIDABLE.has(inspection.status) ? (
+                'Awaiting QA Manager review.'
+              ) : (
+                <>
+                  Final decision: <strong>{r?.qaDecision ?? inspection.status}</strong>
+                  {r?.qaRemarks ? <div style={{ marginTop: 8, color: ui.ink }}>{r.qaRemarks}</div> : null}
+                </>
+              )}
             </div>
           )}
 
           {/* Contextual action links */}
           <div style={{ padding: '12px 20px', borderTop: `1px solid ${ui.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {POPULATABLE.has(inspection.status) && (
+            {showPopulateLink && (
               <Btn kind="ghost" href={`/inspections/${id}/populate`}>
                 Populate photos &amp; defects
               </Btn>
@@ -102,7 +122,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
                 View / generate report
               </Btn>
             )}
-            {REINSPECTABLE.has(inspection.status) && (
+            {showReInspect && (
               <ReInspectButton id={id} />
             )}
           </div>

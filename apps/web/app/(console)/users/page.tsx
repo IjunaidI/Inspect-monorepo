@@ -1,4 +1,6 @@
+import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { apiRoleAtLeast } from '@/lib/roles';
 import { loadOrFallback, type ApiUser } from '@/lib/api';
 import { PageHead, RoleBadge } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
@@ -24,7 +26,12 @@ export default async function UsersPage({
   searchParams: Promise<{ q?: string }>;
 }) {
   const { q } = await searchParams;
-  const session = (await auth()) as unknown as { user?: { id?: string; role?: string } } | null;
+  const session = (await auth()) as unknown as { user?: { id?: string }; role?: string } | null;
+  // Web-side UX gate only (INS-065 relaxed GET /users to QA_MANAGER for the
+  // create-inspection dropdown) — every management route here still floors at
+  // ORG_OWNER, so anything below that role gets redirected before it can load
+  // a screen full of controls that would 403.
+  if (!apiRoleAtLeast(session?.role, 'ORG_OWNER')) redirect('/dashboard');
   const currentUserId = session?.user?.id;
 
   // Server-side search (INS-050) — the client keeps its instant filter for the loaded page.

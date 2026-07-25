@@ -62,6 +62,9 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
   const [pending, start] = useTransition();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deactivating, startDeactivate] = useTransition();
+  // Controlled so a server-rejected role change (e.g. INS-058's last-active-owner
+  // 400) can be visibly reverted instead of leaving the rejected role displayed.
+  const [role, setRole] = useState<string>(row.apiRole);
   const ss = statusStyle[row.status];
 
   const th = { fontSize: 11, fontWeight: 550, color: ui.sub, textTransform: 'uppercase' as const, letterSpacing: 0.4, padding: '13px 20px', textAlign: 'left' as const, borderBottom: `1px solid ${ui.line}`, background: ui.fill };
@@ -83,13 +86,20 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
       </td>
       <td style={td}>
         <select
-          defaultValue={row.apiRole}
+          value={role}
           disabled={pending || row.you || row.status === 'deactivated'}
-          onChange={(e) => start(async () => {
-            const r = await updateUserRole(row.id, e.target.value);
-            if (r.error) alert(r.error);
-          })}
-          style={{ height: 32, padding: '0 8px', fontSize: 12.5, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, background: '#fff', cursor: row.you ? 'default' : 'pointer', opacity: pending ? 0.6 : 1 }}
+          onChange={(e) => {
+            const next = e.target.value;
+            setRole(next);
+            start(async () => {
+              const r = await updateUserRole(row.id, next);
+              if (r.error) {
+                alert(r.error);
+                setRole(row.apiRole);
+              }
+            });
+          }}
+          style={{ height: 32, padding: '0 8px', fontSize: 12.5, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, background: '#fff', cursor: (row.you || row.status === 'deactivated') ? 'default' : 'pointer', opacity: pending ? 0.6 : row.status === 'deactivated' ? 0.55 : 1 }}
         >
           <option value="INSPECTOR">Inspector</option>
           <option value="QA_MANAGER">QA Manager</option>

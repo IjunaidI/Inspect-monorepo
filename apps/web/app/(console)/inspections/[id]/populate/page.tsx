@@ -16,7 +16,7 @@ export default async function PopulatePage({
 
   let inspection: ApiInspection | null = null;
   try {
-    inspection = await apiGet<ApiInspection>(`/inspections/${id}`);
+    inspection = await apiGet<ApiInspection>(`/inspections/${id}/populate`);
   } catch {
     inspection = null;
   }
