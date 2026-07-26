@@ -21,7 +21,7 @@ export default auth((req) => {
 
   if (isPlatformAdmin && !isAdminRoute) {
     const assuming = Boolean(req.cookies.get('inspect_admin_org')?.value);
-    const isConsoleRoute = ['/dashboard', '/inspections', '/reports', '/presets', '/products', '/purchase-orders', '/users']
+    const isConsoleRoute = ['/dashboard', '/inspections', '/reports', '/presets', '/products', '/purchase-orders', '/users', '/buyers', '/suppliers']
       .some((p) => pathname === p || pathname.startsWith(`${p}/`));
     if (!assuming && isConsoleRoute) {
       return NextResponse.redirect(new URL('/admin/orgs', req.nextUrl));
