@@ -106,8 +106,9 @@ export async function apiGet<T>(path: string): Promise<T> {
  * Load live data from the API, falling back to design demo data when the API is
  * unreachable or the caller is unauthenticated (keeps previews working offline).
  * Returns `{ data, live }` so the UI can badge the source if it wants.
- * Re-throws 401/403 — those are auth failures, not "API offline"; the layout
- * intercepts these before any page renders (see ConsoleLayout).
+ * Re-throws 401/403 — those are auth failures, not "API offline". Middleware
+ * routes an un-assumed Platform Admin away from org screens before they render;
+ * anything that still escapes is caught by app/(console)/error.tsx (INS-079).
  */
 export async function loadOrFallback<T>(path: string, fallback: T): Promise<{ data: T; live: boolean }> {
   try {
