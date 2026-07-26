@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuditService } from '../audit/audit.service';
+import { actorTypeFor } from '../audit/actor-type';
 import { AuthUser } from '../auth/auth-user';
 import { hasAtLeast, Role } from '../auth/rbac';
 import { hashPassword } from '../auth/password';
@@ -130,7 +131,7 @@ export class UsersService {
         select: SAFE_SELECT,
       });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'user.member_added', entityType: 'User', entityId: user.id, metadata: { role } },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'user.member_added', entityType: 'User', entityId: user.id, metadata: { role } },
         tx,
       );
       return user;
@@ -169,7 +170,7 @@ export class UsersService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({ where: { id: userId }, data: { role }, select: SAFE_SELECT });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'user.role_changed', entityType: 'User', entityId: userId, metadata: { role } },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'user.role_changed', entityType: 'User', entityId: userId, metadata: { role } },
         tx,
       );
       return updated;
@@ -188,7 +189,7 @@ export class UsersService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({ where: { id: userId }, data: { status: 'DEACTIVATED' }, select: SAFE_SELECT });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'user.deactivated', entityType: 'User', entityId: userId },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'user.deactivated', entityType: 'User', entityId: userId },
         tx,
       );
       return updated;
@@ -206,7 +207,7 @@ export class UsersService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({ where: { id: userId }, data: { status: 'ACTIVE' }, select: SAFE_SELECT });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'user.reactivated', entityType: 'User', entityId: userId },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'user.reactivated', entityType: 'User', entityId: userId },
         tx,
       );
       return updated;

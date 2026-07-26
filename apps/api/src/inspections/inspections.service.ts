@@ -12,6 +12,7 @@ import {
 } from './inspection-mapping';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
+import { actorTypeFor } from '../audit/actor-type';
 import { MailService } from '../mail/mail.service';
 
 export interface CreateInspectionInput {
@@ -267,7 +268,7 @@ export class InspectionsService {
       await this.audit.append(
         {
           orgId,
-          actorType: 'USER',
+          actorType: actorTypeFor(actor),
           actorUserId: actor.userId,
           action: 'inspection.updated',
           entityType: 'Inspection',
@@ -425,7 +426,7 @@ export class InspectionsService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.inspection.update({ where: { id }, data: { status: 'IN_PROGRESS' } });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'inspection.started', entityType: 'Inspection', entityId: id },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'inspection.started', entityType: 'Inspection', entityId: id },
         tx,
       );
       return updated;
@@ -444,7 +445,7 @@ export class InspectionsService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.inspection.update({ where: { id }, data: { status: 'ASSIGNED' } });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'inspection.reset', entityType: 'Inspection', entityId: id },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'inspection.reset', entityType: 'Inspection', entityId: id },
         tx,
       );
       return updated;

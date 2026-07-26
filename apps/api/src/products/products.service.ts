@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
+import { actorTypeFor } from '../audit/actor-type';
 
 export interface CreateProductInput {
   styleNumber: string;
@@ -83,7 +84,7 @@ export class ProductsService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.product.update({ where: { id }, data: { archivedAt: new Date() } });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'product.archived', entityType: 'Product', entityId: id },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'product.archived', entityType: 'Product', entityId: id },
         tx,
       );
       return updated;
@@ -97,7 +98,7 @@ export class ProductsService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.product.update({ where: { id }, data: { archivedAt: null } });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'product.restored', entityType: 'Product', entityId: id },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'product.restored', entityType: 'Product', entityId: id },
         tx,
       );
       return updated;
