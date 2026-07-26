@@ -3,10 +3,16 @@
 import { useEffect } from 'react';
 import { signOut } from 'next-auth/react';
 import { ui } from '@/components/inspect/tokens';
+import { clearAssumedOrgOnLogout } from './actions';
 
 export default function LogoutPage() {
   useEffect(() => {
-    void signOut({ callbackUrl: '/login?expired=1' });
+    // Clear the assumed-org cookie (server-only) before handing off to
+    // NextAuth's client-side signOut, which only clears its own session
+    // cookies (INS-079 final review, finding 2).
+    void clearAssumedOrgOnLogout().finally(() => {
+      void signOut({ callbackUrl: '/login?expired=1' });
+    });
   }, []);
 
   return (

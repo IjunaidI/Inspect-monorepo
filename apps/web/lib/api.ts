@@ -24,13 +24,19 @@ export async function apiToken(): Promise<string | null> {
 }
 
 /**
- * Headers carrying the session token plus, for a Platform Admin operating inside
- * an assumed org, the X-Org-Id selector (INS-079). Deliberately NOT used by
- * apiGetPublic/apiPostPublic — those are unauthenticated by contract.
+ * Headers carrying the session token plus, for a verified Platform Admin
+ * operating inside an assumed org, the X-Org-Id selector (INS-079). The role
+ * check is defense-in-depth (the API guard ignores the header for anyone else
+ * regardless) against a stale `inspect_admin_org` cookie surviving into a
+ * different session on a shared browser (final review, finding 2) — reads the
+ * one `auth()` call already needed here for the bearer token, rather than a
+ * second call. Deliberately NOT used by apiGetPublic/apiPostPublic — those are
+ * unauthenticated by contract.
  */
 async function authHeaders(): Promise<Record<string, string>> {
-  const token = await apiToken();
-  const orgId = await getAssumedOrgId();
+  const session = (await auth()) as unknown as { accessToken?: string; role?: string } | null;
+  const token = session?.accessToken ?? null;
+  const orgId = session?.role === 'PLATFORM_ADMIN' ? await getAssumedOrgId() : null;
   return {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(orgId ? { 'X-Org-Id': orgId } : {}),

@@ -120,6 +120,6 @@ export class InspectionsController {
     @Param('id') id: string,
     @Body() body: QaDecisionInput,
   ) {
-    return this.inspections.decide(requireOrgId(user), user.userId, id, body);
+    return this.inspections.decide(requireOrgId(user), user, id, body);
   }
 }
