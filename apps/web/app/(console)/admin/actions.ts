@@ -58,6 +58,12 @@ export async function enterOrg(orgId: string): Promise<void> {
   redirect('/dashboard');
 }
 
+/**
+ * Leave the assumed org. Deliberately NOT gated on PLATFORM_ADMIN, unlike
+ * createOrg/enterOrg: exiting is a de-escalation, and requiring a privilege to
+ * drop that privilege would strand a session whose role lookup is failing.
+ * Clearing a cookie the caller does not have is a no-op.
+ */
 export async function exitOrg(): Promise<void> {
   await clearAssumedOrgId();
   redirect('/admin/orgs');
