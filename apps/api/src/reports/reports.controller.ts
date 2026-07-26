@@ -14,7 +14,7 @@ export class ReportsController {
   @Post('inspections/:id/report')
   @Roles('QA_MANAGER')
   generate(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.reports.generate(requireOrgId(user), id);
+    return this.reports.generate(requireOrgId(user), user, id);
   }
 
   @Get('reports')

@@ -58,7 +58,12 @@ describe('AuthService', () => {
 
     it('returns the principal for valid credentials', async () => {
       const principal = await makeService(activeUser).validateUser('qa@org.com', 'correct-pw');
-      expect(principal).toEqual({ userId: 'u1', orgId: 'org1', role: 'QA_MANAGER' });
+      expect(principal).toEqual({
+        userId: 'u1',
+        orgId: 'org1',
+        role: 'QA_MANAGER',
+        actingAsOrgId: null,
+      });
     });
 
     it('stamps lastLoginAt on success and never on failure', async () => {
@@ -83,6 +88,7 @@ describe('AuthService', () => {
         userId: 'u1',
         orgId: 'org1',
         role: 'QA_MANAGER',
+        actingAsOrgId: null,
       });
       const claims = verifyJwt(accessToken, 'access-secret');
       expect(claims.sub).toBe('u1');
@@ -107,13 +113,23 @@ describe('AuthService', () => {
   describe('refresh', () => {
     it('rejects an access token used as a refresh token', async () => {
       const svc = makeService(activeUser);
-      const { accessToken } = svc.issueTokens({ userId: 'u1', orgId: 'org1', role: 'QA_MANAGER' });
+      const { accessToken } = svc.issueTokens({
+        userId: 'u1',
+        orgId: 'org1',
+        role: 'QA_MANAGER',
+        actingAsOrgId: null,
+      });
       await expect(svc.refresh(accessToken)).rejects.toThrow();
     });
 
     it('issues fresh tokens for a valid refresh token', async () => {
       const svc = makeService(activeUser);
-      const { refreshToken } = svc.issueTokens({ userId: 'u1', orgId: 'org1', role: 'QA_MANAGER' });
+      const { refreshToken } = svc.issueTokens({
+        userId: 'u1',
+        orgId: 'org1',
+        role: 'QA_MANAGER',
+        actingAsOrgId: null,
+      });
       const pair = await svc.refresh(refreshToken);
       expect(pair.accessToken).toBeTruthy();
       expect(verifyJwt(pair.accessToken, 'access-secret').sub).toBe('u1');

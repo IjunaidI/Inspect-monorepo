@@ -1,7 +1,15 @@
 import { InspectionsService } from './inspections.service';
 import { AuthUser } from '../auth/auth-user';
 
-const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER' };
+const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER', actingAsOrgId: null };
+// INS-079: a Platform Admin operating inside an assumed org must be attributed
+// as PLATFORM_ADMIN in the audit chain, not as an ordinary org member.
+const PLATFORM_ADMIN_ACTOR: AuthUser = {
+  userId: 'u-admin',
+  orgId: 'org1',
+  role: 'PLATFORM_ADMIN',
+  actingAsOrgId: 'org1',
+};
 
 interface MakeOpts {
   inspection?: Record<string, unknown>;
@@ -109,7 +117,7 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
       },
       users: [{ email: 'insp@x.com' }],
     });
-    await service.decide('org1', 'u-qa', 'insp1', { decision: 'FAIL', remarks: 'seams' });
+    await service.decide('org1', QA, 'insp1', { decision: 'FAIL', remarks: 'seams' });
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -141,9 +149,100 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
       },
       users: [{ email: 'owner@x.com' }],
     });
-    await service.decide('org1', 'u-qa', 'insp1', { decision: 'PASS', remarks: 'ok' });
+    await service.decide('org1', QA, 'insp1', { decision: 'PASS', remarks: 'ok' });
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ OR: [{ role: 'ORG_OWNER' }] }) }),
+    );
+  });
+});
+
+describe('InspectionsService.submit — audit attribution (INS-079)', () => {
+  it('appends actorType USER for an ordinary org actor', async () => {
+    const { service, audit } = makeService({
+      loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }],
+    });
+    await service.submit('org1', QA, 'insp1', {});
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'inspection.submitted', actorType: 'USER', actorUserId: QA.userId }),
+      expect.anything(),
+    );
+  });
+
+  // Without actorTypeFor wired into the call site, this regresses silently —
+  // the literal 'USER' still satisfies every other assertion in this file.
+  it('attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
+    const { service, audit } = makeService({
+      loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }],
+    });
+    await service.submit('org1', PLATFORM_ADMIN_ACTOR, 'insp1', {});
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'inspection.submitted',
+        actorType: 'PLATFORM_ADMIN',
+        actorUserId: PLATFORM_ADMIN_ACTOR.userId,
+      }),
+      expect.anything(),
+    );
+  });
+});
+
+describe('InspectionsService.decide — audit attribution (INS-079)', () => {
+  const decidableInspection = {
+    id: 'insp1',
+    orgId: 'org1',
+    status: 'SUBMITTED',
+    assignedInspectorId: null,
+    purchaseOrder: { poNumber: 'PO-1' },
+    aqlResult: { id: 'aql1' },
+  };
+
+  it('appends actorType USER for an ordinary QA actor', async () => {
+    const { service, audit } = makeService({ inspection: decidableInspection });
+    await service.decide('org1', QA, 'insp1', { decision: 'PASS' });
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'inspection.decided', actorType: 'USER', actorUserId: QA.userId }),
+      expect.anything(),
+    );
+  });
+
+  // Without actorTypeFor wired into the call site, this regresses silently —
+  // the literal 'USER' still satisfies every other assertion in this file.
+  it('attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
+    const { service, audit } = makeService({ inspection: decidableInspection });
+    await service.decide('org1', PLATFORM_ADMIN_ACTOR, 'insp1', { decision: 'PASS' });
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'inspection.decided',
+        actorType: 'PLATFORM_ADMIN',
+        actorUserId: PLATFORM_ADMIN_ACTOR.userId,
+      }),
+      expect.anything(),
+    );
+  });
+});
+
+describe('InspectionsService.start — audit attribution (INS-079)', () => {
+  it('appends actorType USER for an ordinary org actor', async () => {
+    const { service, audit } = makeService();
+    await service.start('org1', QA, 'insp1');
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'inspection.started', actorType: 'USER', actorUserId: QA.userId }),
+      expect.anything(),
+    );
+  });
+
+  // Without actorTypeFor wired into the call site, this regresses silently —
+  // the literal 'USER' still satisfies every other assertion in this file.
+  it('attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
+    const { service, audit } = makeService();
+    await service.start('org1', PLATFORM_ADMIN_ACTOR, 'insp1');
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'inspection.started',
+        actorType: 'PLATFORM_ADMIN',
+        actorUserId: PLATFORM_ADMIN_ACTOR.userId,
+      }),
+      expect.anything(),
     );
   });
 });

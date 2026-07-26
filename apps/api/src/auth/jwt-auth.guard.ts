@@ -50,10 +50,21 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Not an access token');
     }
 
+    // INS-079: a Platform Admin may name an org to operate inside via X-Org-Id.
+    // Honored ONLY for a verified PLATFORM_ADMIN claim, and silently IGNORED for
+    // every other role — rejecting it would confirm the header is meaningful.
+    // This is not escalation: the admin is already the cross-tenant principal;
+    // the header only selects a scope it already has.
+    const role = claims.role as Role;
+    const rawAssumed = req.headers?.['x-org-id'];
+    const assumed = typeof rawAssumed === 'string' ? rawAssumed.trim() : '';
+    const actingAsOrgId = role === 'PLATFORM_ADMIN' && assumed !== '' ? assumed : null;
+
     req.user = {
       userId: String(claims.sub),
-      orgId: (claims.orgId ?? null) as string | null,
-      role: claims.role as Role,
+      orgId: actingAsOrgId ?? ((claims.orgId ?? null) as string | null),
+      role,
+      actingAsOrgId,
     };
     return true;
   }

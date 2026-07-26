@@ -12,6 +12,7 @@ import {
 } from './inspection-mapping';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
+import { actorTypeFor } from '../audit/actor-type';
 import { MailService } from '../mail/mail.service';
 
 export interface CreateInspectionInput {
@@ -267,7 +268,7 @@ export class InspectionsService {
       await this.audit.append(
         {
           orgId,
-          actorType: 'USER',
+          actorType: actorTypeFor(actor),
           actorUserId: actor.userId,
           action: 'inspection.updated',
           entityType: 'Inspection',
@@ -385,6 +386,21 @@ export class InspectionsService {
           },
         });
       }
+      // INS-079: same attribution story as decide() — a Platform Admin submitting
+      // inside an assumed org must show up as PLATFORM_ADMIN, in the same
+      // transaction as the status change it is attesting to.
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'inspection.submitted',
+          entityType: 'Inspection',
+          entityId: id,
+          metadata: { systemRecommendation: evaluation.systemRecommendation },
+        },
+        tx,
+      );
       return tx.inspection.findUnique({ where: { id }, include: { aqlResult: true } });
     });
 
@@ -425,7 +441,7 @@ export class InspectionsService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.inspection.update({ where: { id }, data: { status: 'IN_PROGRESS' } });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'inspection.started', entityType: 'Inspection', entityId: id },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'inspection.started', entityType: 'Inspection', entityId: id },
         tx,
       );
       return updated;
@@ -444,7 +460,7 @@ export class InspectionsService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.inspection.update({ where: { id }, data: { status: 'ASSIGNED' } });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'inspection.reset', entityType: 'Inspection', entityId: id },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'inspection.reset', entityType: 'Inspection', entityId: id },
         tx,
       );
       return updated;
@@ -452,7 +468,7 @@ export class InspectionsService {
   }
 
   /** QA Manager's binding decision (spec §8). */
-  async decide(orgId: string, userId: string, id: string, input: QaDecisionInput) {
+  async decide(orgId: string, actor: AuthUser, id: string, input: QaDecisionInput) {
     if (!input?.decision) throw new BadRequestException('decision is required');
     const inspection = await this.prisma.inspection.findFirst({
       where: { id, orgId },
@@ -474,15 +490,32 @@ export class InspectionsService {
         data: {
           qaDecision: input.decision,
           qaRemarks: input.remarks,
-          decidedByUserId: userId,
+          decidedByUserId: actor.userId,
           decidedAt,
         },
       });
-      return tx.inspection.update({
+      const updated = await tx.inspection.update({
         where: { id },
         data: { status },
         include: { aqlResult: true },
       });
+      // INS-079: this is the product's binding pass/fail call — it must be
+      // attributed truthfully (a Platform Admin acting inside an assumed org
+      // records as PLATFORM_ADMIN, never as an ordinary org member) and it
+      // must roll back with the decision if the audit write fails.
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'inspection.decided',
+          entityType: 'Inspection',
+          entityId: id,
+          metadata: { decision: input.decision, status },
+        },
+        tx,
+      );
+      return updated;
     });
 
     // INS-069: assigned inspector + active owners learn the binding call (post-commit).
@@ -491,7 +524,7 @@ export class InspectionsService {
         where: {
           orgId,
           status: 'ACTIVE',
-          id: { not: userId },
+          id: { not: actor.userId },
           OR: [
             { role: 'ORG_OWNER' },
             ...(inspection.assignedInspectorId ? [{ id: inspection.assignedInspectorId }] : []),

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
+import { actorTypeFor } from '../audit/actor-type';
 
 export interface CreateBuyerInput {
   name: string;
@@ -112,7 +113,7 @@ export class BuyersService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.buyer.update({ where: { id }, data: { archivedAt: new Date() } });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'buyer.archived', entityType: 'Buyer', entityId: id },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'buyer.archived', entityType: 'Buyer', entityId: id },
         tx,
       );
       return updated;
@@ -126,7 +127,7 @@ export class BuyersService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.buyer.update({ where: { id }, data: { archivedAt: null } });
       await this.audit.append(
-        { orgId, actorType: 'USER', actorUserId: actor.userId, action: 'buyer.restored', entityType: 'Buyer', entityId: id },
+        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'buyer.restored', entityType: 'Buyer', entityId: id },
         tx,
       );
       return updated;

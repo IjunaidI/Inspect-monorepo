@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { actorTypeFor } from '../audit/actor-type';
+import { AuthUser } from '../auth/auth-user';
 import { contentHash } from '../tamper-proof/content-hash';
 import { sign, verify } from '../tamper-proof/signature';
 
@@ -24,7 +26,7 @@ export class ReportsService {
   }
 
   /** Generate the immutable, signed report for an APPROVED inspection (spec §10). */
-  async generate(orgId: string, inspectionId: string) {
+  async generate(orgId: string, actor: AuthUser, inspectionId: string) {
     const inspection = await this.prisma.inspection.findFirst({
       where: { id: inspectionId, orgId },
       include: {
@@ -147,7 +149,8 @@ export class ReportsService {
         await this.audit.append(
           {
             orgId,
-            actorType: 'USER',
+            actorType: actorTypeFor(actor),
+            actorUserId: actor.userId,
             action: 'report.generated',
             entityType: 'Report',
             entityId: report.id,

@@ -30,6 +30,8 @@ export interface ApiClient {
 interface CallOpts {
   token?: string;
   body?: unknown;
+  /** INS-079: assume an org as a Platform Admin (sets X-Org-Id). */
+  orgId?: string;
 }
 
 export async function bootApp(): Promise<INestApplication> {
@@ -49,6 +51,7 @@ export function apiClient(app: INestApplication): ApiClient {
   ): Promise<ApiResult> => {
     let req = request(app.getHttpServer())[method](path);
     if (opts.token) req = req.set('authorization', `Bearer ${opts.token}`);
+    if (opts.orgId) req = req.set('x-org-id', opts.orgId);
     if (opts.body !== undefined) req = req.send(opts.body as object);
     const res = await req;
     return { status: res.status, body: res.body };

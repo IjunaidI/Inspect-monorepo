@@ -1,4 +1,6 @@
+import { redirect } from 'next/navigation';
 import { auth } from './auth';
+import { getAssumedOrgId } from './admin-org';
 
 const API_URL = process.env.INSPECT_API_URL ?? 'http://localhost:3000';
 
@@ -19,6 +21,26 @@ export class ApiError extends Error {
 export async function apiToken(): Promise<string | null> {
   const session = (await auth()) as unknown as { accessToken?: string } | null;
   return session?.accessToken ?? null;
+}
+
+/**
+ * Headers carrying the session token plus, for a verified Platform Admin
+ * operating inside an assumed org, the X-Org-Id selector (INS-079). The role
+ * check is defense-in-depth (the API guard ignores the header for anyone else
+ * regardless) against a stale `inspect_admin_org` cookie surviving into a
+ * different session on a shared browser (final review, finding 2) — reads the
+ * one `auth()` call already needed here for the bearer token, rather than a
+ * second call. Deliberately NOT used by apiGetPublic/apiPostPublic — those are
+ * unauthenticated by contract.
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  const session = (await auth()) as unknown as { accessToken?: string; role?: string } | null;
+  const token = session?.accessToken ?? null;
+  const orgId = session?.role === 'PLATFORM_ADMIN' ? await getAssumedOrgId() : null;
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(orgId ? { 'X-Org-Id': orgId } : {}),
+  };
 }
 
 /**
@@ -71,9 +93,8 @@ export async function apiPostPublic<T>(path: string, body?: unknown): Promise<T>
  * Throws ApiError on non-2xx so callers can distinguish 401 from network errors.
  */
 export async function apiGet<T>(path: string): Promise<T> {
-  const token = await apiToken();
   const res = await fetch(`${API_URL}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: await authHeaders(),
     cache: 'no-store'
   });
   if (!res.ok) {
@@ -92,14 +113,22 @@ export async function apiGet<T>(path: string): Promise<T> {
  * Load live data from the API, falling back to design demo data when the API is
  * unreachable or the caller is unauthenticated (keeps previews working offline).
  * Returns `{ data, live }` so the UI can badge the source if it wants.
- * Re-throws 401/403 — those are auth failures, not "API offline"; the layout
- * intercepts these before any page renders (see ConsoleLayout).
+ * Re-throws 401 and any other 403 — those are auth failures, not "API offline".
+ * A 403 raised by the API's no-org-context guard (`requireOrgId`, INS-079) is
+ * special-cased: it redirects an un-assumed Platform Admin to /admin/orgs here,
+ * server-side, rather than re-throwing into app/(console)/error.tsx. Next.js
+ * redacts Server Component error messages in production builds, so a client
+ * error boundary cannot reliably pattern-match on `error.message` — this
+ * function still has the real message, so it is the right place to act on it.
  */
 export async function loadOrFallback<T>(path: string, fallback: T): Promise<{ data: T; live: boolean }> {
   try {
     const data = await apiGet<T>(path);
     return { data, live: true };
   } catch (e) {
+    if (e instanceof ApiError && e.status === 403 && /organization context/i.test(e.message)) {
+      redirect('/admin/orgs');
+    }
     if (e instanceof ApiError && (e.status === 401 || e.status === 403)) throw e;
     return { data: fallback, live: false };
   }
@@ -114,12 +143,11 @@ type WriteMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
  * returns `undefined` for an empty/204 response.
  */
 async function apiSend<T>(method: WriteMethod, path: string, body?: unknown): Promise<T> {
-  const token = await apiToken();
   const hasBody = body !== undefined;
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(await authHeaders()),
       ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
     },
     body: hasBody ? JSON.stringify(body) : undefined,
@@ -453,4 +481,19 @@ export interface ApiInvitationLookup {
   role: string;
   orgName: string | null;
   expiresAt: string;
+}
+
+/** GET /admin/orgs row (PLATFORM_ADMIN only). */
+export interface ApiOrganization {
+  id: string;
+  name: string;
+  type: 'INSPECTION_COMPANY' | 'MANUFACTURER';
+  createdAt: string;
+}
+
+/** POST /admin/orgs — the org plus its first ORG_OWNER invitation. */
+export interface ApiCreatedOrg {
+  org: ApiOrganization;
+  invitation: { token: string; email: string; role: string; expiresAt: string };
+  emailSent: boolean;
 }

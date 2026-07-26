@@ -19,6 +19,8 @@ export const ui = {
   accentSoft: '#F0F8FF',
   /** Destructive-action red — same hue as severity.critical.fg; never hardcode #DC2626. */
   danger: '#B42318',
+  /** Platform-Admin org-assumption banner background (INS-079) — never hardcode #7C2D12. */
+  assumeBg: '#7C2D12',
   font: 'var(--font-sans), Inter, -apple-system, system-ui, sans-serif',
 } as const;
 

@@ -95,7 +95,15 @@ describe('BuyersService preset tenant scoping', () => {
 });
 
 describe('BuyersService archive/restore (INS-061)', () => {
-  const ACTOR = { userId: 'u1', orgId: 'org1', role: 'ORG_OWNER' as const };
+  const ACTOR = { userId: 'u1', orgId: 'org1', role: 'ORG_OWNER' as const, actingAsOrgId: null };
+  // INS-079: a Platform Admin operating inside an assumed org must be attributed
+  // as PLATFORM_ADMIN in the audit chain, not as an ordinary org member.
+  const PLATFORM_ADMIN_ACTOR = {
+    userId: 'admin1',
+    orgId: 'org1',
+    role: 'PLATFORM_ADMIN' as const,
+    actingAsOrgId: 'org1',
+  };
 
   function makeArchiveService(row: { id: string; orgId: string; archivedAt: Date | null }) {
     const update = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...row, ...data }));
@@ -116,7 +124,27 @@ describe('BuyersService archive/restore (INS-061)', () => {
     expect(out.archivedAt).toBeNull();
     expect(update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { archivedAt: null } });
     expect(audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'buyer.restored', entityId: 'b1' }),
+      expect.objectContaining({
+        action: 'buyer.restored',
+        entityId: 'b1',
+        actorType: 'USER',
+        actorUserId: ACTOR.userId,
+      }),
+      expect.anything(),
+    );
+  });
+
+  // INS-079: without actorTypeFor wired into the call site, this regresses
+  // silently — the literal 'USER' still satisfies every other assertion above.
+  it('restore attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
+    const { service, audit } = makeArchiveService({ id: 'b1', orgId: 'org1', archivedAt: new Date() });
+    await service.restore('org1', PLATFORM_ADMIN_ACTOR, 'b1');
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'buyer.restored',
+        actorType: 'PLATFORM_ADMIN',
+        actorUserId: PLATFORM_ADMIN_ACTOR.userId,
+      }),
       expect.anything(),
     );
   });

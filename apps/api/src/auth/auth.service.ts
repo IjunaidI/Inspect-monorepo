@@ -51,7 +51,7 @@ export class AuthService {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
-    return { userId: user.id, orgId: user.orgId, role: user.role as Role };
+    return { userId: user.id, orgId: user.orgId, role: user.role as Role, actingAsOrgId: null };
   }
 
   issueTokens(user: AuthUser): TokenPair {
@@ -90,6 +90,7 @@ export class AuthService {
       userId: user.id,
       orgId: user.orgId,
       role: user.role as Role,
+      actingAsOrgId: null,
     });
   }
 }
