@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { auth } from './auth';
 import { getAssumedOrgId } from './admin-org';
 
@@ -106,15 +107,22 @@ export async function apiGet<T>(path: string): Promise<T> {
  * Load live data from the API, falling back to design demo data when the API is
  * unreachable or the caller is unauthenticated (keeps previews working offline).
  * Returns `{ data, live }` so the UI can badge the source if it wants.
- * Re-throws 401/403 — those are auth failures, not "API offline". Middleware
- * routes an un-assumed Platform Admin away from org screens before they render;
- * anything that still escapes is caught by app/(console)/error.tsx (INS-079).
+ * Re-throws 401 and any other 403 — those are auth failures, not "API offline".
+ * A 403 raised by the API's no-org-context guard (`requireOrgId`, INS-079) is
+ * special-cased: it redirects an un-assumed Platform Admin to /admin/orgs here,
+ * server-side, rather than re-throwing into app/(console)/error.tsx. Next.js
+ * redacts Server Component error messages in production builds, so a client
+ * error boundary cannot reliably pattern-match on `error.message` — this
+ * function still has the real message, so it is the right place to act on it.
  */
 export async function loadOrFallback<T>(path: string, fallback: T): Promise<{ data: T; live: boolean }> {
   try {
     const data = await apiGet<T>(path);
     return { data, live: true };
   } catch (e) {
+    if (e instanceof ApiError && e.status === 403 && /organization context/i.test(e.message)) {
+      redirect('/admin/orgs');
+    }
     if (e instanceof ApiError && (e.status === 401 || e.status === 403)) throw e;
     return { data: fallback, live: false };
   }
