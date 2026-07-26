@@ -467,3 +467,18 @@ export interface ApiInvitationLookup {
   orgName: string | null;
   expiresAt: string;
 }
+
+/** GET /admin/orgs row (PLATFORM_ADMIN only). */
+export interface ApiOrganization {
+  id: string;
+  name: string;
+  type: 'INSPECTION_COMPANY' | 'MANUFACTURER';
+  createdAt: string;
+}
+
+/** POST /admin/orgs — the org plus its first ORG_OWNER invitation. */
+export interface ApiCreatedOrg {
+  org: ApiOrganization;
+  invitation: { token: string; email: string; role: string; expiresAt: string };
+  emailSent: boolean;
+}
