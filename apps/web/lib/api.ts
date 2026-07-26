@@ -1,4 +1,5 @@
 import { auth } from './auth';
+import { getAssumedOrgId } from './admin-org';
 
 const API_URL = process.env.INSPECT_API_URL ?? 'http://localhost:3000';
 
@@ -19,6 +20,20 @@ export class ApiError extends Error {
 export async function apiToken(): Promise<string | null> {
   const session = (await auth()) as unknown as { accessToken?: string } | null;
   return session?.accessToken ?? null;
+}
+
+/**
+ * Headers carrying the session token plus, for a Platform Admin operating inside
+ * an assumed org, the X-Org-Id selector (INS-079). Deliberately NOT used by
+ * apiGetPublic/apiPostPublic — those are unauthenticated by contract.
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await apiToken();
+  const orgId = await getAssumedOrgId();
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(orgId ? { 'X-Org-Id': orgId } : {}),
+  };
 }
 
 /**
@@ -71,9 +86,8 @@ export async function apiPostPublic<T>(path: string, body?: unknown): Promise<T>
  * Throws ApiError on non-2xx so callers can distinguish 401 from network errors.
  */
 export async function apiGet<T>(path: string): Promise<T> {
-  const token = await apiToken();
   const res = await fetch(`${API_URL}${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: await authHeaders(),
     cache: 'no-store'
   });
   if (!res.ok) {
@@ -114,12 +128,11 @@ type WriteMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
  * returns `undefined` for an empty/204 response.
  */
 async function apiSend<T>(method: WriteMethod, path: string, body?: unknown): Promise<T> {
-  const token = await apiToken();
   const hasBody = body !== undefined;
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(await authHeaders()),
       ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
     },
     body: hasBody ? JSON.stringify(body) : undefined,
