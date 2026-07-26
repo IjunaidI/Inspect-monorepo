@@ -6,6 +6,7 @@
 import { INestApplication } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import { verifyChain } from '../../src/audit/audit-chain';
 import {
   ApiClient,
   apiClient,
@@ -24,6 +25,7 @@ describe('Platform-Admin org assumption (INS-079)', () => {
   let orgA: Awaited<ReturnType<typeof createOrgWithOwner>>;
   let orgB: Awaited<ReturnType<typeof createOrgWithOwner>>;
   let buyerAName: string;
+  let buyerBName: string;
 
   beforeAll(async () => {
     app = await bootApp();
@@ -33,12 +35,13 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     orgB = await createOrgWithOwner(client, adminToken, runTag('assume-b'));
 
     buyerAName = `Assume Buyer ${runTag('a')}`;
+    buyerBName = `Assume Buyer ${runTag('b')}`;
     expect2xx(
       await client.post('/buyers', { token: orgA.ownerToken, body: { name: buyerAName } }),
       'POST /buyers (org A)',
     );
     expect2xx(
-      await client.post('/buyers', { token: orgB.ownerToken, body: { name: `Assume Buyer ${runTag('b')}` } }),
+      await client.post('/buyers', { token: orgB.ownerToken, body: { name: buyerBName } }),
       'POST /buyers (org B)',
     );
   }, 120_000);
@@ -64,6 +67,9 @@ describe('Platform-Admin org assumption (INS-079)', () => {
       'GET /buyers (assuming org B)',
     ) as { name: string }[];
     expect(b.some((x) => x.name === buyerAName)).toBe(false);
+    // Positive control: org B's list must not simply be empty/irrelevant —
+    // it must actually be org B's own data.
+    expect(b.some((x) => x.name === buyerBName)).toBe(true);
   });
 
   // The tenant boundary: the header must do nothing at all for a non-admin.
@@ -71,6 +77,10 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     const res = await client.get('/buyers', { token: orgB.ownerToken, orgId: orgA.orgId });
     const rows = expect2xx(res, 'GET /buyers (owner B spoofing org A)') as { name: string }[];
     expect(rows.some((x) => x.name === buyerAName)).toBe(false);
+    // Positive control: a 200 with an empty/irrelevant list would satisfy the
+    // assertion above vacuously. Proving the response is genuinely owner B's
+    // own (unaffected) org data is what shows the header was truly ignored.
+    expect(rows.some((x) => x.name === buyerBName)).toBe(true);
   });
 
   it('attributes an assumed-org write to PLATFORM_ADMIN with the real admin id', async () => {
@@ -115,10 +125,14 @@ describe('Platform-Admin org assumption (INS-079)', () => {
         orderBy: { sequence: 'asc' },
       });
       expect(rows.length).toBeGreaterThan(0);
-      // Sequence is monotonic and gap-free for this org — an admin write must not
-      // fork or skip the chain it joins.
-      rows.forEach((row, i) => expect(row.sequence).toBe(i + 1));
-      expect(rows.some((r) => r.actorType === 'PLATFORM_ADMIN')).toBe(true);
+      // Full hash-chain verification (sequence monotonicity + prevEntryHash
+      // linkage), not just a sequence-gap check: an admin write must not fork
+      // or break the chain it joins.
+      expect(verifyChain(rows)).toBe(true);
+      // Keyed to the write actually under test (org A's beforeAll fixture
+      // also logs a PLATFORM_ADMIN 'org.created' row, so a bare actorType
+      // check would pass even if attribution on THIS write regressed).
+      expect(rows.some((r) => r.action === 'buyer.archived' && r.actorType === 'PLATFORM_ADMIN')).toBe(true);
     } finally {
       await prisma.$disconnect();
     }
@@ -251,5 +265,5 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     } finally {
       await prisma.$disconnect();
     }
-  }, 60_000);
+  });
 });
