@@ -1,7 +1,7 @@
 import { InspectionsService } from './inspections.service';
 import { AuthUser } from '../auth/auth-user';
 
-const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER' };
+const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER', actingAsOrgId: null };
 
 interface MakeOpts {
   inspection?: Record<string, unknown>;

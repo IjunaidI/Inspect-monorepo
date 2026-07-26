@@ -1,8 +1,13 @@
 import { UsersService } from './users.service';
 import { AuthUser } from '../auth/auth-user';
 
-const OWNER: AuthUser = { userId: 'u-owner', orgId: 'org1', role: 'ORG_OWNER' };
-const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER' };
+const OWNER: AuthUser = {
+  userId: 'u-owner',
+  orgId: 'org1',
+  role: 'ORG_OWNER',
+  actingAsOrgId: null,
+};
+const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER', actingAsOrgId: null };
 
 function makeService(
   mailResult: { sent: boolean; messageId?: string } = { sent: true },

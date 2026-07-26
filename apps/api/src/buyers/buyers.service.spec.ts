@@ -95,7 +95,7 @@ describe('BuyersService preset tenant scoping', () => {
 });
 
 describe('BuyersService archive/restore (INS-061)', () => {
-  const ACTOR = { userId: 'u1', orgId: 'org1', role: 'ORG_OWNER' as const };
+  const ACTOR = { userId: 'u1', orgId: 'org1', role: 'ORG_OWNER' as const, actingAsOrgId: null };
 
   function makeArchiveService(row: { id: string; orgId: string; archivedAt: Date | null }) {
     const update = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...row, ...data }));
