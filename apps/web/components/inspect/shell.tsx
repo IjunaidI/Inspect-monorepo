@@ -17,6 +17,7 @@ import {
 import { mono as monoStyle, roles, severity, ui, type RoleKey, type SeverityKey } from './tokens';
 import { initialsFrom } from '@/lib/roles';
 import { signOutAction } from '@/app/(console)/actions';
+import { exitOrg } from '@/app/(console)/admin/actions';
 import { CommandPalette } from './command-palette';
 
 // ─── Primitives ──────────────────────────────────────────────
@@ -200,20 +201,24 @@ export function PageHead({ title, sub, actions }: { title: string; sub?: string;
 // ─── Shell ───────────────────────────────────────────────────
 const ROLE_FLOOR: Record<RoleKey, number> = { inspector: 1, qa: 2, owner: 3, platform: 4 };
 
-const NAV: { key: string; label: string; icon: typeof Building2; href: string; minRole: RoleKey }[] = [
-  { key: 'directory', label: 'Buyers & Suppliers', icon: Building2, href: '/dashboard', minRole: 'qa' },
-  { key: 'inspections', label: 'Inspections', icon: ClipboardList, href: '/inspections', minRole: 'inspector' },
-  { key: 'reports', label: 'Reports', icon: FileCheck2, href: '/reports', minRole: 'qa' },
-  { key: 'presets', label: 'Loop Presets', icon: Repeat, href: '/presets', minRole: 'qa' },
-  { key: 'products', label: 'Products', icon: Package, href: '/products', minRole: 'qa' },
-  { key: 'purchase-orders', label: 'Purchase Orders', icon: FileText, href: '/purchase-orders', minRole: 'qa' },
-  { key: 'users', label: 'Users & Roles', icon: Users, href: '/users', minRole: 'owner' },
+const NAV: {
+  key: string; label: string; icon: typeof Building2; href: string;
+  minRole: RoleKey; scope: 'org' | 'admin';
+}[] = [
+  { key: 'orgs', label: 'Organizations', icon: Building2, href: '/admin/orgs', minRole: 'platform', scope: 'admin' },
+  { key: 'directory', label: 'Buyers & Suppliers', icon: Building2, href: '/dashboard', minRole: 'qa', scope: 'org' },
+  { key: 'inspections', label: 'Inspections', icon: ClipboardList, href: '/inspections', minRole: 'inspector', scope: 'org' },
+  { key: 'reports', label: 'Reports', icon: FileCheck2, href: '/reports', minRole: 'qa', scope: 'org' },
+  { key: 'presets', label: 'Loop Presets', icon: Repeat, href: '/presets', minRole: 'qa', scope: 'org' },
+  { key: 'products', label: 'Products', icon: Package, href: '/products', minRole: 'qa', scope: 'org' },
+  { key: 'purchase-orders', label: 'Purchase Orders', icon: FileText, href: '/purchase-orders', minRole: 'qa', scope: 'org' },
+  { key: 'users', label: 'Users & Roles', icon: Users, href: '/users', minRole: 'owner', scope: 'org' },
 ];
 
 const DEFAULT_USER = { name: 'Riya Saraf', initials: 'RS', role: 'owner' as RoleKey };
 const DEFAULT_ORG = 'Asha Inspection Services';
 
-function Sidebar({ org, user }: { org: string; user: typeof DEFAULT_USER }) {
+function Sidebar({ org, user, isAssuming }: { org: string; user: typeof DEFAULT_USER; isAssuming: boolean }) {
   const pathname = usePathname();
   return (
     <aside
@@ -263,7 +268,15 @@ function Sidebar({ org, user }: { org: string; user: typeof DEFAULT_USER }) {
         </div>
       </div>
 
-      {NAV.filter((n) => ROLE_FLOOR[user.role] >= ROLE_FLOOR[n.minRole]).map((n) => {
+      {NAV.filter((n) => {
+        const isPlatform = user.role === 'platform';
+        // Org screens all run through requireOrgId, so an un-assumed admin must
+        // not see links that would 403. Admin screens are admin-only, and stay
+        // visible while assuming so the admin can switch orgs without exiting.
+        if (n.scope === 'admin') return isPlatform;
+        const canSeeOrgNav = !isPlatform || isAssuming;
+        return canSeeOrgNav && ROLE_FLOOR[user.role] >= ROLE_FLOOR[n.minRole];
+      }).map((n) => {
         const on = pathname === n.href || (n.href !== '/dashboard' && pathname.startsWith(n.href));
         const NavIcon = n.icon;
         return (
@@ -347,6 +360,38 @@ function Topbar({ org, search, user }: { org: string; search: string; user: type
   );
 }
 
+/**
+ * Non-dismissible reminder that a Platform Admin is acting inside someone else's
+ * tenant (INS-079). Binding QA decisions are possible from here — the operator
+ * must never be unsure whose data they are looking at.
+ */
+function AssumptionBanner({ orgName }: { orgName: string }) {
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '8px 16px', background: '#7C2D12', color: '#fff', fontSize: 12.5,
+      }}
+    >
+      <span style={{ fontWeight: 600 }}>Platform Admin</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        You are operating inside <strong>{orgName}</strong>. Actions are recorded against your admin account.
+      </span>
+      <form action={exitOrg}>
+        <button
+          type="submit"
+          style={{
+            padding: '4px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.45)',
+            background: 'transparent', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Exit
+        </button>
+      </form>
+    </div>
+  );
+}
+
 /** Full-height responsive console shell: sidebar + topbar + scrollable content. */
 export function ConsoleShell({
   children,
@@ -354,16 +399,19 @@ export function ConsoleShell({
   search = 'Search inspections, buyers, suppliers, POs…',
   userName,
   role,
+  assumedOrgName = null,
 }: {
   children: ReactNode;
   org?: string;
   search?: string;
   userName?: string;
   role?: RoleKey;
+  assumedOrgName?: string | null;
 }) {
   const user = userName
     ? { name: userName, initials: initialsFrom(userName), role: role ?? 'inspector' as RoleKey }
     : DEFAULT_USER;
+  const isAssuming = Boolean(assumedOrgName);
   return (
     <div
       style={{
@@ -373,13 +421,17 @@ export function ConsoleShell({
         fontSize: 13,
         color: ui.ink,
         display: 'flex',
+        flexDirection: 'column',
         fontFeatureSettings: '"cv11", "ss01"',
       }}
     >
-      <Sidebar org={org} user={user} />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <Topbar org={org} search={search} user={user} />
-        <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
+      {isAssuming && <AssumptionBanner orgName={assumedOrgName as string} />}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <Sidebar org={org} user={user} isAssuming={isAssuming} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <Topbar org={org} search={search} user={user} />
+          <div style={{ flex: 1, overflow: 'auto' }}>{children}</div>
+        </div>
       </div>
     </div>
   );
