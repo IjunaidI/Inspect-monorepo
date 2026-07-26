@@ -370,7 +370,7 @@ function AssumptionBanner({ orgName }: { orgName: string }) {
     <div
       style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        padding: '8px 16px', background: '#7C2D12', color: '#fff', fontSize: 12.5,
+        padding: '8px 16px', background: ui.assumeBg, color: '#fff', fontSize: 12.5,
       }}
     >
       <span style={{ fontWeight: 600 }}>Platform Admin</span>

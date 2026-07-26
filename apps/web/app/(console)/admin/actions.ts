@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth';
 import { apiGet, apiPost, ApiError, type ApiCreatedOrg, type ApiOrganization } from '@/lib/api';
-import { setAssumedOrgId, clearAssumedOrgId } from '@/lib/admin-org';
+import { setAssumedOrg, clearAssumedOrgId } from '@/lib/admin-org';
 
 async function requirePlatformAdmin(): Promise<void> {
   const session = (await auth()) as unknown as { role?: string } | null;
@@ -51,10 +51,11 @@ export async function createOrg(
 export async function enterOrg(orgId: string): Promise<void> {
   await requirePlatformAdmin();
   const orgs = await apiGet<ApiOrganization[]>('/admin/orgs');
-  if (!orgs.some((o) => o.id === orgId)) {
+  const org = orgs.find((o) => o.id === orgId);
+  if (!org) {
     throw new Error('Unknown organization');
   }
-  await setAssumedOrgId(orgId);
+  await setAssumedOrg(orgId, org.name);
   redirect('/dashboard');
 }
 
