@@ -8,6 +8,14 @@ const OWNER: AuthUser = {
   actingAsOrgId: null,
 };
 const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER', actingAsOrgId: null };
+// INS-079: a Platform Admin operating inside an assumed org must be attributed
+// as PLATFORM_ADMIN in the audit chain, not as an ordinary org member.
+const PLATFORM_ADMIN_ACTOR: AuthUser = {
+  userId: 'u-admin',
+  orgId: 'org1',
+  role: 'PLATFORM_ADMIN',
+  actingAsOrgId: 'org1',
+};
 
 function makeService(
   mailResult: { sent: boolean; messageId?: string } = { sent: true },
@@ -165,7 +173,32 @@ describe('UsersService guards (INS-058)', () => {
     const out = await service.deactivate('org1', OWNER, 'u-target');
     expect(out.status).toBe('DEACTIVATED');
     expect(audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'user.deactivated', entityId: 'u-target' }),
+      expect.objectContaining({
+        action: 'user.deactivated',
+        entityId: 'u-target',
+        actorType: 'USER',
+        actorUserId: OWNER.userId,
+      }),
+      expect.anything(),
+    );
+  });
+
+  // INS-079: without actorTypeFor wired into the call site, this regresses
+  // silently — the literal 'USER' still satisfies every other assertion above.
+  it('deactivate attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
+    const { service, audit } = makeService(
+      { sent: true },
+      null,
+      { id: 'u-target', orgId: 'org1', role: 'ORG_OWNER', status: 'ACTIVE' },
+      1,
+    );
+    await service.deactivate('org1', PLATFORM_ADMIN_ACTOR, 'u-target');
+    expect(audit.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'user.deactivated',
+        actorType: 'PLATFORM_ADMIN',
+        actorUserId: PLATFORM_ADMIN_ACTOR.userId,
+      }),
       expect.anything(),
     );
   });
