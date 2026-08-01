@@ -26,7 +26,7 @@ export class PurchaseOrdersController {
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() body: CreatePurchaseOrderInput) {
-    return this.purchaseOrders.create(requireOrgId(user), user.userId, body);
+    return this.purchaseOrders.create(requireOrgId(user), user, body);
   }
 
   @Patch(':id')
@@ -35,11 +35,11 @@ export class PurchaseOrdersController {
     @Param('id') id: string,
     @Body() body: UpdatePurchaseOrderInput,
   ) {
-    return this.purchaseOrders.update(requireOrgId(user), id, body);
+    return this.purchaseOrders.update(requireOrgId(user), user, id, body);
   }
 
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.purchaseOrders.remove(requireOrgId(user), id);
+    return this.purchaseOrders.remove(requireOrgId(user), user, id);
   }
 }

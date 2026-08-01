@@ -1,18 +1,76 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
 
+/**
+ * The only shape a supplier's `gps` column may hold (INS-071). A type alias (not
+ * an interface) so it stays assignable to Prisma's JSON input types.
+ */
+export type GpsCoordinates = { lat: number; lng: number };
+
 export interface CreateSupplierInput {
   name: string;
   address?: string;
-  gps?: unknown;
+  gps?: GpsCoordinates | null;
 }
 export interface UpdateSupplierInput {
   name?: string;
   address?: string;
-  gps?: unknown;
+  gps?: GpsCoordinates | null;
+}
+
+const GPS_SHAPE_MESSAGE =
+  'gps must be an object with numeric lat and lng, e.g. { "lat": 23.8103, "lng": 90.4125 }';
+
+/** Accept a real number or an unambiguous numeric string; reject NaN/Infinity. */
+function finiteNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * INS-071: `gps` used to be typed `unknown` and persisted verbatim, so a typo in
+ * the console's hand-typed JSON saved a supplier with no usable coordinates and
+ * no error. Validate the structure here — the API is the authority — and return
+ * a canonical `{ lat, lng }` with any extra keys stripped.
+ *
+ * `undefined` = field absent (no change); `null` = explicit clear.
+ */
+export function normalizeGps(value: unknown): GpsCoordinates | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException(GPS_SHAPE_MESSAGE);
+  }
+  const raw = value as Record<string, unknown>;
+  const lat = finiteNumber(raw.lat);
+  const lng = finiteNumber(raw.lng);
+  if (lat === null || lng === null) {
+    throw new BadRequestException(GPS_SHAPE_MESSAGE);
+  }
+  if (lat < -90 || lat > 90) {
+    throw new BadRequestException(`gps.lat must be between -90 and 90 (got ${lat})`);
+  }
+  if (lng < -180 || lng > 180) {
+    throw new BadRequestException(`gps.lng must be between -180 and 180 (got ${lng})`);
+  }
+  return { lat, lng };
+}
+
+/** Map the normalised value onto Prisma's nullable-JSON write semantics. */
+function gpsWrite(
+  gps: GpsCoordinates | null | undefined,
+): Prisma.InputJsonObject | typeof Prisma.DbNull | undefined {
+  if (gps === undefined) return undefined;
+  if (gps === null) return Prisma.DbNull;
+  return gps as Prisma.InputJsonObject;
 }
 
 @Injectable()
@@ -47,30 +105,66 @@ export class SuppliersService {
     return row;
   }
 
-  create(orgId: string, userId: string, input: CreateSupplierInput) {
+  // async so a validation failure surfaces as a rejected promise rather than a
+  // synchronous throw — callers (and specs) treat every write path uniformly.
+  async create(orgId: string, actor: AuthUser, input: CreateSupplierInput) {
     if (!input?.name?.trim()) {
       throw new BadRequestException('name is required');
     }
-    return this.prisma.supplier.create({
-      data: {
-        orgId,
-        name: input.name.trim(),
-        address: input.address,
-        gps: input.gps as object | undefined,
-        createdByUserId: userId,
-      },
+    const gps = normalizeGps(input.gps);
+    // INS-006: audit inside the business transaction.
+    return this.prisma.$transaction(async (tx) => {
+      const supplier = await tx.supplier.create({
+        data: {
+          orgId,
+          name: input.name.trim(),
+          address: input.address,
+          gps: gpsWrite(gps),
+          createdByUserId: actor.userId,
+        },
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'supplier.created',
+          entityType: 'Supplier',
+          entityId: supplier.id,
+          metadata: { name: supplier.name },
+        },
+        tx,
+      );
+      return supplier;
     });
   }
 
-  async update(orgId: string, id: string, input: UpdateSupplierInput) {
+  async update(orgId: string, actor: AuthUser, id: string, input: UpdateSupplierInput) {
+    // Validate before touching the DB (INS-071).
+    const gps = normalizeGps(input.gps);
     await this.get(orgId, id);
-    return this.prisma.supplier.update({
-      where: { id },
-      data: {
-        name: input.name?.trim(),
-        address: input.address,
-        gps: input.gps as object | undefined,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const supplier = await tx.supplier.update({
+        where: { id },
+        data: {
+          name: input.name?.trim(),
+          address: input.address,
+          gps: gpsWrite(gps),
+        },
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'supplier.updated',
+          entityType: 'Supplier',
+          entityId: id,
+          metadata: { fields: Object.keys(input ?? {}).sort() },
+        },
+        tx,
+      );
+      return supplier;
     });
   }
 

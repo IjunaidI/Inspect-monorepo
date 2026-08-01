@@ -32,9 +32,10 @@ function makeService(opts: {
       cb({ user: { upsert }, invitation: { update: invitationUpdate } }),
     ),
   };
+  const audit = { append: jest.fn(async () => ({})) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const service = new InvitationsService(prisma as any);
-  return { service, upsert, invitationUpdate, prisma };
+  const service = new InvitationsService(prisma as any, audit as any);
+  return { service, upsert, invitationUpdate, prisma, audit };
 }
 
 const validInvite = {

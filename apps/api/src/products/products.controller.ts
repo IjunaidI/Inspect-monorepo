@@ -30,7 +30,7 @@ export class ProductsController {
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() body: CreateProductInput) {
-    return this.products.create(requireOrgId(user), user.userId, body);
+    return this.products.create(requireOrgId(user), user, body);
   }
 
   @Patch(':id')
@@ -39,7 +39,7 @@ export class ProductsController {
     @Param('id') id: string,
     @Body() body: UpdateProductInput,
   ) {
-    return this.products.update(requireOrgId(user), id, body);
+    return this.products.update(requireOrgId(user), user, id, body);
   }
 
   @Delete(':id')

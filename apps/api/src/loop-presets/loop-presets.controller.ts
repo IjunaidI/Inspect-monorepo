@@ -59,11 +59,11 @@ export class LoopPresetsController {
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() body: CreateLoopPresetInput) {
-    return this.presets.create(requireOrgId(user), user.userId, body);
+    return this.presets.create(requireOrgId(user), user, body);
   }
 
   @Delete(':id')
   archive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.presets.archive(requireOrgId(user), id);
+    return this.presets.archive(requireOrgId(user), user, id);
   }
 }

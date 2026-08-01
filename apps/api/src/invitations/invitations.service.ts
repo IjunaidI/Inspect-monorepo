@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword } from '../auth/password';
+import { AuditService } from '../audit/audit.service';
 
 export interface AcceptInvitationInput {
   token: string;
@@ -17,7 +18,10 @@ export interface AcceptInvitationInput {
 /** Accept an invite: set the password and activate the User (spec §3). Public. */
 @Injectable()
 export class InvitationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /**
    * Public lookup so the /invite page renders VERIFIED data (email/role/org)
@@ -95,6 +99,26 @@ export class InvitationsService {
         where: { id: invitation.id },
         data: { acceptedAt: new Date() },
       });
+      // INS-006: account activation is an unauthenticated public write that
+      // grants a role inside a tenant — one of the few events with no logged-in
+      // actor, so it is attributed to the newly-activated user themselves and
+      // typed SYSTEM to make the self-service origin explicit in the chain.
+      await this.audit.append(
+        {
+          orgId: invitation.orgId,
+          actorType: 'SYSTEM',
+          actorUserId: user.id,
+          action: 'invitation.accepted',
+          entityType: 'User',
+          entityId: user.id,
+          metadata: {
+            invitationId: invitation.id,
+            email: invitation.email,
+            role: invitation.role,
+          },
+        },
+        tx,
+      );
       const { passwordHash: _omit, ...safe } = user;
       return safe;
     });
