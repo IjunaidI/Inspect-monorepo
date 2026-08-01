@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { Copy } from 'lucide-react';
 import { apiGet, type ApiLoopPresetDetail } from '@/lib/api';
 import { Btn, Mono, PageHead, SeverityTag } from '@/components/inspect/shell';
 import { severity, ui, type SeverityKey } from '@/components/inspect/tokens';
@@ -30,8 +31,14 @@ export default async function PresetDetailPage({
         title={`${preset.name} · v${preset.version}`}
         sub={[preset.description, preset.aqlLevel ? `AQL ${preset.aqlLevel}` : null].filter(Boolean).join(' · ') || 'Loop preset'}
         actions={
-          <Btn kind="primary" href={`/presets/new?from=${preset.id}`}>
-            Edit (new version)
+          /*
+           * INS-076: presets are never edited in place — the API is
+           * GET/POST/DELETE only. This opens a pre-seeded builder, so the
+           * honest label is "Duplicate" (same label as the list card menu).
+           * The builder itself states which version the save lands on.
+           */
+          <Btn kind="primary" icon={<Copy size={15} />} href={`/presets/new?from=${preset.id}`}>
+            Duplicate
           </Btn>
         }
       />

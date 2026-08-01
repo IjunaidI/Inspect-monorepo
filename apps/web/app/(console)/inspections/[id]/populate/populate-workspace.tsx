@@ -92,7 +92,7 @@ export function PopulateWorkspace({
       try {
         await uploadBytesToPresignedUrl(presign.data!.uploadUrl, file);
       } catch (e) {
-        setPendingError(`Storage upload failed (MinIO not running — INS-023): ${String(e)}`);
+        setPendingError(`Storage upload failed — the browser could not PUT to object storage (check S3_ENDPOINT reachability and the bucket's CORS policy): ${String(e)}`);
       }
 
       const hash = await sha256Hex(file);

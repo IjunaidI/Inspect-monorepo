@@ -13,31 +13,61 @@ function decodeJwtExp(token: string): number | null {
   }
 }
 
-async function refreshAccessToken(token: Record<string, unknown>) {
+export interface RefreshedApiTokens {
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpires: number;
+}
+
+/**
+ * Exchange a refresh token for a fresh API access token. Exported because the
+ * server-side API layer performs the same rotation: since INS-045 the bearer
+ * token is no longer projected onto the session object, so lib/api.ts reads the
+ * encrypted NextAuth JWT directly and must be able to renew an expired token
+ * itself rather than relying on this module's `jwt` callback having run.
+ * Returns null when the API rejects the refresh (caller decides the fallback).
+ * Deliberately free of `next/headers` — middleware.ts imports this module and
+ * runs on the edge runtime.
+ */
+export async function refreshApiAccessToken(refreshToken: unknown): Promise<RefreshedApiTokens | null> {
+  if (typeof refreshToken !== 'string' || !refreshToken) return null;
   try {
     const res = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: token.refreshToken }),
+      body: JSON.stringify({ refreshToken }),
     });
-    if (!res.ok) throw new Error(`Refresh failed: ${res.status}`);
-    const { accessToken, refreshToken } = (await res.json()) as { accessToken: string; refreshToken?: string };
+    if (!res.ok) return null;
+    const issued = (await res.json()) as { accessToken?: string; refreshToken?: string };
+    if (!issued?.accessToken) return null;
     return {
-      ...token,
-      accessToken,
-      refreshToken: refreshToken ?? token.refreshToken,
-      accessTokenExpires: decodeJwtExp(accessToken) ?? (Date.now() + 15 * 60 * 1000),
-      error: undefined,
+      accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken ?? refreshToken,
+      accessTokenExpires: decodeJwtExp(issued.accessToken) ?? (Date.now() + 15 * 60 * 1000),
     };
   } catch {
-    return { ...token, error: 'RefreshAccessTokenError' as const };
+    return null;
   }
+}
+
+async function refreshAccessToken(token: Record<string, unknown>) {
+  const refreshed = await refreshApiAccessToken(token.refreshToken);
+  if (!refreshed) return { ...token, error: 'RefreshAccessTokenError' as const };
+  return { ...token, ...refreshed, error: undefined };
 }
 
 /**
  * The NestJS API is the RBAC authority (spec §13). NextAuth uses a Credentials
- * provider that delegates to the API's POST /auth/login, then stores the issued
- * access/refresh JWTs (plus role + orgId) in the session for API calls.
+ * provider that delegates to the API's POST /auth/login, then keeps the issued
+ * access/refresh JWTs inside the *encrypted* NextAuth cookie.
+ *
+ * INS-045: those API tokens are deliberately NOT copied onto the session object.
+ * NextAuth serves the session object to the browser at GET /api/auth/session, so
+ * anything placed there is readable by client-side JS — and the bearer token is
+ * only ever used server-side (lib/api.ts), which makes exposing it pure downside.
+ * The session therefore carries identity only: user, role, orgId, orgName.
+ * lib/api.ts reads the token out of the encrypted cookie via `getToken`.
+ *
  * The jwt callback tracks token expiry and auto-refreshes; on failure it sets
  * error='RefreshAccessTokenError', which the console layout catches to force sign-out.
  */
@@ -73,6 +103,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             refreshToken,
             role: me.role,
             orgId: me.orgId ?? null,
+            // INS-080: GET /auth/me resolves the real workspace name (null for the
+            // cross-tenant Platform Admin). Carried through so the console shell can
+            // show it instead of falling through to the design-demo constant.
+            orgName: (me.orgName as string | null) ?? null,
             accessTokenExpires: decodeJwtExp(accessToken) ?? (Date.now() + 15 * 60 * 1000),
           } as never;
         } catch {
@@ -92,6 +126,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           refreshToken: u.refreshToken,
           role: u.role,
           orgId: u.orgId,
+          orgName: u.orgName ?? null,
           accessTokenExpires: (u.accessTokenExpires as number | undefined) ?? (Date.now() + 15 * 60 * 1000),
           error: undefined,
         };
@@ -107,9 +142,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     session: async ({ session, token }) => {
       const s = session as unknown as Record<string, unknown>;
-      s.accessToken = token.accessToken;
+      // INS-045: NEVER put accessToken/refreshToken here — this object is what
+      // GET /api/auth/session hands to the browser. Server code gets the bearer
+      // token from the encrypted JWT instead (lib/api.ts#readSessionJwt).
       s.role = token.role;
       s.orgId = token.orgId;
+      // INS-080: the caller's real org name, for the console shell.
+      s.orgName = token.orgName ?? null;
       // Project the API user id explicitly (RowActions gates the assigned
       // inspector's Start/Reset on it) instead of relying on Auth.js's implicit
       // token.sub -> session.user.id default.

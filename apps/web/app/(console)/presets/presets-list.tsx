@@ -108,7 +108,8 @@ export function PresetsList({ presets: initial, live }: { presets: PresetRow[]; 
                       href={`/presets/new?from=${p.id}`}
                       style={{ display: 'block', padding: '10px 14px', fontSize: 13, color: ui.ink, textDecoration: 'none' }}
                     >
-                      Duplicate (new version)
+                      {/* INS-076: same label as the detail page's primary action. */}
+                      Duplicate
                     </a>
                     <button
                       onClick={() => handleArchive(p.id)}

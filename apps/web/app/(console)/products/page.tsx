@@ -43,7 +43,29 @@ export default async function ProductsPage() {
                 <td style={{ padding: '14px 20px', fontSize: 13, fontWeight: 550 }}>
                   <Mono>{p.styleNumber}</Mono>
                 </td>
-                <td style={{ padding: '14px 20px', fontSize: 13, color: ui.sub }}>{p.description || '—'}</td>
+                <td style={{ padding: '14px 20px', fontSize: 13, color: ui.sub }}>
+                  {/* INS-074: descriptions are unbounded TEXT — clamp to two
+                      lines so one long entry cannot blow the row height out.
+                      The full text lives on the detail page. */}
+                  {p.description ? (
+                    <div
+                      title={p.description}
+                      style={{
+                        maxWidth: 560,
+                        lineHeight: 1.5,
+                        display: '-webkit-box',
+                        WebkitBoxOrient: 'vertical',
+                        WebkitLineClamp: 2,
+                        overflow: 'hidden',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {p.description}
+                    </div>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                   <Link href={`/products/${p.id}`} style={{ fontSize: 12.5, color: ui.accent, textDecoration: 'none', fontWeight: 500 }}>Edit →</Link>
                 </td>
