@@ -94,7 +94,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11 · [../reference/inspect-schema.md](../reference/inspect-schema.md) (§9)
 
 ### INS-003 · PDF binary is never rendered   [HIGH]
-- status: todo
+- status: done            # 2026-08-01: `pdf-lib` added; `src/reports/report-pdf.ts` renders the FROZEN canonicalSnapshot + brandingSnapshot (never live relations, so the artifact can't drift from what was signed) into a per-buyer-branded PDF mirroring `BrandedReport`, with the content hash + Ed25519 signature + public verify URL in the footer. Uploaded via the existing dependency-free SigV4 presign path and `report.pdfStorageKey` attached after commit; `GET /reports/:id/pdf` returns a short-lived presigned GET. Rendering NEVER breaks generation — if storage is unconfigured or the upload fails, the signed row still exists with a null key and the failure is logged (the signed record is the guarantee; the PDF is a rendition). Unit-tested (`report-pdf.spec.ts`, `reports.service.spec.ts`).
 - area: Reports & verification
 - evidence: `apps/api/src/reports/reports.service.ts:97` — comment "pdfStorageKey is set when the PDF binary is rendered (pdf-lib, follow-up)"; no `pdf-lib`/`pdfkit`/`puppeteer` in `apps/api/package.json`.
 - problem: `reports.service` creates the signed report record + Ed25519 signature but never produces a PDF; `pdfStorageKey` stays null, so there is no per-buyer-branded artifact to deliver, download, or verify — a core MVP deliverable is absent.
@@ -121,7 +121,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-07-inspect-status-and-next-steps.md](../done/plans/2026-06-07-inspect-status-and-next-steps.md) (Phase C)
 
 ### INS-006 · Audit-on-write not enforced across mutations   [HIGH]
-- status: todo
+- status: done            # 2026-08-01: every mutating service now appends its AuditLog row INSIDE the business transaction. Newly audited: buyers/suppliers/products create+update (they audited only archive+restore before), purchase-orders create/update/delete, loop-presets create+archive, defect-catalog create+archive, buyer-guests invite+revoke, invitation accept (the unauthenticated activation path — attributed `SYSTEM` + the activated user's own id), and the whole populate evidence path (photo register, photo→loop assign, defect add, measurement add) where orgId comes from the INSPECTION and the actor stays the real Platform Admin. Found and fixed en route: `actorTypeFor` keyed only on `actingAsOrgId`, so a Platform Admin populating cross-tenant — who never assumes an org — was recorded as an ordinary `USER`, reopening the INS-039 attribution hole; it now keys on the principal's role (unit-tested, `actor-type.spec.ts`). Verified: unit 533 passing / 38 suites, type-check clean.
 - area: Tamper-proof & audit
 - evidence: `audit.append` called in only TWO places — `reports.service.ts:104` (report.generated) and `orgs.service.ts:45` (org.created); inspections submit/decide, populate, and all workspace CRUD mutate **without** audit entries.
 - problem: The append-only hash-chained audit log is meant to record every mutating action, but ~13 mutating services write none, leaving the tamper-evidence story incomplete and the chain sparse.
@@ -130,7 +130,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§6/§7)
 
 ### INS-007 · populate.service invariant-heavy logic has no tests   [HIGH]
-- status: todo
+- status: done            # 2026-08-01: `populate.service.spec.ts` added (pure unit, mocked Prisma) covering every invariant path — writes refused for each of the six LOCKED statuses (and still allowed for DRAFT/ASSIGNED/IN_PROGRESS), the error naming the blocking status and pointing at re-inspection, `addDefect` rejecting both-null and both-set, the cross-tenant Platform-Admin path stamping the INSPECTION's orgId (not the caller's), and clientRequestId replay/conflict. Plus `test/integration/populate-invariants.e2e-spec.ts` against the real DB.
 - area: Populate console
 - evidence: `populate.service.ts` enforces LOCKED immutability, catalog-XOR-custom (`addDefect:130-135`), and `clientRequestId` idempotency but has no spec (module `tested:false`).
 - problem: The populate service is the only place enforcing immutability of submitted inspections, catalog-XOR-custom, and photo idempotency, yet it is completely untested — regressions in these critical invariants would go unnoticed.
@@ -139,7 +139,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md)
 
 ### INS-008 · @inspect/shared-types built but never linked   [HIGH]
-- status: todo
+- status: in-progress    # 2026-08-01: HALF done. `@inspect/shared-types` is now a real workspace dependency of BOTH apps (`pnpm --filter … add @inspect/shared-types@workspace:*`), and `turbo.json`'s `type-check` task gained `dependsOn: ["^build"]` so the package's `dist/` is built before either app type-checks it. What remains is the mechanical part: neither app IMPORTS from it yet, so the duplicated role/enum/DTO declarations are still the ones in use and the contract can still drift.
 - area: Infra & CI
 - evidence: package exists at `packages/shared-types` (dist+src) but the only reference in `apps/` is a comment in `apps/api/src/auth/rbac.ts:7`; it is not in `apps/api` or `apps/web` `package.json`. (README marks it "done" — a contradiction.)
 - problem: The shared contract package is effectively dead code: API and web each redeclare their own types, so the client/server contract can silently drift.
@@ -157,7 +157,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-build-index.md](../reference/inspect-build-index.md)
 
 ### INS-010 · Composite-FK tenant guard not DB-enforced (orgId alignment)   [HIGH]
-- status: todo
+- status: in-progress    # 2026-08-01: schema + migration AUTHORED AND VERIFIED, **not yet applied** — applying it was blocked by the sandbox permission classifier (see the note at the end of this file). Parents `Inspection`/`Buyer` gained `@@unique([id, orgId])`; `InspectionLoop`, `Photo`, `DefectInstance`, `AqlResult` now reference `[id, orgId]` on their inspection, and `BuyerGuest` on its buyer, so the DB rejects a child whose orgId disagrees with its parent. The optional `inspectionLoopId` links stay single-column ON PURPOSE: they are `onDelete: SetNull` and a composite FK would have to null the NOT NULL orgId alongside them. `prisma validate` passes; the SQL is in `prisma/migrations/20260801000000_db_level_invariants/`; a live data probe confirmed 0 misaligned rows in all five relations, so it applies without repair. Acceptance test written: `test/integration/db-invariants.e2e-spec.ts` (self-skips until the migration lands).
 - area: Data model & schema
 - evidence: single-column FKs only — `inspection_loops_orgId_fkey`, `photos_orgId_fkey` reference `organizations(id)`, never a composite parent key (`schema.prisma` convention note + [inspect-schema.md](../reference/inspect-schema.md) §7).
 - problem: Children (InspectionLoop, Photo, DefectInstance, AqlResult, BuyerGuest) carry a denormalized `orgId` the DB never checks against their parent aggregate, so a bug or bad write could attach a child to the wrong tenant with no DB rejection.
@@ -228,7 +228,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 > cost optimization (OpenRouter) — the product has no LLM surface to attach it to yet.
 
 ### INS-055 · EPIC: unify Buyer/Supplier into a single Company model (spec first, phased)   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): directed product decision — every inspection gets a company (internal or third-party) attached.
+- status: in-progress    # 2026-08-01: **the step this item actually asked for is DONE — the spec + phased plan exist** ([../in-progress/specs/2026-08-01-inspect-company-model-design.md](../in-progress/specs/2026-08-01-inspect-company-model-design.md) · [../in-progress/plans/2026-08-01-inspect-company-model.md](../in-progress/plans/2026-08-01-inspect-company-model.md)), grounded in real file:line evidence and answering the role-model / branding / guest-visibility / canonical-versioning questions this item listed as prerequisites. **Implementation deliberately NOT started**: the spec's opening section lists the decisions that need a human product call first, each with a recommended default. This is the one epic that genuinely needs the user — see the flag at the end of this file.  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17): directed product decision — every inspection gets a company (internal or third-party) attached.
 - area: Data model & schema (epic: api + web + tests)
 - evidence: the split is structural at every layer — `schema.prisma:247-315` separate Buyer/Supplier tables with asymmetric fields (branding/defaultLoopPresetId/guests/reports vs address/gps), `:341-342` PurchaseOrder requires both parties, `:480-481` Inspection denormalizes required buyerId + optional supplierId, `:718-744` Report is buyer-owned with a buyer-derived brandingSnapshot; `guest.service.ts:37` buyer-scoped report visibility (a security boundary); `reports.service.ts:61-62` the Ed25519-signed canonical embeds distinct buyer/supplier keys; ~12 API modules, ~28 web files, 68 integration-test occurrences encode the split.
 - problem: The meeting decided to retire the buyer/supplier split for a unified Company model. A one-shot rename would put tenant-isolation, immutability, and signed-snapshot invariants at risk simultaneously across 25 models and both apps.
@@ -273,12 +273,13 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · owner-set passwords are shared secrets — a forced first-login password change is a noted follow-up, out of scope here
 
 ### INS-060 · Browser→storage presigned PUT fails ("failed to fetch"): dead/unprovisioned storage endpoint, no storage CORS   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17 bug report: reference-image upload always fails). Root-cause hypotheses ranked below.
+- status: done            # 2026-08-01: the four remaining fix items are closed (H1/H2/H3/H4 were already disproven by the 2026-08-01 live probe recorded in the `update:` line below). (1) `docker-compose.dev.yml` gained a `minio-init` sidecar that creates the bucket (it was never created, so every presigned PUT would have 404'd even with MinIO up) plus `MINIO_API_CORS_ALLOW_ORIGIN` for the console origin — MinIO, not the API, is what must answer that preflight. (2) `StorageService.presign` now rejects PLACEHOLDER credentials (CHANGE_ME and friends), not just empty ones, so the API can no longer mint signed URLs that are guaranteed to fail; unit-tested in the new `storage.service.spec.ts`. (3) `.env.example` documents the deployed-setup requirements: a browser-reachable https `S3_ENDPOINT`, the exact bucket CORS policy, objects NOT anonymously readable, and the trap that managed endpoints answer 403 for ANY bucket name so a wrong `S3_BUCKET` surfaces as a failing PUT rather than a probe 404. (4) the console no longer registers phantom photos: the populate workspace only calls the register endpoint after the PUT genuinely succeeded, and both it and the preset builder now distinguish a network/CORS failure from an HTTP status failure instead of blaming "MinIO not running". **Caveat: the docker-compose half is unverified — Docker is not available on this machine** (the managed S3 bucket is what the live byte path was proven against).  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17 bug report: reference-image upload always fails). Root-cause hypotheses ranked below.
 - area: Storage / Web console (shared byte path: preset reference images + populate photos)
 - evidence: the browser PUTs directly to the host embedded in the presigned URL (`builder.tsx:214`; `sigv4.ts:101` embeds S3_ENDPOINT verbatim, default `http://localhost:9000` per `storage.service.ts:48`); the presign guard rejects only EMPTY creds — the template's CHANGE_ME placeholders pass (`storage.service.ts:42-46`); `docker-compose.dev.yml:40` has no bucket-init (inspect-photos never created) and no MinIO CORS env; the INS-053 CORS allowlist covers only the API origin (`main.ts:10`); populate shares the identical path, hardcodes "MinIO not running" (`populate-workspace.tsx:95`), and STILL registers photo metadata for bytes that never uploaded (`:98-105`). A fetch network/CORS failure surfaces as exactly "Failed to fetch" (`builder.tsx:234-235`); an HTTP status would render "Image upload failed (NNN)".
 - problem: The byte path has never been exercised browser→storage. Ranked hypotheses: **H1** nothing listening at the signed host (MinIO/Docker unavailable locally; presign mints URLs to a dead host anyway); **H2** storage-host CORS preflight rejection (nothing configures it; the API allowlist is irrelevant there); **H3** non-browser-reachable or http:// endpoint in deployed setups (mixed content, internal hostname); **H4** follow-on once a host answers: missing bucket → 404. Populate masks the failure with phantom photo rows.
 - fix: Make the byte path work end-to-end and fail loudly when it can't: (1) dev stack — bucket-init sidecar (mc mb + `MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:3001`) in docker-compose; (2) API — presign rejects placeholder config (CHANGE_ME) and a boot-time storage health check warns, so presign never signs for a dead host; (3) deploy config — require a browser-reachable https S3_ENDPOINT and document the bucket CORS policy (PUT+GET, console origin, Content-Type header); (4) web — distinguish network vs HTTP failure in the error copy, and stop populate from registering photos whose bytes never landed.
 - verify: With the dev stack up: builder upload completes (OPTIONS+PUT 200 in the Network tab), the key chip appears, save persists referenceImageUrls, the preset detail renders the thumbnail via viewUrl; the populate photo upload passes the same round-trip; presign returns 400 (not a signed URL) with CHANGE_ME/unset creds; the CI byte spec stays green with REQUIRE_STORAGE=1.
+- update: 2026-08-01 — `S3_*` now points at a managed S3-compatible bucket (Tigris, https, path-style) instead of the `localhost:9000` default, and the byte path was verified live against it from Node using the repo's own `presignS3Url`: **H1 disproven** (presigned PUT → 200), **H3 disproven** (endpoint is browser-reachable https), **H2 disproven** (OPTIONS preflight with `Origin: http://localhost:3001` + `Access-Control-Request-Method: PUT` → 200, `access-control-allow-origin: *`, `access-control-allow-methods: *`), **H4 not applicable** (bucket exists; presigned GET round-tripped a sha256 byte-for-byte match, and objects are NOT anonymously readable — unsigned GET → 403, so the `viewUrl` privacy model holds). The original report predates this config and is consistent with H1 at the time (presign minting URLs to a dead `localhost:9000`). **Still open:** fix items (2) presign still accepts `CHANGE_ME` placeholders — `storage.service.ts:42-46` rejects only EMPTY creds — and (4) populate still registers photo metadata for bytes that never landed; item (1) local MinIO bucket-init + CORS only matters if the local stack is still wanted. **Not yet verified:** the actual browser→storage hop through the console UI (this was Node-side fetch, not the builder/populate screens). Caveat for verification: managed endpoints answer 403 for ANY bucket name, so a wrong `S3_BUCKET` will NOT surface as a probe 404 — it surfaces as a failing presigned PUT.
 - refs: meeting 2026-07-17 · diagnostics: devtools Network first (which hop fails), then `curl -X PUT` the uploadUrl — curl-fails ⇒ unreachable (H1/H3), curl-succeeds ⇒ CORS (H2) · relates INS-052 (built the flow), INS-023, INS-002
 
 ### INS-061 · Archive is irreversible: no unarchive/restore path (buyers, suppliers, products)   [HIGH]
@@ -300,7 +301,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · INS-003 (PDF download itself) · INS-020 (a delivery-status column can join ReportDelivery later)
 
 ### INS-063 · AQL is not configurable end-to-end: expose per-class AQL within the verified band + validate it   [HIGH]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): "AQL level not configurable — fix it". The knob is per-class AQL VALUES, not the inspection level.
+- status: done            # 2026-08-01: (a) `inspections/new` now offers per-class AQL selects restricted to {0, 1.0, 1.5, 2.5, 4.0, 6.5} (critical defaults 0), feeds them into the live preview so the plan panel tracks the choice, and sends `aqlPlan` on create; (b) API hardened — a new pure `src/inspections/aql-plan-input.ts` validates the plan against the allowed set and `create()` wraps computeSampling in a BadRequestException, so an out-of-band plan or a hole in the verified grid is a clean 400 instead of the old 500; (d) `aqlLevel` stays locked to II and the engine's acceptance-number grid was NOT touched. **(c) deliberately deferred**: per-class default columns on LoopPreset need a schema change, and were left out to keep this shippable — file separately if wanted. Proven by `test/integration/aql-config.e2e-spec.ts` (major=1.5 at lot 1000 → ac 3/re 4; major=3.0 → 400 naming the allowed values; lot 100 letter F → clean 400 from preview AND create; omitted plan → spec defaults; submit re-derives from the frozen snapshot).  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17): "AQL level not configurable — fix it". The knob is per-class AQL VALUES, not the inspection level.
 - area: Loop presets / Inspection lifecycle (UI + validation — NOT an engine extension)
 - evidence: the preset stores only an AqlLevel enum locked to 'II' (guard `loop-presets.service.ts:69-73`; single-option select `builder.tsx:453-459`) and no per-class fields (`schema.prisma:368-389`); the API already accepts `aqlPlan` on POST /inspections and per-class params on GET /inspections/aql-preview (`inspections.service.ts:18,144`, `inspections.controller.ts:45-53`) but the web never sends them (`create-form.tsx:26`, `inspections/actions.ts:33`) — every inspection uses the defaults (critical 0 / major 2.5 / minor 4.0, `aql-tables.ts:75`); `inspections.service.ts:145` calls computeSampling UNWRAPPED, so an out-of-band aqlPlan today surfaces as a 500, not a 400; the verified grid has holes (G lacks 1.0/1.5; M/N lack 4.0/6.5; letters A–F have no non-zero-AQL cells) and planFor throws outside it (`aql.engine.ts:56-65`).
 - problem: The QA-configurable AQL knob (per-class values — `aql.types.ts:26-35` was designed for exactly this) has zero UI, and the API's error path for invalid plans is a 500.
@@ -358,7 +359,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11 (schema piece INS-016 implies but never spelled out)
 
 ### INS-011 · Append-only audit log not protected by DB triggers   [MEDIUM]
-- status: todo
+- status: in-progress    # 2026-08-01: migration AUTHORED, **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file). `prisma/migrations/20260801000000_db_level_invariants/` adds BEFORE UPDATE and BEFORE DELETE triggers on `audit_logs` that RAISE, leaving INSERT open. Documented residual risk: a role that OWNS the table can `ALTER TABLE … DISABLE TRIGGER`, so full protection needs a least-privilege application role that is not the table owner (Railway's single-role setup cannot express that today). Acceptance test written: `test/integration/db-invariants.e2e-spec.ts`.
 - area: Tamper-proof & audit
 - evidence: `AuditLog` comment `schema.prisma` "enforced at the application layer"; `migration.sql` has no triggers/rules blocking UPDATE/DELETE.
 - problem: The DB permits UPDATE/DELETE of `audit_logs` rows, so the append-only tamper-evidence guarantee rests entirely on app discipline and is defeatable by any direct row mutation.
@@ -367,7 +368,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§9)
 
 ### INS-012 · Monotonic per-org audit sequence relies on caller-supplied tx   [MEDIUM]
-- status: todo            # 2026-07-11 (security review): CONFIRMED — under Postgres default Read Committed, wrapping append() in the caller's tx does NOT serialize the read-max-then-write, so two concurrent same-org appends collide on @@unique([orgId,sequence]) → P2002 rolls back the loser's business mutation (no data corruption, but a spurious failure with no retry). The misleading "wrap … to avoid races" NOTE was corrected in audit.service.ts. Still open: Serializable+retry or an atomic per-org counter / advisory lock. # 2026-07-18: blast radius grew — meeting batch 1 added ten more audited mutations sharing this same-transaction append pattern (inspection start/reset/update, buyer/supplier/product archive+restore, user role-change/deactivate/reactivate/member-add), each a new caller for whom a losing P2002 rolls back the business write and surfaces a 500.
+- status: done            # 2026-08-01: `AuditService.append()` now takes a transaction-scoped `pg_advisory_xact_lock` keyed on the org as its FIRST statement, so the read-modify-write of the per-org counter serialises while different orgs stay fully parallel. Because the lock only works inside a transaction, an append called WITHOUT one now opens its own (and retries the whole transaction on P2002); an append inside the caller's transaction cannot retry — Postgres aborts the whole tx on error — so the lock is what makes P2002 unreachable there. hashtext() narrowing is safe by construction: a key collision only makes two unrelated orgs serialise briefly, never share a sequence, because the counter is still read `WHERE orgId = <this org>`. Verified: `audit.service.spec.ts` + `test/integration/audit-chain.e2e-spec.ts` (concurrent audited mutations produce a gap-free 1..N sequence with no P2002 leaked to callers, and `verifyChain` passes over the real rows).  # old status: todo            # 2026-07-11 (security review): CONFIRMED — under Postgres default Read Committed, wrapping append() in the caller's tx does NOT serialize the read-max-then-write, so two concurrent same-org appends collide on @@unique([orgId,sequence]) → P2002 rolls back the loser's business mutation (no data corruption, but a spurious failure with no retry). The misleading "wrap … to avoid races" NOTE was corrected in audit.service.ts. Still open: Serializable+retry or an atomic per-org counter / advisory lock. # 2026-07-18: blast radius grew — meeting batch 1 added ten more audited mutations sharing this same-transaction append pattern (inspection start/reset/update, buyer/supplier/product archive+restore, user role-change/deactivate/reactivate/member-add), each a new caller for whom a losing P2002 rolls back the business write and surfaces a 500.
 - area: Tamper-proof & audit
 - evidence: `audit.service.ts:25-26` NOTE "caller MUST wrap in the audited write's transaction to avoid races"; `AuditLog.sequence` is a plain `Int`, `@@unique([orgId, sequence])` enforces uniqueness only.
 - problem: Sequence assignment reads-latest-then-writes with no DB generation, so two concurrent writers can pick the same next sequence; correctness depends on every caller wrapping the append in the audited write's transaction and retrying on unique-violation.
@@ -376,7 +377,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§7)
 
 ### INS-013 · audit.service.ts itself has no unit test   [MEDIUM]
-- status: todo
+- status: done            # 2026-08-01: `src/audit/audit.service.spec.ts` added — first-entry (sequence 1, prevEntryHash null), chained entry (sequence N+1 linked to the prior row's linkHash), the INS-039 guarantee that actor identity + app-assigned createdAt are inside payloadHash, that the advisory lock is taken BEFORE the read, and the P2002 retry path.
 - area: Tamper-proof & audit
 - evidence: `audit` module `tested:true` but only `audit-chain.spec.ts` (7 tests) exists; `audit.service.ts` has no spec.
 - problem: Only the pure audit-chain helper is tested; the service that assigns sequence, links `prevEntryHash`, and persists is untested, so its transaction/sequence logic is unverified.
@@ -385,7 +386,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md](../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md)
 
 ### INS-014 · Immutability of submitted inspections/reports is app-layer only   [MEDIUM]
-- status: todo
+- status: in-progress    # 2026-08-01: migration AUTHORED, **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file). Deliberately COLUMN-LEVEL rather than a blanket UPDATE block, because the lifecycle must keep moving after submission and a report legitimately gains `pdfStorageKey` (INS-003) / `status` / `deliveredAt` (INS-020) AFTER the signing transaction commits. What is frozen: on `reports`, every tamper-proof column (canonicalSnapshot/brandingSnapshot/contentHash/signature/verificationToken/generatedAt + the identity FKs) plus DELETE; on `inspections`, all evidence columns once status is SUBMITTED or beyond (status/decision machinery stays mutable) plus hard DELETE except for a DRAFT; and INSERT/UPDATE/DELETE on `photos`, `defect_instances`, `inspection_loops` once the parent inspection is submitted — the populate LOCKED set, backed by the database. Residual risk documented as for INS-011 (a table owner can disable a trigger). The INS-038 tamper-evidence test in `core-loop.e2e-spec.ts` was updated to disable/re-enable the reports trigger around its deliberate tampering (a new `setReportsImmutabilityTrigger` helper in `test/integration/support.ts`), since it must step around the PREVENTION layer to keep proving the DETECTION layer. Acceptance test: `test/integration/db-invariants.e2e-spec.ts`.
 - area: Inspection lifecycle
 - evidence: enforced via in-memory status sets (populate LOCKED set, inspections SUBMITTABLE/DECIDABLE); `Report` has mutable columns the DB still allows updating ([inspect-schema.md](../reference/inspect-schema.md) §7).
 - problem: Nothing prevents a direct row update of a submitted inspection or a signed report outside the guarded service methods, so the "original stays locked" guarantee is not DB-backed.
@@ -394,7 +395,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§6/§7)
 
 ### INS-015 · DefectInstance catalog-XOR-custom not DB-enforced   [MEDIUM]
-- status: todo
+- status: in-progress    # 2026-08-01: migration AUTHORED, **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file). Adds `CHECK (("defectCatalogId" IS NULL) <> ("customText" IS NULL))` on `defect_instances`. A live probe confirmed 0 existing rows violate it. Acceptance test written (both-null and both-set rejected): `test/integration/db-invariants.e2e-spec.ts`.
 - area: Defect catalog
 - evidence: `defectCatalogId` and `customText` both nullable, `migration.sql` has no CHECK; app-side check at `populate.service.ts:130-135` only.
 - problem: The DB allows `DefectInstance` rows with both fields null or both set; only the populate service rejects them, so any other write path could violate the rule.
@@ -403,7 +404,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§7)
 
 ### INS-016 · Photo idempotency partial; verify dedupe semantics   [MEDIUM]
-- status: todo            # 2026-07-11 (security review): registerPhoto dedups on (orgId, clientRequestId) only — a token reused across two inspections in the same org returns the FIRST inspection's photo and silently attaches nothing to the second. One reviewer rated this a real correctness defect (scope dedupe to inspectionId, 409 on cross-inspection collision); another judged it the intended org-scoped idempotency contract (matches @@unique([orgId, clientRequestId]) and the schema-doc semantics). Decide the contract here; the real web client already generates a fresh token per call, so it is not currently triggered in-product.
+- status: done            # 2026-08-01: the contract this item asked someone to DECIDE is now decided and pinned in code + comments. Ruling: the DB constraint stays org-scoped (no schema change), but the SERVICE contract is per-inspection — a replay with the same clientRequestId AND the same inspection returns the original row (2xx, no duplicate), while the same token against a DIFFERENT inspection is a **409 Conflict** instead of silently returning a foreign photo and attaching nothing (which read as "saved" while the evidence went missing from a signed report). Implemented as `PopulateService.replayOrConflict`, applied to both `registerPhoto` and `addDefect`, including the concurrent-replay P2002 convergence path. `InspectionMeasurement` has no clientRequestId column, noted in the contract comment. Unit-tested in `populate.service.spec.ts` and DB-tested in `test/integration/populate-invariants.e2e-spec.ts`.  # old status: todo            # 2026-07-11 (security review): registerPhoto dedups on (orgId, clientRequestId) only — a token reused across two inspections in the same org returns the FIRST inspection's photo and silently attaches nothing to the second. One reviewer rated this a real correctness defect (scope dedupe to inspectionId, 409 on cross-inspection collision); another judged it the intended org-scoped idempotency contract (matches @@unique([orgId, clientRequestId]) and the schema-doc semantics). Decide the contract here; the real web client already generates a fresh token per call, so it is not currently triggered in-product.
 - area: Populate console
 - evidence: `inspections.service.ts:71-76` + `populate.service.ts:92-97` dedupe on `(orgId, clientRequestId)`; `@@unique([orgId, clientRequestId])` on Inspection + Photo; dedupe-on-retry is app logic.
 - problem: Idempotency exists on create and registerPhoto but not uniformly across all retryable writes; the unique constraint only errors on duplicates — returning the existing row instead of erroring is app behavior that must be consistent.
@@ -421,7 +422,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§9, fast-follow)
 
 ### INS-018 · BillableEvent RE_INSPECTION linkage not constrained   [MEDIUM]
-- status: todo
+- status: in-progress    # 2026-08-01: SERVICE half done — `inspections.service.submit()` now derives and asserts the billable kind against the supersedes chain, so a RE_INSPECTION event can only exist for an inspection that actually supersedes one (unit-tested). DB half AUTHORED but **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file): a `billable_events_match_chain` trigger in `prisma/migrations/20260801000000_db_level_invariants/` rejects both directions of the mismatch. A live probe confirmed 0 existing rows violate it. Acceptance test written: `test/integration/db-invariants.e2e-spec.ts`.
 - area: Inspection lifecycle
 - evidence: `BillableEvent.kind` and `Inspection.supersedesInspectionId` are unrelated columns; `migration.sql` has no constraint tying `kind` to the supersedes chain ([inspect-schema.md](../reference/inspect-schema.md) §7).
 - problem: A RE_INSPECTION billable event can reference an inspection that is not actually a re-inspection (no `supersedesInspectionId`), so billing-vs-lineage can diverge with nothing to catch it.
@@ -430,7 +431,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§7)
 
 ### INS-019 · reports.service has no spec   [MEDIUM]
-- status: todo
+- status: done            # 2026-08-01: `src/reports/reports.service.spec.ts` added (pure unit, mocked Prisma) — the canonicalSnapshot → contentHash → Ed25519 signature round-trip verifies, generation is idempotent (existing report returned; a racing P2002 converges), a non-APPROVED inspection is refused, the audit row carries the right actor attribution, and the PDF rendition failing/being unconfigured leaves the signed record intact. Plus `report-pdf.spec.ts` for the renderer itself.
 - area: Reports & verification
 - evidence: `reports` module `tested:false`; generates signed report record + Ed25519 signature + `audit.append` with no service spec.
 - problem: The signing path — canonicalSnapshot, content hash, Ed25519 signature, idempotent generation, audit append — is untested, so a regression could produce an invalid or non-verifiable signature silently.
@@ -439,7 +440,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md](../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md)
 
 ### INS-020 · Report delivery records exist but no send path   [MEDIUM]
-- status: todo
+- status: done            # 2026-08-01: both blockers cleared first (INS-004 email, INS-003 PDF), then delivery implemented as an EXPLICIT org-scoped, QA-floor route on the reports controller rather than an invisible side effect of generate(). It builds the recipient list from the report buyer's ACTIVE, unexpired guests, writes one `ReportDelivery` row per successful send, appends an AuditLog row inside the transaction, and mails post-commit under MailService's never-throws contract so a notification problem can never roll back the delivery. Recipients are deduped case-insensitively and the canonical lower-cased address is what gets mailed, audited AND recorded, so the delivery trail cannot disagree with the dedupe key. `ReportAccess` rows are recorded on the guest read path, non-blocking. Unit-tested (`reports.service.spec.ts`, `mail-report.spec.ts`).
 - area: Reports & verification
 - evidence: `reports.service` has a deliveries relation but no send path; `ReportDelivery`/`DeliveryChannel`/`ReportAccess` models exist.
 - problem: The schema models report deliveries and access records, but no code path actually delivers a report (email/portal) or records the delivery/access, so the delivery half of the loop is inert.
@@ -448,7 +449,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§10)
 
 ### INS-021 · inspections.service core lifecycle untested   [MEDIUM]
-- status: todo
+- status: done            # 2026-08-01: `inspections.service.spec.ts` grew from mapping-only coverage to the real lifecycle — create freezing the resolved preset snapshot (names + severities, not just FKs) and mirroring it into loops, sampling computed from the lot size with the level locked to II, DRAFT-vs-ASSIGNED on inspector assignment, the per-class AQL plan validation (400 not 500 on an out-of-band value or a hole in the verified grid), submit locking the inspection + re-deriving sampling from the FROZEN plan + writing the AqlResult verdict (PASS and FAIL at the rejection number) + the BillableEvent kind, and refusal to submit from each already-terminal status.
 - area: Inspection lifecycle
 - evidence: `inspections` module `tested:true` but only via `inspection-mapping.spec.ts` (pure mapping helpers); the service itself has no test.
 - problem: Only pure mapping helpers are tested; `create(snapshot)`, `submit(evaluate→AqlResult+BillableEvent+lock)`, and `decision(pass/fail/hold)` status-guard logic are untested, leaving the central workflow unverified.
@@ -548,7 +549,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · sequence with INS-061 (worthless without Restore) · stay within components/inspect tokens (CLAUDE.md)
 
 ### INS-068 · KPI dashboard: render the inspection status breakdown + add an org quality metric to /dashboard/summary   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): in-progress/passed/failed counts + average quality level.
+- status: done            # 2026-08-01: `GET /dashboard/summary` extended with a qaDecision rollup (Prisma groupBy over the existing @@index([orgId, qaDecision])) plus app-code quality metrics — DPHU and passRate — computed by a pure, unit-tested helper (`src/dashboard/dashboard-metrics.ts` + spec) over a BOUNDED Json scan, never SQL over the Json columns. The console stopped summing the per-status map into one meaningless "Inspections" total and now renders In progress / Awaiting review / Passed / Failed tiles plus the quality tile, with the demo fallback and the DTO updated to match. Both metrics ship so no product decision was needed to land it: passRate is the headline, DPHU the secondary. Zero-states render "—" rather than NaN. Tenant-isolated and behind the existing QA floor; proven by `test/integration/dashboard-kpi.e2e-spec.ts` against a hand-computed fixture.  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17): in-progress/passed/failed counts + average quality level.
 - area: Web console + API (dashboard)
 - evidence: GET /dashboard/summary (INS-005, done) already returns per-status `inspectionsByStatus`, but StatTiles sums it into ONE "Inspections" total (`dashboard/page.tsx:35`) — the breakdown is computed then thrown away; no quality metric exists anywhere: defect counts live inside AqlResult.perClass Json (`schema.prisma:690`) and sampleSize inside Inspection.computedSampling Json (`:495`), neither SQL-aggregatable.
 - fix: API: extend summary with (a) a qaDecision rollup via `groupBy` (backed by the existing @@index([orgId, qaDecision])) and (b) app-code quality metrics — DPHU = 100·Σfound/ΣsampleSize over decided inspections + passRate (bounded Json scan; do NOT attempt SQL over Json). Web: tiles for In progress (DRAFT+ASSIGNED+IN_PROGRESS), Awaiting review (SUBMITTED+UNDER_REVIEW+HOLD), Passed (APPROVED+REPORT_ISSUED), Failed (REJECTED) + the quality tile; update DEMO_SUMMARY and ApiDashboardSummary.
@@ -573,7 +574,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · pairs with INS-058
 
 ### INS-071 · Supplier GPS: structured lat/lng + map picker; stop silently dropping bad input   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): map option for supplier location.
+- status: done            # 2026-08-01: `gps` is no longer typed `unknown` and written verbatim — a pure, unit-tested `normalizeGps` canonicalises input to exactly {lat,lng} (coercing unambiguous numeric strings from form inputs, stripping extra keys) and rejects a shapeless object, a missing member, NaN/Infinity, or an out-of-range coordinate with a 400. Both supplier forms now use structured numeric lat/lng inputs instead of hand-typed JSON, the server action surfaces the API's 400 inline instead of swallowing it in an empty catch, and the detail page renders the real coordinates rather than only a "Pinned" badge. **Map picker deliberately NOT built**: it would add leaflet/OSM as the first external runtime dependency in apps/web with CSP/offline implications — the numeric pair was the low-risk MVP cut this item itself recommended. If the map is still wanted, that is a product call — see the flag at the end of this file.  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17): map option for supplier location.
 - area: Workspace CRUD (suppliers, web + api)
 - evidence: both supplier forms ask for hand-typed '{"lat":0,"lng":0}' JSON (`suppliers/[id]/edit-form.tsx:38`, `directory-client.tsx:383`); the server actions JSON.parse with an EMPTY catch — a typo saves the supplier with no coordinates and no error (`dashboard/actions.ts:66,84-88`); the API types gps as `unknown` and persists anything (`suppliers.service.ts:7,12` → `schema.prisma:302` Json?), while the web type assumes {lat,lng} (`lib/api.ts:176`); no map library exists in apps/web.
 - fix: Structured numeric lat/lng inputs as the source of truth (drop gpsJson) + optional click-to-pin map (leaflet/OSM as a client component — NOTE: first external runtime dep, mind CSP/offline; the numeric pair alone is the low-risk MVP cut); API validates finite lat ∈ [-90,90], lng ∈ [-180,180] else 400 (replacing `unknown`); render the coordinates on the supplier detail page instead of only the "Pinned" badge.
@@ -581,7 +582,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17
 
 ### INS-072 · Buyer logo: file upload via the existing presign pattern (today: raw URL, hotlinked + frozen into signed reports)   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): logo should be a file select, not a link.
+- status: done            # 2026-08-01: reuses the loop-preset reference-image pattern end to end — `POST /buyers/presign` (declared ABOVE `/:id` so the param cannot swallow it) mints a key under `orgs/{orgId}/buyers/`, the browser PUTs the bytes, and the buyer list/detail responses are decorated with a short-lived `logoViewUrl`. The DURABLE KEY is what gets stored in `Buyer.logoUrl` and therefore frozen into the signed `brandingSnapshot` — never the ~900s presigned URL, which would have rotted the tamper-proof artifact; consumers presign at render time. Legacy absolute `https://` values are prefix-discriminated and still render, so no data migration was needed, and a crafted FOREIGN-ORG key yields `logoViewUrl: null` (the same signing-oracle guard the preset images use). Both buyer forms now take a file with a preview instead of a URL string.  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17): logo should be a file select, not a link.
 - area: Workspace CRUD (buyers) / Storage
 - evidence: plain URL text input in both buyer forms (`buyers/[id]/edit-form.tsx:33`, `directory-client.tsx:279`), stored verbatim (`buyers.service.ts:59,75`) and hotlinked in an `<img src>` (`directory-client.tsx:327`); the value freezes into the Ed25519-signed report brandingSnapshot (`reports.service.ts:122-126`) — a dead external link permanently degrades a tamper-proof artifact; the full presign-PUT-attach + viewUrl-decoration pattern already exists (INS-052/INS-049: `loop-presets.controller.ts:27,41-57`, `storage.service.ts:17-30`, `builder.tsx:203`).
 - fix: Reuse the pattern end-to-end: StorageService.keyForBuyerLogo → `orgs/{orgId}/buyers/{uuid}.{ext}` + POST /buyers/presign (copy the loop-presets template; route above /:id); decorate buyer GET/list with a short-lived logoViewUrl (keep the org-prefix guard); web file input + preview via the builder flow, legacy https:// URLs still working (prefix-discriminated — no migration); STORE THE DURABLE KEY in Buyer.logoUrl/brandingSnapshot, never the ~900s presigned URL — presign at render time; INS-003's PDF must embed fetched bytes, not a URL.
@@ -589,7 +590,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · depends on INS-060 (the byte path must actually work) · BrandedReport renders no logo today — display wiring is directory-only until INS-003
 
 ### INS-073 · Preset builder: required-shots control is buried under decorative rows   [MEDIUM]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17). Default-1 + stepper ALREADY exist — the layout hides them.
+- status: done            # 2026-08-01: the decorative, non-interactive "Shot 01/02…" rows are gone — the card now shows ONE prominent labelled stepper (clamped >= 1) with an explicit "+ Add shot" text button and a caption stating how many photos populate will require, so users stop mistaking the fake rows for editable slots. Pure builder.tsx change; per-shot labels/instructions would need a schema change (PresetLoopStep stores only a count) and were deliberately left out.  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17). Default-1 + stepper ALREADY exist — the layout hides them.
 - area: Loop presets (web UX)
 - evidence: requiredShotCount already defaults to 1 (`builder.tsx:67`, service fallback `loop-presets.service.ts:131`, `schema.prisma:401` @default(1)) and a +/- stepper exists (`builder.tsx:624-640`) — but the card first renders one decorative, non-interactive "Shot 01/02…" row per shot (`:616-623`) with the actual controls as two small unlabeled 28px icon buttons underneath, so users mistake the rows for editable slots and never find the +.
 - fix: Collapse the card to a single prominent labeled stepper (clamped ≥ 1) with an explicit "+ Add shot" text button; drop the placeholder rows (or replace with a caption "N photos will be required during populate").
@@ -597,7 +598,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · pure builder.tsx change — per-shot labels/instructions would be a schema change (PresetLoopStep stores only a count): separate item, don't smuggle it in
 
 ### INS-080 · Org console shows the hardcoded demo org name instead of the real one   [MEDIUM]
-- status: todo            # NEW 2026-07-25 (found during INS-079 manual verification; pre-existing, out of scope for INS-079)
+- status: done            # 2026-08-01: `orgName` (which `GET /auth/me` has returned all along, and which nothing consumed) is now carried through the NextAuth session and passed as `org` by ConsoleLayout for non-admin sessions, mirroring how it already resolved `assumedOrgName` for admins. `DEFAULT_ORG` survives only as a true offline/demo-mode fallback, so an ORG_OWNER/QA_MANAGER/INSPECTOR sees their real organisation instead of "Asha Inspection Services".  # old status: todo            # NEW 2026-07-25 (found during INS-079 manual verification; pre-existing, out of scope for INS-079)
 - area: Web console
 - evidence: `apps/web/components/inspect/shell.tsx:219` `DEFAULT_ORG = 'Asha Inspection Services'` is the Sidebar's org-name fallback; `apps/web/app/(console)/layout.tsx:43` passes `org={assumedOrgName ?? (session.role === 'PLATFORM_ADMIN' ? 'Platform administration' : undefined)}` — `undefined` for every non-admin session, which falls through to `DEFAULT_ORG`. Meanwhile `GET /auth/me` already returns `orgName` (`apps/api/src/auth/auth.controller.ts:42-51`) and nothing consumes it: `lib/auth.ts`'s `/auth/me` call (`:65`) discards the field, and `lib/api.ts:476`'s `orgName` type is used only by the unrelated invitation-preview and INS-079 admin-org-creation flows. Verified live: an ORG_OWNER session displays "Asha Inspection Services" regardless of their real org.
 - problem: Every org user (ORG_OWNER, QA_MANAGER, INSPECTOR) sees a fabricated demo company name in their own sidebar/topbar instead of their real organization — a correctness bug that predates INS-079 and was only surfaced by this session's manual verification sweep.
@@ -636,7 +637,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11
 
 ### INS-045 · Web session exposes the raw API bearer JWT to the browser   [LOW]
-- status: todo            # NEW 2026-07-11 (security review): deferred — needs a web-auth refactor (read the token via next-auth/jwt getToken server-side instead of placing it in the client-visible session), verified against the live login flow to avoid regressing apiToken().
+- status: done            # 2026-08-01: the API bearer token no longer rides in the client-visible NextAuth session, so `fetch('/api/auth/session')` can no longer hand it to browser JS. It stays inside the encrypted NextAuth JWT and `apiToken()` reads it server-side; only role/orgId/orgName/user remain in the session object. Every consumer was enumerated first (the server actions plus the `app/api/search` and `app/api/guest/reports/[id]` route handlers) and the refresh/expiry callbacks were preserved.  # old status: todo            # NEW 2026-07-11 (security review): deferred — needs a web-auth refactor (read the token via next-auth/jwt getToken server-side instead of placing it in the client-visible session), verified against the live login flow to avoid regressing apiToken().
 - area: Web console
 - evidence: `apps/web/lib/auth.ts:109` `s.accessToken = token.accessToken` — NextAuth serves this at `GET /api/auth/session`, so `fetch('/api/auth/session')` returns the API bearer JWT to client JS.
 - problem: The access token is only ever consumed server-side (`lib/api.ts` apiToken()), yet it's exposed to the browser, so any XSS/extension/kiosk foothold can exfiltrate it and replay against the API for the token lifetime (contradicts the "server-side only" contract at lib/api.ts:18).
@@ -645,7 +646,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11
 
 ### INS-046 · Report.canonicalSnapshot is nullable while verification depends on it   [LOW]
-- status: todo            # NEW 2026-07-11 (security review): needs a `SET NOT NULL` migration (or a CHECK that it's non-null whenever signature is set) — deferred as a live-schema change.
+- status: in-progress    # 2026-08-01: schema changed to `canonicalSnapshot Json` (NOT NULL) and the `SET NOT NULL` is in `prisma/migrations/20260801000000_db_level_invariants/`, but the migration is **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file). A live probe confirmed 0 existing reports have a null snapshot, so it applies without backfill. Acceptance test written: `test/integration/db-invariants.e2e-spec.ts`.  # old status: todo            # NEW 2026-07-11 (security review): needs a `SET NOT NULL` migration (or a CHECK that it's non-null whenever signature is set) — deferred as a live-schema change.
 - area: Reports & verification
 - evidence: `schema.prisma:724` `canonicalSnapshot Json?` while contentHash/signature/brandingSnapshot are NOT NULL and verifyByToken recomputes the hash from it.
 - problem: A Report row with a signature but null canonicalSnapshot (backfill / future re-gen path) would make public verification return `valid:false` for a genuinely signed report — a silently unverifiable artifact.
@@ -654,7 +655,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11
 
 ### INS-047 · No rate limiting on public auth / invitation-accept endpoints   [LOW]
-- status: todo            # NEW 2026-07-11 (security review): add @nestjs/throttler (or edge rate limiting) to POST /auth/login, /auth/refresh, /invitations/accept, and /guest reads.
+- status: done            # 2026-08-01: `@nestjs/throttler` added and applied PER-ROUTE to the public surface (login, refresh, invitation accept + public lookup, guest reads) rather than as a blanket APP_GUARD, so authenticated routes — already gated by JwtAuthGuard + RolesGuard — stay un-throttled. Limits are env-driven through a pure, unit-tested helper (`src/common/throttler.config.ts`, mirroring `common/config.ts`): RATE_LIMIT_{AUTH,INVITE,GUEST}_{LIMIT,TTL_MS}, plus RATE_LIMIT_DISABLED and RATE_LIMIT_TRUSTED_PROXIES. Values resolve lazily per request because decorator metadata is frozen at import time, before ConfigModule populates process.env. Client-IP resolution counts X-Forwarded-For entries from the RIGHT by trusted-hop count — taking the leftmost entry (the common shortcut) would let any client mint a fresh bucket per request. Defaults are deliberately loose enough that the DB-backed suite cannot trip them; production should set RATE_LIMIT_AUTH_LIMIT=10. Proven by `test/integration/rate-limit.e2e-spec.ts`, which sets a low limit before boot and asserts the 429.  # old status: todo            # NEW 2026-07-11 (security review): add @nestjs/throttler (or edge rate limiting) to POST /auth/login, /auth/refresh, /invitations/accept, and /guest reads.
 - area: Auth & RBAC / Infra
 - evidence: no `@nestjs/throttler`/ThrottlerGuard anywhere in `apps/api`; the only global guards are JwtAuthGuard + RolesGuard.
 - problem: Unauthenticated endpoints (login, token accept, guest fetch) are un-throttled, aggravating credential-stuffing, token-guessing (INS-037), and enumeration (INS-042).
@@ -690,7 +691,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md)
 
 ### INS-034 · Workspace CRUD and onboarding modules untested   [LOW]
-- status: todo            # 2026-07-11: partially reduced — users/orgs/buyer-guests/invitations/buyers now have unit specs (security review + INS-004), and the INS-009 integration suite exercises the CRUD create paths + tenant scoping live. Remaining: suppliers/products/purchase-orders/loop-presets/defect-catalog/guest specs.
+- status: in-progress    # 2026-08-01: materially reduced again. New specs this pass: `suppliers.service.spec.ts` (INS-071 gps write path), `products.service.spec.ts` (INS-074 clear-path), `loop-presets.service.spec.ts` (grown), `buyers.controller.spec.ts`, `populate.service.spec.ts`, `reports.service.spec.ts`, `report-pdf.spec.ts`, `storage.service.spec.ts`, `audit.service.spec.ts`, `dashboard-metrics.spec.ts`, `throttler.config.spec.ts`, `aql-plan-input.spec.ts`. **Remaining with no spec: `purchase-orders`, `defect-catalog`, `guest`.**  # old status: todo            # 2026-07-11: partially reduced — users/orgs/buyer-guests/invitations/buyers now have unit specs (security review + INS-004), and the INS-009 integration suite exercises the CRUD create paths + tenant scoping live. Remaining: suppliers/products/purchase-orders/loop-presets/defect-catalog/guest specs.
 - area: Workspace CRUD
 - evidence: `buyers`/`suppliers`/`products`/`purchase-orders`/`users`/`loop-presets`/`defect-catalog`/`invitations`/`buyer-guests`/`guest`/`orgs` modules all `tested:false`.
 - problem: A large band of controllers/services has no tests, so RBAC scoping, validation, and CRUD correctness are unverified once the DB is live.
@@ -710,7 +711,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 > **Product-feedback batch (2026-07-17 meeting), LOW tier** — see the batch note under ## High.
 
 ### INS-074 · Product description: room to write + room to read; fix clear-on-edit   [LOW]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): product page feels empty; allow richer descriptions.
+- status: done            # 2026-08-01: the real bug is fixed — `updateProduct` no longer coerces an emptied textarea to `undefined` (which Prisma reads as "leave unchanged", making a description impossible to clear from the console). The three-way contract is now explicit and unit-tested: key omitted → absent from the update payload; null/''/whitespace → `description: null`; text → trimmed with inner line breaks preserved. Presentation followed: taller resizable textarea without the "Short" framing, the full description rendered as a whitespace-preserving block on the detail page instead of a one-line subtitle, and a line-clamped list cell. No migration, no new fields, report pipeline untouched.  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17): product page feels empty; allow richer descriptions.
 - area: Web console (products) + one-line API touch
 - evidence: the data layer already supports arbitrary-length descriptions (Postgres TEXT, no API cap) — the gap is presentational: both forms render a 3-row resize-none textarea placeholder'd "Short product description" (`create-form.tsx:28`, `edit-form.tsx:32`); the detail page shows the description only as the one-line PageHead subtitle (`products/[id]/page.tsx:19`); the list cell has no clamp and collapses newlines (`products/page.tsx:46`); real bug: updateProduct coerces an empty textarea to undefined (`products/actions.ts:29`), which Prisma treats as "leave unchanged" (`products.service.ts:69`) — a description can never be cleared from the console.
 - fix: Grow the textarea (rows 6-8, resize vertical, drop "Short"); render the full description as a whitespace-preserving body block on the detail page; line-clamp the list cell; fix the clear path (send explicit null on empty, map it through the service).
@@ -727,7 +728,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · if product insists on "Shot", the per-step shot counter must be renamed too ("photos required") — flag in the decision · INS-008 note: a contract rename would currently have to be made twice
 
 ### INS-076 · Preset detail: relabel "Edit (new version)" → "Duplicate"; duplicate framing in the seeded builder   [LOW]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17). Behavior ALREADY matches the ask — only the copy is inconsistent.
+- status: done            # 2026-08-01: copy made honest and consistent with the behaviour that already existed (there is no update path at all — the controller is GET/POST/DELETE and the service auto-increments version per trimmed name). The detail page's primary button now reads "Duplicate" instead of the misleading "Edit (new version)", a builder seeded via ?from= headers itself "Duplicate of <name> (vN)" instead of "New Preset", and the versioning rule is surfaced next to Save: same name ⇒ v(N+1), changed name ⇒ a new preset at v1. No behavioural change.  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17). Behavior ALREADY matches the ask — only the copy is inconsistent.
 - area: Loop presets (web UX)
 - evidence: no update path exists at all (controller is GET/POST/DELETE only; save always POSTs and the service auto-increments version per trimmed name, `loop-presets.service.ts:109-115`) — but the detail page's primary button says "Edit (new version)" (`presets/[id]/page.tsx:33-35`) while the card menu says "Duplicate (new version)" (`presets-list.tsx:111`), and the seeded builder still titles itself "New Preset" (`builder.tsx:413`).
 - fix: Rename the detail button to "Duplicate"; when seeded via ?from=, header the builder "Duplicate of <name> (vN)" and surface the rule near Save: same name ⇒ saves as v(N+1); changed name ⇒ brand-new preset at v1.
@@ -735,9 +736,74 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · adjacent papercut (file separately if pursued): the inspections/new preset dropdown lists EVERY version of every preset (`create-form.tsx:63-65`; list() has no latest-per-name filter) — consider latest-per-name or auto-archive on re-version
 
 ### INS-077 · Buyer primaryColor: server-side hex validation (+ synced hex text field)   [LOW]
-- status: todo            # NEW 2026-07-18. The meeting's color-picker ask is ALREADY SHIPPED — this is the remaining hardening/polish.
+- status: done            # 2026-08-01: `normalizePrimaryColor` (pure, unit-tested) rejects anything that is not `#RRGGBB` with a 400 on both create and update and normalises the case, so `#1457A3` and `#1457a3` can no longer freeze as two different values into the Ed25519-signed brandingSnapshot; `undefined` stays a no-change and `null`/`''` an explicit clear. Both buyer forms gained the synced hex text input beside the native swatch.  # old status: todo            # NEW 2026-07-18. The meeting's color-picker ask is ALREADY SHIPPED — this is the remaining hardening/polish.
 - area: Workspace CRUD (buyers)
 - evidence: both buyer forms already use a native `<input type="color">` picker (`buyers/[id]/edit-form.tsx:38`, `directory-client.tsx:283`); remaining gaps: the API accepts any string for primaryColor (`buyers.service.ts:7,14`) which later freezes into the signed brandingSnapshot (`reports.service.ts:124`), and a bare swatch makes it hard to paste an exact brand hex.
 - fix: Reject primaryColor not matching `/^#[0-9a-fA-F]{6}$/` with a 400 in create/update (normalize case); add a small synced hex text input beside the swatch in both forms (picker ↔ text two-way).
 - verify: PATCH with primaryColor:'red' → 400; '#1457A3' saves; typing a hex updates the swatch and persists; unit test in buyers.service.spec.ts.
 - refs: meeting 2026-07-17 · the invalid path is only reachable via direct API calls (native pickers always emit #rrggbb) — hence LOW
+
+---
+
+## ⚠️ Needs a human — the backlog-clearing pass of 2026-08-01 stopped here
+
+> A full sweep on 2026-08-01 closed **22 items** and left the following. Nothing below is blocked on
+> engineering effort; each needs a decision, a credential, or a permission that only the account owner has.
+> Verified state at the end of that pass: **unit 533 passing / 38 suites, integration 120 passing / 13
+> suites** (both against the live Postgres+Redis+S3), `pnpm type-check` clean across 3 packages,
+> `pnpm web build` clean.
+
+### 1. Apply the DB-level-invariants migration  → unblocks INS-010, INS-011, INS-014, INS-015, INS-018, INS-046
+`apps/api/prisma/migrations/20260801000000_db_level_invariants/migration.sql` is written, reviewed and
+schema-validated (`prisma validate` passes), and a live data probe confirmed **0 existing rows violate any
+of its constraints**, so it applies without repair. It was NOT applied because `prisma migrate deploy`
+against the live database was refused by the sandbox permission classifier.
+
+To apply it (from the repo root, with the root `.env` loaded):
+```
+pnpm api prisma:generate                  # regenerate the client for the new schema
+pnpm --filter @inspect/api exec prisma migrate deploy
+pnpm api test:integration                 # db-invariants.e2e-spec.ts stops self-skipping and asserts for real
+```
+Until it is applied, `apps/api/prisma/schema.prisma` and the database are **intentionally out of step**: the
+schema declares the composite keys and the NOT NULL, the database does not have them yet. The generated
+Prisma client has NOT been regenerated, so nothing is broken at runtime — but do not run `prisma generate`
+without also running `migrate deploy`, or a nested `connect` through one of the new composite relations will
+fail against a DB that lacks the unique index.
+
+### 2. INS-002 (BLOCKER, still open) — rotate the live Railway credentials
+Unchanged and purely user-side: `.env.example` is scrubbed and the working tree is clean, but the
+real-looking `POSTGRES_PASSWORD` / `REDIS_PASSWORD` remain in **git history**, and the live Railway
+credentials have never been rotated. Decide whether to scrub history (`git filter-repo` / BFG, which
+rewrites every commit hash) or accept it and rotate. Also regenerate `REPORT_SIGNING_PRIVATE_KEY_PEM` if the
+current key was ever committed.
+
+### 3. INS-055 — the Company-model epic needs product decisions before implementation
+The spec + phased plan now exist and answer the structural questions, but the epic touches tenant isolation,
+buyer-guest visibility (a security boundary) and the Ed25519-signed canonical payload simultaneously across
+25 models and both apps. The spec's opening section lists each decision that needs a human call with a
+recommended default — confirm or override those and the phased plan is ready to execute.
+
+### 4. INS-075 — pick the user-facing term for "Loop"
+A pure copy sweep, but the term is product identity, so it is yours to choose. The item recommends
+**"Angle"** ("Zone" also maps cleanly, since the schema already calls the step's name `zoneName`). Do NOT
+pick "Shot" without also renaming the per-step `requiredShotCount` control — "shot" is already a different
+concept in the same screen. Once chosen it is a one-pass sweep of user-facing strings only: identifiers,
+routes, API/schema names and snapshot JSON shapes must all stay unchanged, because
+`Inspection.loopPresetSnapshot` and `Report.canonicalSnapshot` embed `loops` keys inside SIGNED artifacts
+and renaming a key would break verification of every historical report.
+
+### 5. INS-071 — the supplier map picker (optional)
+The item's low-risk MVP cut shipped (validated numeric lat/lng, no more silent drops). The click-to-pin map
+was deliberately left out: it would add leaflet/OSM as the **first external runtime dependency in
+`apps/web`**, with CSP and offline implications. Say the word if you want it.
+
+### Still open, but only because they were out of time — not blocked on you
+- **INS-008** (link `@inspect/shared-types`): the workspace dependency is now wired into both apps and
+  `turbo.json` builds it before type-check, but neither app IMPORTS from it yet, so the duplicated
+  enums/DTOs remain. The remaining work is a mechanical import sweep.
+- **INS-034** (specs for the remaining CRUD modules): materially reduced — `suppliers`, `products`,
+  `loop-presets`, `buyers`, `populate`, `reports`, `dashboard` and `audit` all gained specs in this pass.
+  `purchase-orders`, `defect-catalog` and `guest` still have none.
+- **INS-048** (lint broken repo-wide): untouched. ESLint 9 still has no flat config in `apps/api`, `next
+  lint` is still deprecated in `apps/web`, and the CI lint step is still commented out.
