@@ -265,6 +265,9 @@ model Buyer {
   inspections    Inspection[]
   reports        Report[]
 
+  /// INS-010: composite parent key so org-scoped children (BuyerGuest) can carry a
+  /// tenant-aligned FK the DATABASE checks, not just the app layer.
+  @@unique([id, orgId])
   @@unique([orgId, name])
   @@index([orgId])
   @@map("buyers")
@@ -283,7 +286,9 @@ model BuyerGuest {
   lastAccessAt   DateTime?
   createdAt      DateTime   @default(now())
 
-  buyer          Buyer          @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  // INS-010: tenant-aligned composite FK — a guest can only hang off a buyer in
+  // its OWN org, enforced by the database rather than by caller discipline.
+  buyer          Buyer          @relation(fields: [buyerId, orgId], references: [id, orgId], onDelete: Cascade)
   organization   Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
   reportAccesses ReportAccess[]
 
@@ -540,6 +545,11 @@ model Inspection {
   report        Report?
   billableEvent BillableEvent?
 
+  /// INS-010: composite parent key. Every org-scoped child of an inspection
+  /// (loops, photos, defects, AQL result) references [id, orgId] so a child can
+  /// never be attached to a row from another tenant — previously the denormalized
+  /// child orgId was checked only in application code.
+  @@unique([id, orgId])
   @@unique([orgId, clientRequestId])
   @@index([orgId])
   @@index([orgId, status])
@@ -565,7 +575,8 @@ model InspectionLoop {
   notes                  String?
   createdAt              DateTime @default(now())
 
-  inspection   Inspection              @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  // INS-010: tenant-aligned composite FK (see Inspection.@@unique([id, orgId])).
+  inspection   Inspection              @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
   organization Organization            @relation(fields: [orgId], references: [id], onDelete: Restrict)
   photos       Photo[]
   defects      DefectInstance[]
@@ -619,7 +630,10 @@ model Photo {
   createdAt        DateTime    @default(now())
 
   organization   Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  inspection     Inspection            @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  // INS-010: tenant-aligned composite FK to the inspection aggregate. The
+  // inspectionLoop link stays single-column ON PURPOSE: it is `onDelete: SetNull`,
+  // and a composite FK would have to null the NOT NULL orgId alongside it.
+  inspection     Inspection            @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
   inspectionLoop InspectionLoop?       @relation(fields: [inspectionLoopId], references: [id], onDelete: SetNull)
   uploader       User?                 @relation("PhotoUploader", fields: [uploaderUserId], references: [id], onDelete: SetNull)
   defects        DefectInstancePhoto[]
@@ -655,7 +669,8 @@ model DefectInstance {
   createdAt        DateTime       @default(now())
 
   organization   Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  inspection     Inspection            @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  // INS-010: tenant-aligned composite FK (loop link stays single-column — SetNull).
+  inspection     Inspection            @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
   inspectionLoop InspectionLoop?       @relation(fields: [inspectionLoopId], references: [id], onDelete: SetNull)
   defectCatalog  DefectCatalog?        @relation(fields: [defectCatalogId], references: [id], onDelete: Restrict)
   photos         DefectInstancePhoto[]
@@ -699,10 +714,14 @@ model AqlResult {
   decidedAt            DateTime?
   createdAt            DateTime        @default(now())
 
-  inspection   Inspection   @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  // INS-010: tenant-aligned composite FK (see Inspection.@@unique([id, orgId])).
+  inspection   Inspection   @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   decidedBy    User?        @relation("AqlDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
 
+  /// Required by Prisma so the composite tenant-aligned FK below still reads as
+  /// 1:1 (inspectionId alone is already @unique, so this adds no new restriction).
+  @@unique([inspectionId, orgId])
   @@index([orgId])
   @@index([orgId, qaDecision])
   @@map("aql_results")
@@ -726,7 +745,10 @@ model Report {
   // ordered photo hashes + metadata). Frozen so the public verification page can
   // recompute contentHash and verify the Ed25519 signature without re-deriving it
   // and without trusting the portal (spec §9).
-  canonicalSnapshot Json?
+  // NOT NULL since INS-046: verifyByToken() recomputes the hash FROM this column,
+  // so a signed report with a null snapshot would report valid:false forever — a
+  // silently unverifiable artifact. The DB now refuses to store one.
+  canonicalSnapshot Json
   contentHash       String
   signature         String
   verificationToken String       @unique @default(cuid())
