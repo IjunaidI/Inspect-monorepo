@@ -1,7 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { AuthUser } from '../auth/auth-user';
+import { AuditService } from '../audit/audit.service';
+import { actorTypeFor } from '../audit/actor-type';
 
 type Severity = 'CRITICAL' | 'MAJOR' | 'MINOR';
 
@@ -52,6 +60,7 @@ export class PopulateService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly audit: AuditService,
   ) {}
 
   private async loadOpenInspection(inspectionId: string) {
@@ -65,6 +74,44 @@ export class PopulateService {
       );
     }
     return insp;
+  }
+
+  /**
+   * INS-016 — the populate idempotency contract (decided 2026-08-01).
+   *
+   * `clientRequestId` is unique per ORG in the database (`@@unique([orgId,
+   * clientRequestId])` on both Photo and DefectInstance), but the meaningful
+   * unit of retry is one populate write against one inspection. Hence:
+   *
+   *  - **Replay** — same `clientRequestId` *and* same inspection: return the
+   *    ORIGINAL row (2xx, no duplicate, no unique-violation surfaced). This is
+   *    the double-click / offline-sync path; a phantom duplicate defect would
+   *    change the per-class AQL count and could flip the verdict on submit.
+   *  - **Collision** — same `clientRequestId`, DIFFERENT inspection: 409
+   *    Conflict. The org-scoped constraint means the row can never attach to
+   *    the second inspection anyway, so the old "return the existing row"
+   *    behaviour told the client "saved" while nothing landed on the inspection
+   *    it asked for — evidence silently missing from a signed report. This is a
+   *    client bug (a reused token); fail loudly so it is fixable.
+   *
+   * Note: `InspectionMeasurement` has no `clientRequestId` column, so
+   * `addMeasurement` has no idempotency token to honour; if one is added to the
+   * schema it must route through this same helper.
+   */
+  private replayOrConflict<T extends { id: string; inspectionId: string }>(
+    existing: T | null,
+    kind: 'photo' | 'defect',
+    inspectionId: string,
+    clientRequestId: string,
+  ): T | null {
+    if (!existing) return null;
+    if (existing.inspectionId !== inspectionId) {
+      throw new ConflictException(
+        `clientRequestId "${clientRequestId}" was already used for a ${kind} on a different ` +
+          `inspection (${existing.inspectionId}); use a fresh clientRequestId per write`,
+      );
+    }
+    return existing;
   }
 
   private async assertLoop(inspectionId: string, inspectionLoopId: string) {
@@ -83,59 +130,132 @@ export class PopulateService {
     return { storageKey, uploadUrl: this.storage.presignUpload(storageKey), method: 'PUT' };
   }
 
-  async registerPhoto(inspectionId: string, userId: string, input: RegisterPhotoInput) {
+  async registerPhoto(inspectionId: string, actor: AuthUser, input: RegisterPhotoInput) {
     const insp = await this.loadOpenInspection(inspectionId);
     if (!input?.storageKey) throw new BadRequestException('storageKey is required');
     if (!input?.contentHash) throw new BadRequestException('contentHash is required');
     if (input.inspectionLoopId) {
       await this.assertLoop(inspectionId, input.inspectionLoopId);
     }
+    // Idempotency (INS-016): replay returns the original row; a token reused
+    // against a different inspection is a 409 — see replayOrConflict().
     if (input.clientRequestId) {
-      const existing = await this.prisma.photo.findFirst({
-        where: { orgId: insp.orgId, clientRequestId: input.clientRequestId },
-      });
-      if (existing) return existing;
+      const replay = await this.findPhotoReplay(insp.orgId, insp.id, input.clientRequestId);
+      if (replay) return replay;
     }
-    return this.prisma.photo.create({
-      data: {
-        orgId: insp.orgId,
-        inspectionId: insp.id,
-        inspectionLoopId: input.inspectionLoopId,
-        storageKey: input.storageKey,
-        thumbnailKey: input.thumbnailKey,
-        source: 'MANUAL_UPLOAD', // Admin manual upload — badged unverified (spec §9)
-        uploaderUserId: userId,
-        capturedAt: input.capturedAt ? new Date(input.capturedAt) : undefined,
-        deviceId: input.deviceId,
-        gps: input.gps as Prisma.InputJsonValue,
-        exif: input.exif as Prisma.InputJsonValue,
-        contentHash: input.contentHash,
-        clientRequestId: input.clientRequestId,
-      },
+    try {
+      // INS-006: audit inside the business transaction. Note orgId comes from the
+      // INSPECTION, not the actor — the Platform Admin who populates is
+      // cross-tenant (orgId=null), and the event belongs to the tenant.
+      return await this.prisma.$transaction(async (tx) => {
+        const photo = await tx.photo.create({
+          data: {
+            orgId: insp.orgId,
+            inspectionId: insp.id,
+            inspectionLoopId: input.inspectionLoopId,
+            storageKey: input.storageKey,
+            thumbnailKey: input.thumbnailKey,
+            source: 'MANUAL_UPLOAD', // Admin manual upload — badged unverified (spec §9)
+            uploaderUserId: actor.userId,
+            capturedAt: input.capturedAt ? new Date(input.capturedAt) : undefined,
+            deviceId: input.deviceId,
+            gps: input.gps as Prisma.InputJsonValue,
+            exif: input.exif as Prisma.InputJsonValue,
+            contentHash: input.contentHash,
+            clientRequestId: input.clientRequestId,
+          },
+        });
+        await this.audit.append(
+          {
+            orgId: insp.orgId,
+            actorType: actorTypeFor(actor),
+            actorUserId: actor.userId,
+            action: 'populate.photoRegistered',
+            entityType: 'Photo',
+            entityId: photo.id,
+            // contentHash is what the report signature ultimately covers, so it
+            // belongs in the immutable audit payload.
+            metadata: {
+              inspectionId: insp.id,
+              inspectionLoopId: photo.inspectionLoopId,
+              contentHash: photo.contentHash,
+            },
+          },
+          tx,
+        );
+        return photo;
+      });
+    } catch (e) {
+      // Concurrent replay (double-click / parallel offline sync): the
+      // check-then-insert above can race, and the loser hits
+      // @@unique([orgId, clientRequestId]). Converge to the winner's row rather
+      // than surfacing an opaque 500 (INS-016, mirrors addDefect/INS-044).
+      if (
+        input.clientRequestId &&
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        const replay = await this.findPhotoReplay(insp.orgId, insp.id, input.clientRequestId);
+        if (replay) return replay;
+      }
+      throw e;
+    }
+  }
+
+  private async findPhotoReplay(orgId: string, inspectionId: string, clientRequestId: string) {
+    const existing = await this.prisma.photo.findFirst({
+      where: { orgId, clientRequestId },
     });
+    return this.replayOrConflict(existing, 'photo', inspectionId, clientRequestId);
   }
 
   /** Drag a photo into the correct loop slot (spec §6). */
-  async assignPhotoToLoop(inspectionId: string, photoId: string, inspectionLoopId: string) {
-    await this.loadOpenInspection(inspectionId);
+  async assignPhotoToLoop(
+    inspectionId: string,
+    actor: AuthUser,
+    photoId: string,
+    inspectionLoopId: string,
+  ) {
+    const insp = await this.loadOpenInspection(inspectionId);
     const photo = await this.prisma.photo.findFirst({ where: { id: photoId, inspectionId } });
     if (!photo) {
       throw new NotFoundException('Photo not found on this inspection');
     }
     await this.assertLoop(inspectionId, inspectionLoopId);
-    return this.prisma.photo.update({ where: { id: photoId }, data: { inspectionLoopId } });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.photo.update({
+        where: { id: photoId },
+        data: { inspectionLoopId },
+      });
+      await this.audit.append(
+        {
+          orgId: insp.orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'populate.photoAssignedToLoop',
+          entityType: 'Photo',
+          entityId: photoId,
+          metadata: {
+            inspectionId,
+            from: photo.inspectionLoopId ?? null,
+            to: inspectionLoopId,
+          },
+        },
+        tx,
+      );
+      return updated;
+    });
   }
 
-  async addDefect(inspectionId: string, userId: string, input: AddDefectInput) {
+  async addDefect(inspectionId: string, actor: AuthUser, input: AddDefectInput) {
     const insp = await this.loadOpenInspection(inspectionId);
-    // Idempotency (INS-044): a replayed add-defect (double-click / offline
-    // sync) returns the original row — a phantom duplicate could flip the
-    // per-class AQL verdict on submit.
+    // Idempotency (INS-044/INS-016): a replayed add-defect (double-click /
+    // offline sync) returns the original row — a phantom duplicate could flip
+    // the per-class AQL verdict on submit. Reusing the token against a
+    // different inspection is a 409 — see replayOrConflict().
     if (input?.clientRequestId) {
-      const existing = await this.prisma.defectInstance.findFirst({
-        where: { orgId: insp.orgId, clientRequestId: input.clientRequestId },
-      });
-      if (existing) return existing;
+      const replay = await this.findDefectReplay(insp.orgId, insp.id, input.clientRequestId);
+      if (replay) return replay;
     }
     if (!input?.defectCatalogId && !input?.customText?.trim()) {
       throw new BadRequestException('either defectCatalogId or customText is required');
@@ -166,21 +286,45 @@ export class PopulateService {
       }
     }
     try {
-      return await this.prisma.defectInstance.create({
-        data: {
-          orgId: insp.orgId,
-          inspectionId: insp.id,
-          inspectionLoopId: input.inspectionLoopId,
-          defectCatalogId: input.defectCatalogId,
-          customText: input.customText,
-          severity,
-          notes: input.notes,
-          createdByUserId: userId,
-          clientRequestId: input.clientRequestId,
-          photos: input.photoIds?.length
-            ? { create: input.photoIds.map((photoId) => ({ photoId })) }
-            : undefined,
-        },
+      // INS-006: audit inside the business transaction. A defect changes the
+      // per-class AQL count that decides pass/fail, so this is one of the most
+      // forensically important events in the product.
+      return await this.prisma.$transaction(async (tx) => {
+        const defect = await tx.defectInstance.create({
+          data: {
+            orgId: insp.orgId,
+            inspectionId: insp.id,
+            inspectionLoopId: input.inspectionLoopId,
+            defectCatalogId: input.defectCatalogId,
+            customText: input.customText,
+            severity,
+            notes: input.notes,
+            createdByUserId: actor.userId,
+            clientRequestId: input.clientRequestId,
+            photos: input.photoIds?.length
+              ? { create: input.photoIds.map((photoId) => ({ photoId })) }
+              : undefined,
+          },
+        });
+        await this.audit.append(
+          {
+            orgId: insp.orgId,
+            actorType: actorTypeFor(actor),
+            actorUserId: actor.userId,
+            action: 'populate.defectAdded',
+            entityType: 'DefectInstance',
+            entityId: defect.id,
+            metadata: {
+              inspectionId: insp.id,
+              inspectionLoopId: defect.inspectionLoopId,
+              severity: defect.severity,
+              defectCatalogId: defect.defectCatalogId,
+              photoIds: [...(input.photoIds ?? [])].sort(),
+            },
+          },
+          tx,
+        );
+        return defect;
       });
     } catch (e) {
       // Concurrent replay (double-click): the check-then-insert above can race,
@@ -191,13 +335,18 @@ export class PopulateService {
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        const existing = await this.prisma.defectInstance.findFirst({
-          where: { orgId: insp.orgId, clientRequestId: input.clientRequestId },
-        });
-        if (existing) return existing;
+        const replay = await this.findDefectReplay(insp.orgId, insp.id, input.clientRequestId);
+        if (replay) return replay;
       }
       throw e;
     }
+  }
+
+  private async findDefectReplay(orgId: string, inspectionId: string, clientRequestId: string) {
+    const existing = await this.prisma.defectInstance.findFirst({
+      where: { orgId, clientRequestId },
+    });
+    return this.replayOrConflict(existing, 'defect', inspectionId, clientRequestId);
   }
 
   /**
@@ -258,19 +407,42 @@ export class PopulateService {
     }
   }
 
-  async addMeasurement(inspectionId: string, input: AddMeasurementInput) {
-    await this.loadOpenInspection(inspectionId);
+  async addMeasurement(inspectionId: string, actor: AuthUser, input: AddMeasurementInput) {
+    const insp = await this.loadOpenInspection(inspectionId);
     if (!input?.inspectionLoopId) throw new BadRequestException('inspectionLoopId is required');
     if (!input?.label?.trim()) throw new BadRequestException('label is required');
     await this.assertLoop(inspectionId, input.inspectionLoopId);
-    return this.prisma.inspectionMeasurement.create({
-      data: {
-        inspectionLoopId: input.inspectionLoopId,
-        label: input.label.trim(),
-        recordedValue: input.recordedValue,
-        unit: input.unit,
-        notes: input.notes,
-      },
+    // INS-006: audit inside the business transaction. Measurements are rendered
+    // into the signed report, so the recorded value is evidence.
+    return this.prisma.$transaction(async (tx) => {
+      const measurement = await tx.inspectionMeasurement.create({
+        data: {
+          inspectionLoopId: input.inspectionLoopId,
+          label: input.label.trim(),
+          recordedValue: input.recordedValue,
+          unit: input.unit,
+          notes: input.notes,
+        },
+      });
+      await this.audit.append(
+        {
+          orgId: insp.orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'populate.measurementAdded',
+          entityType: 'InspectionMeasurement',
+          entityId: measurement.id,
+          metadata: {
+            inspectionId,
+            inspectionLoopId: measurement.inspectionLoopId,
+            label: measurement.label,
+            recordedValue: measurement.recordedValue,
+            unit: measurement.unit,
+          },
+        },
+        tx,
+      );
+      return measurement;
     });
   }
 }

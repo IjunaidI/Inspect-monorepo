@@ -1,9 +1,22 @@
-import { BadRequestException, Body, Controller, Get, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService, TokenPair } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { Public } from './public.decorator';
 import { CurrentUser } from './current-user.decorator';
 import { AuthUser } from './auth-user';
+import { authRateLimit } from '../common/throttler.config';
+
+/**
+ * INS-047: per-IP throttle for the unauthenticated credential surface. The
+ * ThrottlerGuard keys on controller+handler, so /auth/login and /auth/refresh
+ * each get their own budget; /auth/me (authenticated) is untouched.
+ * Thunks, not literals: decorator metadata is frozen at import time, before
+ * ConfigModule has loaded the repo-root .env into process.env.
+ */
+const authThrottle = {
+  public: { ttl: () => authRateLimit().ttl, limit: () => authRateLimit().limit },
+};
 
 interface LoginBody {
   email?: string;
@@ -21,6 +34,8 @@ export class AuthController {
   ) {}
 
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle(authThrottle)
   @Post('login')
   login(@Body() body: LoginBody): Promise<TokenPair> {
     if (!body?.email || !body?.password) {
@@ -30,6 +45,8 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(ThrottlerGuard)
+  @Throttle(authThrottle)
   @Post('refresh')
   refresh(@Body() body: RefreshBody): Promise<TokenPair> {
     if (!body?.refreshToken) {

@@ -65,6 +65,19 @@ export function buildPresetSnapshot(preset: PresetLike) {
   };
 }
 
+export type BillableKind = 'INSPECTION' | 'RE_INSPECTION';
+
+/**
+ * INS-018 — the billable kind is a FUNCTION of the re-inspection linkage, never
+ * an independent input: `BillableEvent.kind = RE_INSPECTION` iff the inspection
+ * carries `supersedesInspectionId`. Keeping the derivation here (and calling it
+ * from the one service path that mints the event) is what stops the two columns
+ * from drifting apart while the DB has no CHECK constraint.
+ */
+export function billableKindFor(supersedesInspectionId?: string | null): BillableKind {
+  return supersedesInspectionId ? 'RE_INSPECTION' : 'INSPECTION';
+}
+
 export type QaDecisionValue = 'PASS' | 'FAIL' | 'HOLD';
 export type InspectionDecisionStatus = 'APPROVED' | 'REJECTED' | 'HOLD';
 

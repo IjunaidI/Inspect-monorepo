@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { CacheModule } from '@nestjs/cache-manager';
+import { ThrottlerModule } from '@nestjs/throttler';
 import KeyvRedis from '@keyv/redis';
 import { Keyv } from 'keyv';
 import { KeyvCacheableMemory } from 'cacheable';
@@ -33,6 +34,11 @@ import { UsersModule } from './users/users.module';
 import { BuyerGuestsModule } from './buyer-guests/buyer-guests.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SearchModule } from './search/search.module';
+import {
+  authRateLimit,
+  clientIpFromRequest,
+  rateLimitDisabled,
+} from './common/throttler.config';
 import * as path from 'path';
 
 /**
@@ -86,6 +92,39 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
           ],
         };
       },
+    }),
+    /**
+     * INS-047 — per-IP rate limiting for the unauthenticated surface.
+     *
+     * `ThrottlerGuard` is deliberately NOT an APP_GUARD: authenticated routes are
+     * already gated by JwtAuthGuard + RolesGuard, and a blanket limiter would
+     * throttle a legitimately busy console (and the DB-backed integration suite,
+     * which drives everything from one IP). Instead the guard is attached
+     * per-route with @UseGuards(ThrottlerGuard) + @Throttle on the @Public()
+     * endpoints an attacker can reach — see auth/, invitations/, guest/.
+     *
+     * This module is @Global(), so those controllers resolve the guard's
+     * dependencies without importing anything.
+     *
+     * The single named throttler ('public') carries the AUTH bucket as its
+     * fallback, so a future public route that forgets @Throttle inherits the
+     * TIGHTEST limit rather than none. ttl/limit are thunks because decorator
+     * metadata is evaluated at import time — before ConfigModule has populated
+     * process.env from the repo-root .env.
+     */
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'public',
+          ttl: () => authRateLimit().ttl,
+          limit: () => authRateLimit().limit,
+        },
+      ],
+      // Express has no `trust proxy` set in main.ts, so req.ip is the socket peer.
+      // Resolve the real client ourselves, honouring RATE_LIMIT_TRUSTED_PROXIES.
+      getTracker: (req) => clientIpFromRequest(req),
+      skipIf: () => rateLimitDisabled(),
+      errorMessage: 'Too many requests — please slow down and try again shortly.',
     }),
     PrismaModule,
     HealthModule,

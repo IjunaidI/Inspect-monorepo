@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { InspectionsService } from './inspections.service';
 import { AuthUser } from '../auth/auth-user';
 
@@ -15,6 +16,10 @@ interface MakeOpts {
   inspection?: Record<string, unknown>;
   loops?: Array<{ zoneName: string; requiredShotCount: number; _count: { photos: number } }>;
   users?: Array<{ email: string }>;
+  /** Defect rows as prisma.defectInstance.groupBy returns them (drives the AQL verdict). */
+  defects?: Array<{ severity: string; _count: { _all: number } }>;
+  /** A BillableEvent already on the inspection (INS-018 linkage guard). */
+  billableEvent?: { kind: string } | null;
 }
 
 function makeService(opts: MakeOpts = {}) {
@@ -36,12 +41,15 @@ function makeService(opts: MakeOpts = {}) {
       findUnique: jest.fn(async () => ({ id: 'insp1', status: 'SUBMITTED', aqlResult: { systemRecommendation: 'PASS' } })),
     },
     aqlResult: { upsert: jest.fn(async () => ({})), update: jest.fn(async () => ({})) },
-    billableEvent: { findUnique: jest.fn(async () => null), create: jest.fn(async () => ({})) },
+    billableEvent: {
+      findUnique: jest.fn(async () => opts.billableEvent ?? null),
+      create: jest.fn(async () => ({})),
+    },
   };
   const prisma = {
     inspection: { findFirst: jest.fn(async () => inspection) },
     inspectionLoop: { findMany: jest.fn(async () => opts.loops ?? []) },
-    defectInstance: { groupBy: jest.fn(async () => []) },
+    defectInstance: { groupBy: jest.fn(async () => opts.defects ?? []) },
     user: { findMany: jest.fn(async () => opts.users ?? []) },
     $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
   };
@@ -218,6 +226,436 @@ describe('InspectionsService.decide — audit attribution (INS-079)', () => {
       }),
       expect.anything(),
     );
+  });
+});
+
+// ── create(): snapshot + frozen AQL plan (INS-021 / INS-063) ──
+
+const PO = { id: 'po1', orgId: 'org1', buyerId: 'b1', supplierId: 's1', productId: 'p1' };
+const PRESET = {
+  id: 'preset1',
+  version: 3,
+  steps: [
+    {
+      position: 1,
+      zoneName: 'Front',
+      description: null,
+      referenceImageUrls: ['ref1'],
+      requiredShotCount: 2,
+      measurementFields: [{ label: 'Length', unit: 'cm' }],
+      allowedDefects: [
+        { defectCatalogId: 'd1', defectCatalog: { name: 'Broken stitch', defaultSeverity: 'MAJOR' } },
+      ],
+    },
+  ],
+};
+
+interface CreateOpts {
+  /** Row returned by inspection.findFirst — the clientRequestId replay AND the supersedes lookup. */
+  existingInspection?: Record<string, unknown> | null;
+  po?: Record<string, unknown> | null;
+  preset?: Record<string, unknown> | null;
+  inspector?: Record<string, unknown> | null;
+}
+
+function makeCreateService(opts: CreateOpts = {}) {
+  const prisma = {
+    inspection: {
+      findFirst: jest.fn(async () => opts.existingInspection ?? null),
+      create: jest.fn(async () => ({ id: 'insp-new', loops: [] })),
+    },
+    purchaseOrder: { findFirst: jest.fn(async () => (opts.po === undefined ? PO : opts.po)) },
+    loopPreset: { findFirst: jest.fn(async () => (opts.preset === undefined ? PRESET : opts.preset)) },
+    user: {
+      findFirst: jest.fn(async () =>
+        opts.inspector === undefined ? { id: 'u-insp', orgId: 'org1' } : opts.inspector,
+      ),
+    },
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const service = new InspectionsService(prisma as any, { append: jest.fn() } as any, {} as any);
+  return { service, prisma };
+}
+
+/**
+ * First argument of a mock call. `jest.fn(async () => …)` infers a zero-length
+ * parameter tuple, so `mock.calls[0][0]` is a type error under strict TS even
+ * though the value is there at runtime — this is the one place we cast.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function firstArg(mock: jest.Mock): any {
+  return (mock.mock.calls as unknown as any[][])[0][0];
+}
+
+/** The `data` argument the service handed to prisma.inspection.create. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createdData(prisma: { inspection: { create: jest.Mock } }): any {
+  return firstArg(prisma.inspection.create).data;
+}
+
+const baseInput = { poId: 'po1', loopPresetId: 'preset1', lotSize: 1000 };
+
+describe('InspectionsService.create — snapshot + computed sampling (INS-021)', () => {
+  it('freezes the resolved preset snapshot (names + severities, not just FKs) and mirrors it into loops', async () => {
+    const { service, prisma } = makeCreateService();
+    await service.create('org1', 'u-qa', baseInput);
+    const data = createdData(prisma);
+    expect(data.loopPresetSnapshot.presetId).toBe('preset1');
+    expect(data.loopPresetSnapshot.version).toBe(3);
+    expect(data.loopPresetSnapshot.steps[0].allowedDefects[0]).toEqual({
+      defectCatalogId: 'd1',
+      name: 'Broken stitch',
+      severity: 'MAJOR',
+    });
+    expect(data.loops.create).toEqual([
+      expect.objectContaining({ orgId: 'org1', position: 1, zoneName: 'Front', requiredShotCount: 2 }),
+    ]);
+  });
+
+  it('computes the sampling from the lot size and locks the level to II (lot 1000 -> code J, n 80)', async () => {
+    const { service, prisma } = makeCreateService();
+    await service.create('org1', 'u-qa', baseInput);
+    const data = createdData(prisma);
+    expect(data.aqlLevel).toBe('II');
+    expect(data.computedSampling.sampleSizeCodeLetter).toBe('J');
+    expect(data.computedSampling.sampleSize).toBe(80);
+  });
+
+  it('is DRAFT unassigned and ASSIGNED once an inspector is given', async () => {
+    const a = makeCreateService();
+    await a.service.create('org1', 'u-qa', baseInput);
+    expect(createdData(a.prisma).status).toBe('DRAFT');
+
+    const b = makeCreateService();
+    await b.service.create('org1', 'u-qa', { ...baseInput, assignedInspectorId: 'u-insp' });
+    expect(createdData(b.prisma).status).toBe('ASSIGNED');
+  });
+
+  it('replays a clientRequestId to the original row without creating a second inspection', async () => {
+    const { service, prisma } = makeCreateService({ existingInspection: { id: 'insp-original' } });
+    const out = await service.create('org1', 'u-qa', { ...baseInput, clientRequestId: 'crid-1' });
+    expect((out as { id: string }).id).toBe('insp-original');
+    expect(prisma.inspection.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a create with no poId', async () => {
+    const { service, prisma } = makeCreateService();
+    await expect(service.create('org1', 'u-qa', { ...baseInput, poId: '' })).rejects.toThrow(
+      /poId is required/,
+    );
+    expect(prisma.inspection.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a create with no loopPresetId', async () => {
+    const { service, prisma } = makeCreateService();
+    await expect(service.create('org1', 'u-qa', { ...baseInput, loopPresetId: '' })).rejects.toThrow(
+      /loopPresetId is required/,
+    );
+    expect(prisma.inspection.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a PO, preset, inspector or superseded inspection outside the org (tenant isolation)', async () => {
+    await expect(makeCreateService({ po: null }).service.create('org1', 'u-qa', baseInput)).rejects.toThrow(
+      /purchase order not found in organization/,
+    );
+    await expect(
+      makeCreateService({ preset: null }).service.create('org1', 'u-qa', baseInput),
+    ).rejects.toThrow(/loop preset not found in organization/);
+    await expect(
+      makeCreateService({ inspector: null }).service.create('org1', 'u-qa', {
+        ...baseInput,
+        assignedInspectorId: 'u-foreign',
+      }),
+    ).rejects.toThrow(/assigned inspector not found in organization/);
+    await expect(
+      makeCreateService({ existingInspection: null }).service.create('org1', 'u-qa', {
+        ...baseInput,
+        supersedesInspectionId: 'insp-foreign',
+      }),
+    ).rejects.toThrow(/superseded inspection not found in organization/);
+  });
+});
+
+describe('InspectionsService.create — per-class AQL configuration (INS-063)', () => {
+  it('freezes the caller plan and computes it: major 1.5 at lot 1000 -> ac 3 / re 4', async () => {
+    const { service, prisma } = makeCreateService();
+    await service.create('org1', 'u-qa', { ...baseInput, aqlPlan: { major: 1.5 } });
+    const data = createdData(prisma);
+    expect(data.aqlPlan).toEqual({ critical: 0, major: 1.5, minor: 4.0 });
+    expect(data.computedSampling.perClass.major).toEqual({ aql: 1.5, ac: 3, re: 4 });
+  });
+
+  it('an omitted plan still freezes the spec defaults (critical 0 / major 2.5 / minor 4.0)', async () => {
+    const { service, prisma } = makeCreateService();
+    await service.create('org1', 'u-qa', baseInput);
+    const data = createdData(prisma);
+    expect(data.aqlPlan).toEqual({ critical: 0, major: 2.5, minor: 4.0 });
+    expect(data.computedSampling.perClass).toEqual({
+      critical: { aql: 0, ac: 0, re: 1 },
+      major: { aql: 2.5, ac: 5, re: 6 },
+      minor: { aql: 4, ac: 7, re: 8 },
+    });
+  });
+
+  it('rejects an AQL outside the verified band with a 400 naming the allowed values (not a 500)', async () => {
+    const { service, prisma } = makeCreateService();
+    const call = service.create('org1', 'u-qa', { ...baseInput, aqlPlan: { major: 3.0 } });
+    await expect(call).rejects.toThrow(BadRequestException);
+    await expect(
+      service.create('org1', 'u-qa', { ...baseInput, aqlPlan: { major: 3.0 } }),
+    ).rejects.toThrow(/aqlPlan\.major must be one of 0, 1\.0, 1\.5, 2\.5, 4\.0, 6\.5/);
+    expect(prisma.inspection.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a hole in the grid with a 400: lot 100 (code letter F) has no non-zero column', async () => {
+    const { service, prisma } = makeCreateService();
+    await expect(
+      service.create('org1', 'u-qa', { ...baseInput, lotSize: 100, aqlPlan: { major: 2.5 } }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.create('org1', 'u-qa', { ...baseInput, lotSize: 100, aqlPlan: { major: 2.5 } }),
+    ).rejects.toThrow(/AQL plan not available for code letter F/);
+    expect(prisma.inspection.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unusable lot size with a 400 rather than an unhandled engine throw', async () => {
+    const { service } = makeCreateService();
+    await expect(service.create('org1', 'u-qa', { ...baseInput, lotSize: 1 })).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+});
+
+// ── submit(): evaluate -> AqlResult + BillableEvent + lock (INS-021 / INS-018) ──
+
+describe('InspectionsService.submit — lifecycle (INS-021)', () => {
+  const ready = { loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }] };
+
+  it('locks the inspection: SUBMITTED + submittedAt + tamperProof + the re-derived sampling', async () => {
+    const { service, tx } = makeService(ready);
+    await service.submit('org1', QA, 'insp1', { deviceId: 'dev-1', gps: { lat: 1, lng: 2 } });
+    const data = firstArg(tx.inspection.update).data;
+    expect(data.status).toBe('SUBMITTED');
+    expect(data.submittedAt).toBeInstanceOf(Date);
+    expect(data.tamperProof).toEqual(
+      expect.objectContaining({ inspectorId: 'u-qa', deviceId: 'dev-1', gps: { lat: 1, lng: 2 } }),
+    );
+    // lot 500 -> code letter H, n 50 (re-derived from the FROZEN plan, not the live defaults).
+    expect(data.computedSampling).toEqual(
+      expect.objectContaining({ sampleSizeCodeLetter: 'H', sampleSize: 50 }),
+    );
+  });
+
+  it('writes the AQL verdict: no defects -> PASS', async () => {
+    const { service, tx } = makeService(ready);
+    await service.submit('org1', QA, 'insp1', {});
+    const upsert = firstArg(tx.aqlResult.upsert);
+    expect(upsert.create.systemRecommendation).toBe('PASS');
+    expect(upsert.create.perClass.major).toEqual({ found: 0, ac: 3, re: 4, outcome: 'PASS' });
+  });
+
+  it('writes the AQL verdict: majors at the rejection number -> FAIL', async () => {
+    // lot 500 -> H; the frozen plan below is major 1.5 -> ac 2 / re 3, so 3 majors reject.
+    const { service, tx } = makeService({
+      ...ready,
+      inspection: {
+        id: 'insp1',
+        orgId: 'org1',
+        status: 'IN_PROGRESS',
+        lotSize: 500,
+        aqlPlan: { critical: 0, major: 1.5, minor: 4.0 },
+        supersedesInspectionId: null,
+        assignedInspectorId: null,
+        purchaseOrder: { poNumber: 'PO-1' },
+      },
+      defects: [{ severity: 'MAJOR', _count: { _all: 3 } }],
+    });
+    await service.submit('org1', QA, 'insp1', {});
+    const upsert = firstArg(tx.aqlResult.upsert);
+    expect(upsert.create.perClass.major).toEqual({ found: 3, ac: 2, re: 3, outcome: 'FAIL' });
+    expect(upsert.create.systemRecommendation).toBe('FAIL');
+  });
+
+  it.each(['SUBMITTED', 'APPROVED', 'REJECTED', 'HOLD'])(
+    'refuses to submit an inspection already in status %s',
+    async (status) => {
+      const { service, prisma } = makeService({
+        ...ready,
+        inspection: { id: 'insp1', orgId: 'org1', status, lotSize: 500, aqlPlan: {} },
+      });
+      await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
+        new RegExp(`Cannot submit an inspection in status ${status}`),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses to submit without a lot size (no lot size, no sampling plan)', async () => {
+    const { service, prisma } = makeService({
+      ...ready,
+      inspection: { id: 'insp1', orgId: 'org1', status: 'ASSIGNED', lotSize: null, aqlPlan: {} },
+    });
+    await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(/lotSize must be set/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('InspectionsService.submit — billable linkage (INS-018)', () => {
+  const ready = { loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }] };
+  const supersedingInspection = {
+    id: 'insp1',
+    orgId: 'org1',
+    status: 'ASSIGNED',
+    lotSize: 500,
+    aqlPlan: {},
+    supersedesInspectionId: 'insp-original',
+    assignedInspectorId: null,
+    purchaseOrder: { poNumber: 'PO-1' },
+  };
+
+  it('bills a plain inspection as INSPECTION', async () => {
+    const { service, tx } = makeService(ready);
+    await service.submit('org1', QA, 'insp1', {});
+    expect(tx.billableEvent.create).toHaveBeenCalledWith({
+      data: { orgId: 'org1', inspectionId: 'insp1', kind: 'INSPECTION' },
+    });
+  });
+
+  it('bills a genuine re-inspection chain as RE_INSPECTION', async () => {
+    const { service, tx } = makeService({ ...ready, inspection: supersedingInspection });
+    await service.submit('org1', QA, 'insp1', {});
+    expect(tx.billableEvent.create).toHaveBeenCalledWith({
+      data: { orgId: 'org1', inspectionId: 'insp1', kind: 'RE_INSPECTION' },
+    });
+  });
+
+  it('rejects a RE_INSPECTION event sitting on an inspection that supersedes nothing', async () => {
+    const { service, tx } = makeService({ ...ready, billableEvent: { kind: 'RE_INSPECTION' } });
+    await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
+      /Billing integrity: existing BillableEvent kind RE_INSPECTION contradicts/,
+    );
+    expect(tx.billableEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an INSPECTION event sitting on a genuine re-inspection', async () => {
+    const { service } = makeService({
+      ...ready,
+      inspection: supersedingInspection,
+      billableEvent: { kind: 'INSPECTION' },
+    });
+    await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
+      /contradicts the inspection's re-inspection linkage \(expected RE_INSPECTION\)/,
+    );
+  });
+
+  it('does not double-bill a matching pre-existing event', async () => {
+    const { service, tx } = makeService({ ...ready, billableEvent: { kind: 'INSPECTION' } });
+    await service.submit('org1', QA, 'insp1', {});
+    expect(tx.billableEvent.create).not.toHaveBeenCalled();
+  });
+});
+
+// ── decide(): the binding QA call + its status guards (INS-021) ──
+
+describe('InspectionsService.decide — status transitions (INS-021)', () => {
+  const decidable = (status: string) => ({
+    id: 'insp1',
+    orgId: 'org1',
+    status,
+    assignedInspectorId: null,
+    purchaseOrder: { poNumber: 'PO-1' },
+    aqlResult: { id: 'aql1' },
+  });
+
+  it.each([
+    ['PASS', 'APPROVED'],
+    ['FAIL', 'REJECTED'],
+    ['HOLD', 'HOLD'],
+  ] as const)('%s -> %s, recorded on both the inspection and the AQL result', async (decision, status) => {
+    const { service, tx } = makeService({ inspection: decidable('SUBMITTED') });
+    await service.decide('org1', QA, 'insp1', { decision, remarks: 'note' });
+    expect(tx.inspection.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status } }));
+    expect(tx.aqlResult.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          qaDecision: decision,
+          qaRemarks: 'note',
+          decidedByUserId: 'u-qa',
+        }),
+      }),
+    );
+  });
+
+  it.each(['SUBMITTED', 'UNDER_REVIEW', 'HOLD'])('accepts a decision from status %s', async (status) => {
+    const { service, prisma } = makeService({ inspection: decidable(status) });
+    await service.decide('org1', QA, 'insp1', { decision: 'PASS' });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['DRAFT', 'ASSIGNED', 'IN_PROGRESS', 'APPROVED', 'REJECTED'])(
+    'refuses a decision from status %s',
+    async (status) => {
+      const { service, prisma } = makeService({ inspection: decidable(status) });
+      await expect(service.decide('org1', QA, 'insp1', { decision: 'PASS' })).rejects.toThrow(
+        new RegExp(`Cannot decide an inspection in status ${status}`),
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses to decide before submit (no AQL result to decide on)', async () => {
+    const { service, prisma } = makeService({
+      inspection: { ...decidable('SUBMITTED'), aqlResult: null },
+    });
+    await expect(service.decide('org1', QA, 'insp1', { decision: 'PASS' })).rejects.toThrow(
+      /no AQL result \(submit first\)/,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('requires a decision value', async () => {
+    const { service } = makeService({ inspection: decidable('SUBMITTED') });
+    await expect(
+      service.decide('org1', QA, 'insp1', {} as { decision: 'PASS' }),
+    ).rejects.toThrow(/decision is required/);
+  });
+});
+
+describe('InspectionsService.start / reset — status guards (INS-021)', () => {
+  it('starts an ASSIGNED inspection into IN_PROGRESS', async () => {
+    const { service, tx } = makeService();
+    await service.start('org1', QA, 'insp1');
+    expect(tx.inspection.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'IN_PROGRESS' } }),
+    );
+  });
+
+  it('refuses to start anything that is not ASSIGNED', async () => {
+    const { service, prisma } = makeService({
+      inspection: { id: 'insp1', orgId: 'org1', status: 'IN_PROGRESS' },
+    });
+    await expect(service.start('org1', QA, 'insp1')).rejects.toThrow(
+      /Cannot start an inspection in status IN_PROGRESS/,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('resets an IN_PROGRESS inspection back to ASSIGNED', async () => {
+    const { service, tx } = makeService({
+      inspection: { id: 'insp1', orgId: 'org1', status: 'IN_PROGRESS' },
+    });
+    await service.reset('org1', QA, 'insp1');
+    expect(tx.inspection.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: 'ASSIGNED' } }),
+    );
+  });
+
+  it('refuses to reset anything that is not IN_PROGRESS', async () => {
+    const { service, prisma } = makeService();
+    await expect(service.reset('org1', QA, 'insp1')).rejects.toThrow(
+      /Cannot reset an inspection in status ASSIGNED/,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 

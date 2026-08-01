@@ -1,4 +1,5 @@
 import {
+  billableKindFor,
   buildPresetSnapshot,
   qaDecisionToStatus,
   toDefectCounts,
@@ -47,6 +48,16 @@ describe('buildPresetSnapshot', () => {
       severity: 'MAJOR',
     });
     expect(snap.steps[0].measurementFields[0]).toEqual({ label: 'Collar length', unit: 'cm' });
+  });
+});
+
+describe('billableKindFor (INS-018)', () => {
+  it('bills RE_INSPECTION only when the inspection actually supersedes another', () => {
+    expect(billableKindFor('insp-original')).toBe('RE_INSPECTION');
+  });
+
+  it.each([[null], [undefined], ['']])('bills INSPECTION when the linkage is %p', (linkage) => {
+    expect(billableKindFor(linkage as string | null | undefined)).toBe('INSPECTION');
   });
 });
 
