@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuthUser } from '../auth/auth-user';
+import { AuditService } from '../audit/audit.service';
+import { actorTypeFor } from '../audit/actor-type';
 
 type AqlLevelInput = 'I' | 'II' | 'III' | 'S1' | 'S2' | 'S3' | 'S4';
 
@@ -20,7 +23,10 @@ export interface CreateLoopPresetInput {
 
 @Injectable()
 export class LoopPresetsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   list(orgId: string, opts: { includeArchived?: boolean; q?: string; take?: number; skip?: number } = {}) {
     return this.prisma.loopPreset.findMany({
@@ -60,7 +66,7 @@ export class LoopPresetsService {
     return preset;
   }
 
-  async create(orgId: string, userId: string, input: CreateLoopPresetInput) {
+  async create(orgId: string, actor: AuthUser, input: CreateLoopPresetInput) {
     if (!input?.name?.trim()) {
       throw new BadRequestException('name is required');
     }
@@ -114,45 +120,75 @@ export class LoopPresetsService {
     });
     const version = (latest?.version ?? 0) + 1;
 
-    return this.prisma.loopPreset.create({
-      data: {
-        orgId,
-        name: input.name.trim(),
-        description: input.description,
-        aqlLevel: input.aqlLevel,
-        version,
-        createdByUserId: userId,
-        steps: {
-          create: input.steps.map((s, i) => ({
-            position: i + 1,
-            zoneName: s.zoneName.trim(),
-            description: s.description,
-            referenceImageUrls: s.referenceImageUrls ?? [],
-            requiredShotCount: s.requiredShotCount ?? 1,
-            measurementFields: {
-              create: (s.measurementFields ?? []).map((m, j) => ({
-                position: j + 1,
-                label: m.label,
-                unit: m.unit,
-              })),
-            },
-            allowedDefects: {
-              create: (s.allowedDefectCatalogIds ?? []).map((cid) => ({
-                defectCatalogId: cid,
-              })),
-            },
-          })),
+    // INS-006: audit inside the business transaction.
+    return this.prisma.$transaction(async (tx) => {
+      const preset = await tx.loopPreset.create({
+        data: {
+          orgId,
+          name: input.name.trim(),
+          description: input.description,
+          aqlLevel: input.aqlLevel,
+          version,
+          createdByUserId: actor.userId,
+          steps: {
+            create: input.steps.map((s, i) => ({
+              position: i + 1,
+              zoneName: s.zoneName.trim(),
+              description: s.description,
+              referenceImageUrls: s.referenceImageUrls ?? [],
+              requiredShotCount: s.requiredShotCount ?? 1,
+              measurementFields: {
+                create: (s.measurementFields ?? []).map((m, j) => ({
+                  position: j + 1,
+                  label: m.label,
+                  unit: m.unit,
+                })),
+              },
+              allowedDefects: {
+                create: (s.allowedDefectCatalogIds ?? []).map((cid) => ({
+                  defectCatalogId: cid,
+                })),
+              },
+            })),
+          },
         },
-      },
-      include: { steps: { include: { measurementFields: true, allowedDefects: true } } },
+        include: { steps: { include: { measurementFields: true, allowedDefects: true } } },
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'loopPreset.created',
+          entityType: 'LoopPreset',
+          entityId: preset.id,
+          metadata: { name: preset.name, version: preset.version, steps: preset.steps.length },
+        },
+        tx,
+      );
+      return preset;
     });
   }
 
-  async archive(orgId: string, id: string) {
+  async archive(orgId: string, actor: AuthUser, id: string) {
     await this.get(orgId, id);
-    return this.prisma.loopPreset.update({
-      where: { id },
-      data: { isArchived: true },
+    return this.prisma.$transaction(async (tx) => {
+      const preset = await tx.loopPreset.update({
+        where: { id },
+        data: { isArchived: true },
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'loopPreset.archived',
+          entityType: 'LoopPreset',
+          entityId: id,
+        },
+        tx,
+      );
+      return preset;
     });
   }
 }

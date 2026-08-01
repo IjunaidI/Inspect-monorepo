@@ -4,12 +4,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { computeSampling, evaluateInspection } from '../aql/aql.engine';
 import { AqlPlanInput } from '../aql/aql.types';
 import {
+  billableKindFor,
   buildPresetSnapshot,
   PresetLike,
   QaDecisionValue,
   qaDecisionToStatus,
   toDefectCounts,
 } from './inspection-mapping';
+import { RawAqlPlanInput, resolveAqlPlan } from './aql-plan-input';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
@@ -19,7 +21,8 @@ export interface CreateInspectionInput {
   poId: string;
   loopPresetId: string;
   lotSize?: number;
-  aqlPlan?: { critical?: number; major?: number; minor?: number };
+  /** Per-class AQLs (INS-063). Validated against the verified band; omitted classes take the spec defaults. */
+  aqlPlan?: RawAqlPlanInput;
   assignedInspectorId?: string;
   supersedesInspectionId?: string;
   clientRequestId?: string;
@@ -170,8 +173,19 @@ export class InspectionsService {
     }
 
     const snapshot = buildPresetSnapshot(preset as unknown as PresetLike);
-    const aqlPlan: AqlPlanInput = input.aqlPlan ?? {};
-    const computedSampling = input.lotSize ? computeSampling(input.lotSize, aqlPlan) : undefined;
+
+    // INS-063: the per-class AQLs are caller-configurable, so both the value
+    // check and the grid lookup are USER input errors — a hole in the verified
+    // band (e.g. lot 100 -> code letter F) must surface as a 400 naming the
+    // problem, never as an unhandled 500. aqlPreview() does the same.
+    let aqlPlan: AqlPlanInput;
+    let computedSampling;
+    try {
+      aqlPlan = resolveAqlPlan(input.aqlPlan);
+      computedSampling = input.lotSize ? computeSampling(input.lotSize, aqlPlan) : undefined;
+    } catch (e) {
+      throw new BadRequestException(e instanceof Error ? e.message : 'invalid AQL plan');
+    }
 
     return this.prisma.inspection.create({
       data: {
@@ -208,7 +222,8 @@ export class InspectionsService {
   /**
    * Pre-submission edits only (INS-066): reassign the inspector and/or adjust
    * lot size. SUBMITTED+ inspections are frozen by the immutability invariant.
-   * aqlPlan editing is deliberately excluded (INS-063).
+   * The aqlPlan itself stays fixed at creation (INS-063) — only the lot size may
+   * move, and the sampling is recomputed from the frozen plan.
    */
   async update(orgId: string, actor: AuthUser, id: string, input: UpdateInspectionInput) {
     const inspection = await this.prisma.inspection.findFirst({ where: { id, orgId } });
@@ -251,7 +266,7 @@ export class InspectionsService {
       try {
         changes.computedSampling = computeSampling(
           input.lotSize,
-          (inspection.aqlPlan ?? {}) as unknown as AqlPlanInput,
+          resolveAqlPlan(inspection.aqlPlan as RawAqlPlanInput | null),
         ) as unknown as Prisma.InputJsonValue;
       } catch (e) {
         throw new BadRequestException(e instanceof Error ? e.message : 'AQL plan not available for this lot size');
@@ -282,12 +297,14 @@ export class InspectionsService {
   }
 
   /** Read-only AQL plan preview for the create screen (spec §8). Reuses computeSampling. */
-  aqlPreview(lotSize: number, plan: { critical?: number; major?: number; minor?: number }) {
+  aqlPreview(lotSize: number, plan: RawAqlPlanInput) {
     if (!Number.isInteger(lotSize) || lotSize < 2) {
       throw new BadRequestException('lotSize must be an integer >= 2');
     }
     try {
-      return computeSampling(lotSize, plan as AqlPlanInput);
+      // Same validation the create path applies, so the preview the QA Manager
+      // sees can never differ from the plan the API would actually accept.
+      return computeSampling(lotSize, resolveAqlPlan(plan));
     } catch (e) {
       throw new BadRequestException(e instanceof Error ? e.message : 'AQL plan not available');
     }
@@ -323,10 +340,17 @@ export class InspectionsService {
       );
     }
 
-    const sampling = computeSampling(
-      inspection.lotSize,
-      (inspection.aqlPlan ?? {}) as unknown as AqlPlanInput,
-    );
+    // Re-derived from the plan frozen at creation (never from the live defaults),
+    // so the verdict matches the plan the QA Manager configured and saw.
+    let sampling;
+    try {
+      sampling = computeSampling(
+        inspection.lotSize,
+        resolveAqlPlan(inspection.aqlPlan as RawAqlPlanInput | null),
+      );
+    } catch (e) {
+      throw new BadRequestException(e instanceof Error ? e.message : 'AQL plan not available for this lot');
+    }
 
     const groups = await this.prisma.defectInstance.groupBy({
       by: ['severity'],
@@ -376,15 +400,20 @@ export class InspectionsService {
           decidedAt: null,
         },
       });
+      // INS-018: the billing kind is DERIVED from the re-inspection linkage and
+      // never supplied by a caller — a RE_INSPECTION event may only exist for an
+      // inspection that actually supersedes another (and vice versa). Until the
+      // DB carries a CHECK constraint, this service path is the enforcement point.
+      const billableKind = billableKindFor(inspection.supersedesInspectionId);
       const existing = await tx.billableEvent.findUnique({ where: { inspectionId: id } });
       if (!existing) {
-        await tx.billableEvent.create({
-          data: {
-            orgId,
-            inspectionId: id,
-            kind: inspection.supersedesInspectionId ? 'RE_INSPECTION' : 'INSPECTION',
-          },
-        });
+        await tx.billableEvent.create({ data: { orgId, inspectionId: id, kind: billableKind } });
+      } else if (existing.kind !== billableKind) {
+        // A pre-existing event that contradicts the linkage is a billing-integrity
+        // fault: fail the submit rather than silently bill the wrong kind.
+        throw new BadRequestException(
+          `Billing integrity: existing BillableEvent kind ${existing.kind} contradicts the inspection's re-inspection linkage (expected ${billableKind})`,
+        );
       }
       // INS-079: same attribution story as decide() — a Platform Admin submitting
       // inside an assumed org must show up as PLATFORM_ADMIN, in the same

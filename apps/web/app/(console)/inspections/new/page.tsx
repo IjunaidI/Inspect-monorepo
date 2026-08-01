@@ -27,7 +27,7 @@ export default async function CreateInspectionPage() {
         <ChevronRight size={14} color={ui.faint} />
         <span style={{ color: ui.ink, fontWeight: 550 }}>New inspection</span>
       </div>
-      <PageHead title="Create inspection" sub="The AQL sampling plan is computed automatically from lot size." />
+      <PageHead title="Create inspection" sub="Set the per-class AQL; the Level II sampling plan is computed from it and the lot size, then frozen onto the inspection." />
       <div style={{ marginTop: 24 }}>
         <CreateInspectionForm pos={pos} presets={presets} inspectors={inspectors} />
       </div>

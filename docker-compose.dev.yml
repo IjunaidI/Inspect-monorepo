@@ -43,11 +43,40 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-inspect}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-inspect-secret}
+      # INS-060: the browser PUTs straight to this host from the console origin, so
+      # MinIO — not the API — is the one that must answer the CORS preflight. Without
+      # this the upload fails as an opaque "Failed to fetch".
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_API_CORS_ALLOW_ORIGIN:-http://localhost:3001,http://localhost:3000}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - inspect_minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # INS-060: create the bucket the API presigns into. Without this the stack came up
+  # "healthy" but every presigned PUT 404'd on a bucket that was never created.
+  # Runs once and exits; `docker compose up -d` leaves it in state Exited(0).
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-inspect}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-inspect-secret}
+      S3_BUCKET: ${S3_BUCKET:-inspect-photos}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\" &&
+      mc mb --ignore-existing \"local/$${S3_BUCKET}\" &&
+      echo 'bucket ready: '\"$${S3_BUCKET}\" &&
+      mc anonymous set none \"local/$${S3_BUCKET}\"
+      "
 
 volumes:
   inspect_pg:

@@ -108,7 +108,7 @@ Legend: ✅ done & verified · ⬜ planned
 - [x] Append‑only hash‑chained audit core *(7 tests)*
 - [x] `@inspect/shared-types` contract package
 
-**Backend API (NestJS)** — ✅ *verified live against Postgres + Redis + MinIO: 36 integration tests across 4 suites, green in CI (GitHub Actions)*
+**Backend API (NestJS)** — ✅ *verified live against Postgres + Redis + S3-compatible object storage: 68 integration tests across 6 suites, green in CI (GitHub Actions)*
 - [x] JWT auth + additive RBAC guards — scrypt + HS256 *(25 tests)*
 - [x] Workspace CRUD — buyers, suppliers, products, purchase orders
 - [x] Loop‑preset builder (versioned) + defect catalog (global + per‑org)

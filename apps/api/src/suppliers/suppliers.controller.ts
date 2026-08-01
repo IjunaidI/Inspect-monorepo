@@ -30,7 +30,7 @@ export class SuppliersController {
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() body: CreateSupplierInput) {
-    return this.suppliers.create(requireOrgId(user), user.userId, body);
+    return this.suppliers.create(requireOrgId(user), user, body);
   }
 
   @Patch(':id')
@@ -39,7 +39,7 @@ export class SuppliersController {
     @Param('id') id: string,
     @Body() body: UpdateSupplierInput,
   ) {
-    return this.suppliers.update(requireOrgId(user), id, body);
+    return this.suppliers.update(requireOrgId(user), user, id, body);
   }
 
   @Delete(':id')

@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { Mono, SeverityTag } from '@/components/inspect/shell';
-import { severity, ui, type SeverityKey } from '@/components/inspect/tokens';
+import { mono, severity, ui, type SeverityKey } from '@/components/inspect/tokens';
 import type { ApiDefectCatalog, ApiLoopPresetDetail } from '@/lib/api';
 import type { CreatePresetInput } from '../actions';
 import { createPreset, createDefect, presignPresetImage } from '../actions';
@@ -211,13 +211,27 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
         return;
       }
       const { storageKey, uploadUrl } = presign.data;
-      const res = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      });
+      // INS-060: separate the two failure modes. fetch() only *rejects* on a
+      // transport-level failure — offline, DNS/TLS, or a CORS preflight the
+      // bucket refused; the request never reached storage. An HTTP error status
+      // resolves normally and means storage answered and said no.
+      let res: Response;
+      try {
+        res = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        });
+      } catch {
+        setRefError(
+          'Could not reach object storage — the upload never left the browser (network or CORS). The preset can still be saved without it.',
+        );
+        return;
+      }
       if (!res.ok) {
-        setRefError(`Image upload failed (${res.status}). The preset can still be saved without it.`);
+        setRefError(
+          `Upload rejected by object storage (${res.status}). The preset can still be saved without it.`,
+        );
         return;
       }
       // Attach by STABLE step id, not a positional index: the user can reorder
@@ -256,22 +270,26 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
     });
   }
 
-  function incrementShots(index: number) {
-    setState((prev) => {
-      const steps = prev.steps.map((s, i) =>
-        i === index ? { ...s, requiredShotCount: s.requiredShotCount + 1 } : s,
-      );
-      return { ...prev, steps };
-    });
+  /**
+   * INS-073: the required-shot count is a single clamped stepper. Every path
+   * that writes it funnels through here so the floor of 1 can never be
+   * bypassed (a loop with zero required photos would be un-populatable).
+   */
+  function setShots(index: number, next: number) {
+    const clamped = Number.isFinite(next) ? Math.max(1, Math.floor(next)) : 1;
+    setState((prev) => ({
+      ...prev,
+      steps: prev.steps.map((s, i) => (i === index ? { ...s, requiredShotCount: clamped } : s)),
+    }));
   }
 
-  function decrementShots(index: number) {
-    setState((prev) => {
-      const steps = prev.steps.map((s, i) =>
-        i === index ? { ...s, requiredShotCount: Math.max(1, s.requiredShotCount - 1) } : s,
-      );
-      return { ...prev, steps };
-    });
+  function bumpShots(index: number, delta: 1 | -1) {
+    setState((prev) => ({
+      ...prev,
+      steps: prev.steps.map((s, i) =>
+        i === index ? { ...s, requiredShotCount: Math.max(1, s.requiredShotCount + delta) } : s,
+      ),
+    }));
   }
 
   function addMeasurementField(stepIndex: number) {
@@ -402,6 +420,22 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
 
   const totalShots = state.steps.reduce((a, s) => a + s.requiredShotCount, 0);
 
+  /*
+   * INS-076: presets are never edited in place — the API is GET/POST/DELETE only
+   * and auto-versions per trimmed name. So a seeded builder is a DUPLICATE, and
+   * the two possible outcomes of Save are stated here rather than left implicit.
+   */
+  const isDuplicate = Boolean(seed);
+  const nameChanged = isDuplicate && state.presetName.trim() !== seed!.name.trim();
+  const builderTitle = isDuplicate
+    ? `Duplicate of ${seed!.name} (v${seed!.version})`
+    : state.presetName || 'New Preset';
+  const saveRule = isDuplicate
+    ? nameChanged
+      ? `Name changed — Save creates a brand-new preset at v1. Keep the name “${seed!.name}” instead to save it as the next version.`
+      : `Same name — Save adds the next version of “${seed!.name}” (you opened v${seed!.version}). Change the name to start a brand-new preset at v1. Existing inspections keep their snapshot either way.`
+    : 'Save creates a new preset at v1 — unless the name already exists, in which case it saves as that preset’s next version. Existing inspections keep their snapshot either way.';
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <header style={{ height: 56, borderBottom: `1px solid ${ui.line}`, background: '#fff', display: 'flex', alignItems: 'center', padding: '0 24px', gap: 16, flexShrink: 0 }}>
@@ -409,9 +443,7 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
           <Repeat size={15} color={ui.sub} />
           <span>Loop Presets</span>
           <ChevronRight size={14} color={ui.faint} />
-          <span style={{ color: ui.ink, fontWeight: 550 }}>
-            {state.presetName || 'New Preset'}
-          </span>
+          <span style={{ color: ui.ink, fontWeight: 550 }}>{builderTitle}</span>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: ui.faint, fontWeight: 500 }}>
@@ -431,6 +463,12 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
           </button>
         </div>
       </header>
+
+      {/* INS-076: the versioning rule, stated right under the Save button. */}
+      <div style={{ padding: '8px 24px', background: ui.fill, borderBottom: `1px solid ${ui.line}`, fontSize: 12, color: ui.sub, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <Repeat size={13} color={ui.faint} />
+        <span>{saveRule}</span>
+      </div>
 
       {state.saveError && (
         <div style={{ padding: '8px 24px', background: '#FEF2F2', borderBottom: `1px solid #FECACA`, fontSize: 12.5, color: '#DC2626' }}>
@@ -468,8 +506,14 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
             rows={2}
             style={{ fontFamily: 'inherit', fontSize: 12.5, color: ui.sub, border: `1px solid ${ui.line}`, borderRadius: 6, padding: '6px 8px', resize: 'none', outline: 'none', marginBottom: 4 }}
           />
+          {/*
+            INS-076: this name is what decides the version — the API looks up
+            the latest preset with the same trimmed name and stores version+1,
+            so the rule belongs next to the field, not phrased as "editing".
+          */}
           <div style={{ fontSize: 12, color: ui.sub, marginTop: 4, lineHeight: 1.5 }}>
-            Editing creates a new version; historical inspections keep their snapshot.
+            This name decides the version: an existing name saves as its next version, a new name
+            starts at v1.
           </div>
 
           <div style={{ borderTop: `1px solid ${ui.line}`, margin: '20px 0 16px' }} />
@@ -609,34 +653,62 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 28, minWidth: 0 }}>
-                  {/* Shots counter */}
+                  {/*
+                    Required shots (INS-073): ONE labelled stepper. The old card
+                    rendered a decorative "Shot 01 / Shot 02…" row per shot,
+                    which read as editable slots and buried the real control in
+                    two unlabelled 28px icon buttons underneath. There is nothing
+                    per-shot to configure — the schema stores only a count — so
+                    the rows are replaced by a plain caption.
+                  */}
                   <div>
-                    <div style={fieldLabel}>Required shots · {activeStep.requiredShotCount}</div>
-                    <div style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, overflow: 'hidden' }}>
-                      {Array.from({ length: activeStep.requiredShotCount }, (_, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderTop: i ? `1px solid ${ui.lineSoft}` : 'none' }}>
-                          <Mono style={{ fontSize: 11, color: ui.faint, minWidth: 18 }}>{String(i + 1).padStart(2, '0')}</Mono>
-                          <span style={{ flex: 1, fontSize: 13, color: ui.sub }}>
-                            Shot {String(i + 1).padStart(2, '0')}
-                          </span>
+                    <div style={fieldLabel}>Required shots</div>
+                    <div style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, padding: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${ui.line}`, borderRadius: 10, overflow: 'hidden', background: ui.fill }}>
+                          <button
+                            type="button"
+                            aria-label="Remove one required shot"
+                            disabled={activeStep.requiredShotCount <= 1}
+                            onClick={() => bumpShots(state.activeStepIndex, -1)}
+                            style={{ ...iconBtn, width: 38, height: 38, borderRadius: 0, color: ui.sub, opacity: activeStep.requiredShotCount <= 1 ? 0.35 : 1, cursor: activeStep.requiredShotCount <= 1 ? 'default' : 'pointer' }}
+                          >
+                            <Minus size={15} />
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            aria-label="Required shots for this loop"
+                            value={activeStep.requiredShotCount}
+                            onChange={(e) => setShots(state.activeStepIndex, Number(e.target.value))}
+                            onBlur={(e) => setShots(state.activeStepIndex, Number(e.target.value))}
+                            style={{ ...mono, width: 56, height: 38, textAlign: 'center', fontSize: 17, fontWeight: 600, color: ui.ink, background: '#fff', border: 'none', borderLeft: `1px solid ${ui.line}`, borderRight: `1px solid ${ui.line}`, outline: 'none' }}
+                          />
+                          <button
+                            type="button"
+                            aria-label="Add one required shot"
+                            onClick={() => bumpShots(state.activeStepIndex, 1)}
+                            style={{ ...iconBtn, width: 38, height: 38, borderRadius: 0, color: ui.sub }}
+                          >
+                            <Plus size={15} />
+                          </button>
                         </div>
-                      ))}
-                      <div style={{ padding: '10px 12px', borderTop: `1px solid ${ui.lineSoft}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button
-                          onClick={() => decrementShots(state.activeStepIndex)}
-                          style={{ ...iconBtn, border: `1px solid ${ui.line}`, color: ui.sub }}
-                        >
-                          <Minus size={13} />
-                        </button>
-                        <span style={{ fontSize: 12.5, color: ui.sub, fontWeight: 500 }}>
-                          {activeStep.requiredShotCount} shot{activeStep.requiredShotCount !== 1 ? 's' : ''}
+                        <span style={{ fontSize: 13, color: ui.ink, fontWeight: 500 }}>
+                          shot{activeStep.requiredShotCount !== 1 ? 's' : ''}
                         </span>
                         <button
-                          onClick={() => incrementShots(state.activeStepIndex)}
-                          style={{ ...iconBtn, border: `1px solid ${ui.line}`, color: ui.sub }}
+                          type="button"
+                          onClick={() => bumpShots(state.activeStepIndex, 1)}
+                          style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', border: `1px solid ${ui.line}`, borderRadius: 8, background: '#fff', color: ui.accent, fontSize: 12.5, fontWeight: 550, fontFamily: 'inherit', cursor: 'pointer' }}
                         >
-                          <Plus size={13} />
+                          <Plus size={14} /> Add shot
                         </button>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: ui.faint, marginTop: 12, lineHeight: 1.45 }}>
+                        <Mono style={{ color: ui.sub }}>{activeStep.requiredShotCount}</Mono>{' '}
+                        photo{activeStep.requiredShotCount !== 1 ? 's' : ''} will be required on this
+                        loop during populate. Shots are counted only — there are no per-shot labels.
                       </div>
                     </div>
                   </div>

@@ -215,6 +215,10 @@ const NAV: {
   { key: 'users', label: 'Users & Roles', icon: Users, href: '/users', minRole: 'owner', scope: 'org' },
 ];
 
+// Design-demo identities ONLY. They render when the shell is used without a
+// session — i.e. the offline/API-unreachable preview mode. A signed-in operator
+// must never see these: ConsoleLayout resolves the real org name for every role
+// (INS-080), and passing `org` undefined from a live session would be a bug.
 const DEFAULT_USER = { name: 'Riya Saraf', initials: 'RS', role: 'owner' as RoleKey };
 const DEFAULT_ORG = 'Asha Inspection Services';
 

@@ -244,3 +244,39 @@ export async function createWorkspace(
 export function runTag(suffix: string): string {
   return `${Date.now()}-${Math.floor(Math.random() * 1e6)}-${suffix}`;
 }
+
+/** Minimal raw-SQL surface we need from PrismaService in these specs. */
+interface RawSqlClient {
+  $executeRawUnsafe(sql: string): Promise<number>;
+  $queryRawUnsafe<T = unknown>(sql: string): Promise<T>;
+}
+
+/** True when the named trigger exists (i.e. the INS-014 migration has been applied). */
+export async function triggerExists(prisma: RawSqlClient, name: string): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
+    `SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal AND tgname = '${name}'`,
+  );
+  return Array.isArray(rows) && rows[0]?.n > 0;
+}
+
+/**
+ * Toggle the INS-014 report-immutability trigger.
+ *
+ * ONLY for specs that must deliberately step around the PREVENTION layer to
+ * prove the DETECTION layer still works (the INS-038 tamper-evidence test).
+ * It models an attacker who reached the database with owner rights — the exact
+ * residual risk documented in docs/reference/inspect-schema.md. No production
+ * code path may do this.
+ *
+ * No-ops when the trigger is absent, so the suite still runs against a database
+ * that has not had the INS-014 migration applied yet.
+ */
+export async function setReportsImmutabilityTrigger(
+  prisma: RawSqlClient,
+  enabled: boolean,
+): Promise<void> {
+  if (!(await triggerExists(prisma, 'reports_immutable_columns'))) return;
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "reports" ${enabled ? 'ENABLE' : 'DISABLE'} TRIGGER reports_immutable_columns`,
+  );
+}

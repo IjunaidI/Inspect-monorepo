@@ -23,6 +23,7 @@ import {
   loginAdmin,
   OrgFixture,
   runTag,
+  setReportsImmutabilityTrigger,
   WorkspaceFixture,
 } from './support';
 
@@ -253,9 +254,19 @@ describe('Core inspection loop (integration)', () => {
     expect(report).toBeTruthy();
     const original = report!.canonicalSnapshot as Record<string, unknown>;
 
+    // INS-014 added a BEFORE UPDATE trigger that REFUSES to change a signed
+    // report's tamper-proof columns, so this test can no longer tamper through
+    // an ordinary UPDATE — which is the point of that trigger. To keep proving
+    // the INS-038 DETECTION guarantee we deliberately step around the
+    // PREVENTION layer, modelling an attacker who reached the database with
+    // owner rights. (That residual risk is documented in
+    // docs/reference/inspect-schema.md: full protection needs a least-privilege
+    // application role that does not own the tables.)
+    await setReportsImmutabilityTrigger(prisma, false);
     // An attacker with DB write access edits a buyer-visible field post-signing.
     // Restore in finally: if an assertion throws (or the run is killed), the
-    // shared DB must not keep a permanently-tampered signed report row.
+    // shared DB must not keep a permanently-tampered signed report row — and the
+    // protection trigger must not stay disabled.
     await prisma.report.update({
       where: { id: reportId },
       data: { canonicalSnapshot: { ...original, lotSize: 999999 } },
@@ -272,6 +283,7 @@ describe('Core inspection loop (integration)', () => {
         where: { id: reportId },
         data: { canonicalSnapshot: original as any },
       });
+      await setReportsImmutabilityTrigger(prisma, true);
     }
     const restored = expect2xx(
       await client.get(`/reports/verify/${verificationToken}`),

@@ -7,7 +7,7 @@
  * The suite probes S3_ENDPOINT + the target bucket first and SKIPS (loudly)
  * when storage is unreachable OR the bucket is missing, so a DB-only local run
  * stays green even with a bucket-less MinIO up. Set REQUIRE_STORAGE=1 (CI does)
- * to turn that skip into a hard failure — otherwise a MinIO/bucket setup
+ * to turn that skip into a hard failure — otherwise a storage/bucket setup
  * regression would silently drop INS-023 coverage while CI stays green.
  */
 import { INestApplication } from '@nestjs/common';
@@ -32,9 +32,13 @@ async function probeStorage(endpoint: string, bucket: string): Promise<StoragePr
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2500);
   try {
-    // Path-style bucket URL: 200/403 = bucket exists (listing may be denied);
-    // 404 = endpoint up but NO bucket — presigned PUTs would 404, so treat it
-    // as unusable rather than letting the test fail hard on a half-set-up MinIO.
+    // Path-style bucket URL; 200/403 => treat as usable. NOTE: managed
+    // S3-compatible endpoints answer 403 AccessDenied for ANY bucket name,
+    // existing or not (verified against Tigris), so this probe cannot prove
+    // existence there — a wrong S3_BUCKET surfaces later as a failing presigned
+    // PUT, not as a skip. 404 is the MinIO-shaped "endpoint up but NO bucket"
+    // signal (what CI runs against); treat that as unusable rather than letting
+    // the test fail hard on a half-set-up local stack.
     const res = await fetch(`${endpoint.replace(/\/+$/, '')}/${bucket}`, {
       method: 'GET',
       signal: controller.signal,
@@ -42,7 +46,7 @@ async function probeStorage(endpoint: string, bucket: string): Promise<StoragePr
     if (res.status === 404) {
       return {
         usable: false,
-        reason: `bucket "${bucket}" does not exist at ${endpoint} (create it, e.g. aws --endpoint-url ${endpoint} s3 mb s3://${bucket})`,
+        reason: `bucket "${bucket}" not found at ${endpoint} (MinIO: create it, e.g. aws --endpoint-url ${endpoint} s3 mb s3://${bucket})`,
       };
     }
     return { usable: true, reason: 'ok' };
@@ -73,7 +77,7 @@ describe('Photo byte upload via presigned URL (integration)', () => {
       // eslint-disable-next-line no-console
       console.warn(
         `[storage-bytes] SKIPPED — ${probe.reason}. ` +
-          'Start MinIO (docker-compose.dev.yml) + create the bucket, or run in CI, to exercise the byte path.',
+          'Point S3_* at reachable object storage (a managed S3-compatible bucket, or local MinIO via docker-compose.dev.yml plus bucket creation) to exercise the byte path.',
       );
     }
   });

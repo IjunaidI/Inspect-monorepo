@@ -6,11 +6,28 @@ import { actorTypeFor } from '../audit/actor-type';
 
 export interface CreateProductInput {
   styleNumber: string;
-  description?: string;
+  description?: string | null;
 }
 export interface UpdateProductInput {
   styleNumber?: string;
-  description?: string;
+  /**
+   * INS-074: `undefined` means "not supplied — leave unchanged"; an explicit
+   * `null` (or an empty/whitespace-only string) means "clear the column".
+   * Prisma treats `undefined` as a no-op, so the console MUST send `null` to
+   * empty a description — otherwise it can never be cleared.
+   */
+  description?: string | null;
+}
+
+/**
+ * Normalise a submitted description to what the column should hold: trimmed
+ * text, or `null` when the caller sent nothing meaningful. Only the outer
+ * whitespace is stripped — internal line breaks are content and are preserved
+ * (the detail screen renders them).
+ */
+function normalizeDescription(value: string | null | undefined): string | null {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 @Injectable()
@@ -52,28 +69,65 @@ export class ProductsService {
     return row;
   }
 
-  create(orgId: string, userId: string, input: CreateProductInput) {
+  async create(orgId: string, actor: AuthUser, input: CreateProductInput) {
     if (!input?.styleNumber?.trim()) {
       throw new BadRequestException('styleNumber is required');
     }
-    return this.prisma.product.create({
-      data: {
-        orgId,
-        styleNumber: input.styleNumber.trim(),
-        description: input.description,
-        createdByUserId: userId,
-      },
+    // INS-006: audit inside the business transaction.
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.create({
+        data: {
+          orgId,
+          styleNumber: input.styleNumber.trim(),
+          description: normalizeDescription(input.description),
+          createdByUserId: actor.userId,
+        },
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'product.created',
+          entityType: 'Product',
+          entityId: product.id,
+          metadata: { styleNumber: product.styleNumber },
+        },
+        tx,
+      );
+      return product;
     });
   }
 
-  async update(orgId: string, id: string, input: UpdateProductInput) {
+  async update(orgId: string, actor: AuthUser, id: string, input: UpdateProductInput) {
     await this.get(orgId, id);
-    return this.prisma.product.update({
-      where: { id },
-      data: {
-        styleNumber: input.styleNumber?.trim(),
-        description: input.description,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const product = await tx.product.update({
+        where: { id },
+        data: {
+          styleNumber: input.styleNumber?.trim(),
+          // INS-074: only touch `description` when the caller actually supplied
+          // it. Spreading keeps an omitted key out of the update entirely, while
+          // an explicit null / empty string clears the column instead of being
+          // swallowed by Prisma's "undefined = leave unchanged" rule.
+          ...(input.description === undefined
+            ? {}
+            : { description: normalizeDescription(input.description) }),
+        },
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'product.updated',
+          entityType: 'Product',
+          entityId: id,
+          metadata: { fields: Object.keys(input ?? {}).sort() },
+        },
+        tx,
+      );
+      return product;
     });
   }
 

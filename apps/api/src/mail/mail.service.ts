@@ -44,9 +44,21 @@ export interface InspectionDecidedMail {
   remarks?: string | null;
 }
 
+export interface ReportDeliveredMail {
+  to: string;
+  /** The recipient's OWN buyer-guest magic-link token (their portal credential). */
+  token: string;
+  reportId: string;
+  poNumber?: string | null;
+  buyerName?: string | null;
+  /** Public verification token — lets the buyer check the signature themselves. */
+  verificationToken?: string | null;
+}
+
 /**
  * Outbound email for onboarding (INS-004): user/org-owner invitations and
- * buyer-guest magic links. Report-delivery email is INS-020 (needs INS-003 PDF).
+ * buyer-guest magic links; inspection status notifications (INS-069); and the
+ * buyer-facing report delivery (INS-020).
  *
  * Delivery contract: every send method resolves — it NEVER throws. Email is a
  * side effect of a business write (invitation row, guest token) that must not
@@ -183,6 +195,40 @@ export class MailService {
       link,
     ].join('\n');
     return this.send({ to: input.to, subject: `Inspection ${po} decision: ${input.decision}`, text });
+  }
+
+  /**
+   * Buyer-facing delivery of a signed report (INS-020).
+   *
+   * The email carries the recipient's own portal magic link — never the report
+   * PDF itself: the presigned download is short-lived and the portal is the one
+   * place where access is authenticated and recorded (ReportAccess). The public
+   * verification URL is included so the buyer can confirm the Ed25519 signature
+   * without trusting the portal (spec §9).
+   */
+  async sendReportDelivered(input: ReportDeliveredMail): Promise<SendResult> {
+    const link = `${this.webBaseUrl}/portal?token=${encodeURIComponent(input.token)}`;
+    // Same reference convention as the inspection notifications above.
+    const ref = input.poNumber ?? input.reportId.slice(0, 8);
+    const buyerSuffix = input.buyerName ? ` for ${input.buyerName}` : '';
+    const text = [
+      `The inspection report ${ref}${buyerSuffix} is ready on Inspect.`,
+      '',
+      'Open it in your report portal:',
+      link,
+      ...(input.verificationToken
+        ? [
+            '',
+            'Verify this report independently (it is cryptographically signed):',
+            `${this.webBaseUrl}/r/${encodeURIComponent(input.verificationToken)}`,
+          ]
+        : []),
+      '',
+      'Keep this link private — anyone with it can view the portal.',
+      'If you were not expecting this email, you can ignore it.',
+    ].join('\n');
+
+    return this.send({ to: input.to, subject: `Inspection report ${ref} is ready`, text });
   }
 
   /** Shared send path — logs failures and resolves {sent:false}; never throws. */

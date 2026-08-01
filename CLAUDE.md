@@ -25,9 +25,9 @@ single `pnpm install` at the root installs everything):
 Node ≥ 20, pnpm 9.12.0 (declared in root `package.json`).
 
 > **Maturity reality (2026-07-11):** the pure domain core (AQL, tamper-proof crypto, audit-chain, auth
-> primitives) is unit-tested and solid (135 unit tests). The DB-bound surface — auth round-trip incl. refresh,
-> CRUD create paths, the full inspection lifecycle, populate (incl. the S3 byte path), signed reports + public
-> verify — is **verified live**: a 36-test integration suite (`pnpm api test:integration`) runs green against a
+> primitives) is unit-tested and solid (204 unit tests, verified 2026-08-01). The DB-bound surface — auth round-trip
+> incl. refresh, CRUD create paths, the full inspection lifecycle, populate (incl. the S3 byte path), signed reports +
+> public verify — is **verified live**: the DB-backed integration suite (`pnpm api test:integration`) runs green against a
 > real Postgres/Redis, locally and in CI ([INS-001](docs/future/BACKLOG.md)/INS-009 closed). Update/delete paths
 > and several service internals still lack specs (INS-034/INS-007/INS-019/INS-021). See STATUS.md.
 
@@ -38,15 +38,15 @@ Run from the **repo root** unless noted — Turbo fans tasks out across both app
 ### Root (Turbo)
 - `pnpm dev` — run API (`:3000`) + web (`:3001`) in watch mode together.
 - `pnpm build` — `nest build` + `next build` across the workspace.
-- `pnpm test` — runs each app's `test` (only `@inspect/api` has one: 135 Jest unit tests, no DB).
+- `pnpm test` — runs each app's `test` (only `@inspect/api` has one: 204 Jest unit tests, no DB).
 - `pnpm type-check` — strict `tsc --noEmit` across both apps.
 - `pnpm lint` — **currently broken repo-wide** ([INS-048](docs/future/BACKLOG.md): ESLint 9 without a flat config; `next lint` deprecated). `pnpm format` — Prettier write.
 - `pnpm api <script>` / `pnpm web <script>` — shorthand for `pnpm --filter @inspect/api` / `@inspect/web`.
 
 ### API (`pnpm api <script>`, or `cd apps/api`)
 - `pnpm api dev` — `nest start --watch`. **Requires `DATABASE_URL` + `REDIS_URL`** or it throws on boot (see Gotchas).
-- `pnpm api test` — Jest unit tests (`src/**/*.spec.ts`, `testEnvironment: node`, **no DB**). 135 passing.
-- `pnpm api test:integration` — 36-test DB-backed integration suite (`test/integration/`: negative RBAC matrix, token refresh, full core loop, tamper-evidence, byte upload). Needs a migrated+seeded `DATABASE_URL`+`REDIS_URL` (repo-root `.env` locally; service containers in CI — `.github/workflows/ci.yml`). The byte-upload spec self-skips without MinIO unless `REQUIRE_STORAGE=1`.
+- `pnpm api test` — Jest unit tests (`src/**/*.spec.ts`, `testEnvironment: node`, **no DB**). 204 passing (2026-08-01).
+- `pnpm api test:integration` — DB-backed integration suite (`test/integration/`: negative RBAC matrix, token refresh, full core loop, tamper-evidence, byte upload). Needs a migrated+seeded `DATABASE_URL`+`REDIS_URL` (repo-root `.env` locally; service containers in CI — `.github/workflows/ci.yml`). The byte-upload spec self-skips when the configured `S3_ENDPOINT`/`S3_BUCKET` is unreachable or missing; `REQUIRE_STORAGE=1` (CI sets it) turns that skip into a hard failure.
 - `pnpm api prisma:migrate` — `prisma migrate dev` (apply/author migrations against `DATABASE_URL`).
 - `pnpm api prisma:generate` — regenerate the Prisma client (also runs on `postinstall`).
 - `pnpm api prisma:studio` — Prisma Studio.
@@ -74,11 +74,12 @@ The API loads env from the **repo-root `.env`** first, then `apps/api/.env` (`Co
   throws `REDIS_URL is required` if unset). There is no silent-off fallback.
 - **Auth/signing:** `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `REPORT_SIGNING_PRIVATE_KEY_PEM` (Ed25519), plus
   `AUTH_SECRET` / `NEXTAUTH_URL` for the web console and `INSPECT_API_URL` (the base URL the console calls server-side).
-- **Storage:** `S3_*` / `MINIO_*` for presigned photo uploads (MinIO locally).
+- **Storage:** `S3_*` for presigned photo uploads — any S3-compatible endpoint (managed bucket, or local MinIO via `docker-compose.dev.yml`). `MINIO_ROOT_*` is read only by that compose file, never by the API.
 - `turbo.json` `globalEnv` is the canonical list of vars that participate in caching — add new env vars there.
 
-> ⚠️ **`.env.example` currently ships real-looking Railway credentials** (committed). Rotate + scrub before any
-> deploy — [INS-002](docs/future/BACKLOG.md). `.gitignore` correctly ignores real `.env*`; only `.env.example` is tracked.
+> ⚠️ **`.env.example` is scrubbed to placeholders** (`${{...}}` Railway template refs + `CHANGE_ME`) — verified. What
+> remains open in [INS-002](docs/future/BACKLOG.md): the real-looking credentials are still in **git history**, and the
+> live Railway secrets are unrotated. `.gitignore` correctly ignores real `.env*`; only `.env.example` is tracked.
 
 ## Backend architecture (`apps/api`)
 
@@ -93,7 +94,7 @@ The correctness-critical logic lives as plain TypeScript under `src/`, consumed 
 ### NestJS wiring
 - **Global guards** (`app.module.ts`): `JwtAuthGuard` then `RolesGuard` are registered as `APP_GUARD`, so **every route is protected by default**. Opt out / scope with `@Public()`, `@Roles(min)`, and `@CurrentUser()` (in `src/auth/`).
 - **Feature modules** mirror the domain: `buyers`, `suppliers`, `products`, `purchase-orders`, `loop-presets`, `defect-catalog`, `inspections`, `populate`, `reports`, `guest`, `orgs`, `invitations`, `users`, `buyer-guests`. Most are CRUD controller+service with no spec yet.
-- **`PrismaModule`** is global; inject `PrismaService`. **`CacheModule`** is Redis-backed (Keyv). `ScheduleModule` is registered (no cron jobs yet).
+- **`PrismaModule`** is global; inject `PrismaService`. **`CacheModule`** is Redis-backed (Keyv). There is **no** `ScheduleModule` — it was removed as dead in INS-053; re-add it only when a real scheduled job lands.
 - **Prisma schema:** `apps/api/prisma/schema.prisma` is the **single canonical schema** (25 models, `orgId`-scoped). (A root `LoopQC_schema.prisma` mirror existed historically and was removed 2026-06-20 — there is now exactly one schema.)
 
 ## Frontend architecture (`apps/web`)
@@ -122,7 +123,7 @@ back them yet — tracked as [INS-010..INS-018](docs/future/BACKLOG.md)); when y
 - **Verify DB-bound changes with the integration suite.** The core paths are proven live (INS-001 closed), but update/delete paths and service internals are thinner — run `pnpm api test:integration` (and extend it) rather than assuming "compiles" means "works." The bootstrap-admin password converges to `BOOTSTRAP_ADMIN_*` on every `prisma db seed` (by design — re-seed if login 401s after regenerating `.env`).
 - **One canonical schema.** `apps/api/prisma/schema.prisma` is the only Prisma schema. (The old root `LoopQC_schema.prisma` mirror was removed 2026-06-20 — don't recreate it.)
 - **`@inspect/shared-types` is built but unlinked** ([INS-008](docs/future/BACKLOG.md)) — both apps currently redeclare their own enums/DTOs, so the client/server contract can drift.
-- **Local MinIO/Docker is still unavailable on this machine** — the byte-upload integration spec self-skips locally and runs for real in CI; local `docker-compose.dev.yml` requires Docker Desktop.
+- **Object storage is a managed S3-compatible bucket** (`S3_*` in the repo-root `.env`), verified live: presigned PUT/GET round-trip, private objects, permissive CORS. So the byte-upload spec now **runs** locally rather than skipping. CI still uses a MinIO container. Note managed endpoints answer `403` for *any* bucket name, so the suite's probe cannot prove a bucket exists there — a wrong `S3_BUCKET` surfaces as a failing presigned PUT, not a skip. Local `docker-compose.dev.yml` still requires Docker Desktop.
 - **Windows + pnpm:** if `pnpm` isn't on PATH, use `npx -y pnpm@9.12.0 <cmd>` or `apps/api/node_modules/.bin`. The API reads the **repo-root** `.env` (`../../.env`), not just `apps/api/.env`.
 
 ## Documentation workflow

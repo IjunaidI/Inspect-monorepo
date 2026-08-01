@@ -7,10 +7,22 @@ import { apiPost, apiPatch, apiDelete, ApiError } from '@/lib/api';
 const msg = (e: unknown, fallback: string) =>
   e instanceof ApiError || e instanceof Error ? e.message : fallback;
 
+/**
+ * INS-074: an emptied textarea must CLEAR the column, so it has to reach the
+ * API as an explicit `null` — `undefined` drops the key from the JSON body and
+ * Prisma reads that as "leave unchanged", which made a description permanently
+ * un-clearable from the console.
+ */
+function descriptionField(formData: FormData): string | null {
+  const raw = formData.get('description');
+  if (typeof raw !== 'string' || raw.trim().length === 0) return null;
+  return raw;
+}
+
 export async function createProduct(_prev: unknown, formData: FormData): Promise<{ error?: string }> {
   const styleNumber = String(formData.get('styleNumber') ?? '').trim();
   if (!styleNumber) return { error: 'Style number is required' };
-  const description = (formData.get('description') as string) || undefined;
+  const description = descriptionField(formData);
   let id: string;
   try {
     const res = await apiPost<{ id: string }>('/products', { styleNumber, description });
@@ -26,7 +38,7 @@ export async function updateProduct(_prev: unknown, formData: FormData): Promise
   const id = String(formData.get('id') ?? '');
   const styleNumber = String(formData.get('styleNumber') ?? '').trim();
   if (!styleNumber) return { error: 'Style number is required' };
-  const description = (formData.get('description') as string) || undefined;
+  const description = descriptionField(formData);
   try {
     await apiPatch(`/products/${id}`, { styleNumber, description });
   } catch (e) {

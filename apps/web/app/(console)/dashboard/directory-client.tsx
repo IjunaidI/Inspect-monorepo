@@ -5,15 +5,17 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   ChevronLeft,
   ChevronRight,
+  Image as ImageIcon,
   MapPin,
   MoreVertical,
   Plus,
+  Upload,
 } from 'lucide-react';
 import { Avatar, Btn, Mono } from '@/components/inspect/shell';
 import { ConfirmDialog } from '@/components/inspect/confirm-dialog';
 import { mono as monoStyle, ui } from '@/components/inspect/tokens';
 import type { ApiBuyer, ApiLoopPreset, ApiSupplier } from '@/lib/api';
-import { archiveBuyer, archiveSupplier, createBuyer, createSupplier, restoreBuyer, restoreSupplier } from './actions';
+import { archiveBuyer, archiveSupplier, createBuyer, createSupplier, presignBuyerLogo, restoreBuyer, restoreSupplier } from './actions';
 
 const th = {
   fontSize: 11,
@@ -99,6 +101,180 @@ function InputRow({ label, name, placeholder, type = 'text', defaultValue }: { l
       <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</label>
       <input name={name} type={type} defaultValue={defaultValue} placeholder={placeholder}
         style={{ width: '100%', height: 34, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} />
+    </div>
+  );
+}
+
+const fieldLabel = { display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 };
+const boxInput = { width: '100%', height: 34, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const };
+
+/** Exactly what the API accepts for primaryColor (INS-077) — mirrored for a live hint only. */
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+const isAbsoluteUrl = (v: string) => /^https?:\/\//i.test(v);
+/** Decimal degrees with trailing zeros dropped (INS-071): 23.810300 → 23.8103, 120.000000 → 120. */
+const coord = (n: number) => String(Number(n.toFixed(6)));
+/** Render source for a buyer logo: the API's short-lived presigned GET, or a legacy absolute URL. */
+const logoSrcOf = (b: ApiBuyer): string | null =>
+  b.logoViewUrl ?? (b.logoUrl && isAbsoluteUrl(b.logoUrl) ? b.logoUrl : null);
+
+/**
+ * Buyer logo upload (INS-072): presign → PUT the bytes straight to storage →
+ * submit the DURABLE object key. The presigned URL is display-only and must never
+ * be persisted — `logoUrl` freezes verbatim into the Ed25519-signed report
+ * brandingSnapshot, so a ~900s URL there would rot permanently.
+ */
+function LogoUploadField() {
+  const [logoKey, setLogoKey] = useState('');
+  const [preview, setPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Sole owner of the blob: URL — runs on replacement and on unmount.
+  useEffect(() => {
+    if (!preview) return;
+    return () => URL.revokeObjectURL(preview);
+  }, [preview]);
+
+  async function upload(file: File) {
+    setError(null);
+    setUploading(true);
+    try {
+      const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+      const presign = await presignBuyerLogo(ext);
+      if (presign.error || !presign.data) {
+        setError(presign.error ?? 'Could not prepare the upload.');
+        return;
+      }
+      // fetch() only *rejects* on a transport failure — offline, DNS/TLS, or a CORS
+      // preflight the bucket refused, meaning the bytes never left the browser. An
+      // HTTP error status resolves normally: storage answered and said no.
+      let res: Response;
+      try {
+        res = await fetch(presign.data.uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        });
+      } catch {
+        setError('Could not reach object storage — the upload never left the browser (network or CORS). The buyer can still be created without a logo.');
+        return;
+      }
+      if (!res.ok) {
+        setError(`Upload rejected by object storage (${res.status}). The buyer can still be created without a logo.`);
+        return;
+      }
+      setPreview(URL.createObjectURL(file));
+      setLogoKey(presign.data.storageKey);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Logo upload failed.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={fieldLabel}>Logo</label>
+      {/* The durable key — never the presigned preview URL. */}
+      <input type="hidden" name="logoUrl" value={logoKey} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 48, height: 48, borderRadius: 8, border: `1px solid ${ui.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="Logo preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          ) : (
+            <ImageIcon size={16} color={ui.faint} />
+          )}
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void upload(file);
+            e.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px', border: `1px solid ${ui.line}`, borderRadius: 8, background: '#fff', color: ui.accent, fontSize: 12.5, fontWeight: 550, fontFamily: 'inherit', cursor: uploading ? 'default' : 'pointer', opacity: uploading ? 0.6 : 1 }}
+        >
+          <Upload size={14} /> {uploading ? 'Uploading…' : logoKey ? 'Replace' : 'Upload logo'}
+        </button>
+        {logoKey !== '' && !uploading && (
+          <button
+            type="button"
+            onClick={() => { setPreview(null); setLogoKey(''); setError(null); }}
+            style={{ height: 32, padding: '0 12px', border: `1px solid ${ui.line}`, borderRadius: 8, background: '#fff', color: ui.sub, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      {error && <div style={{ marginTop: 6, fontSize: 11.5, color: ui.danger, lineHeight: 1.4 }}>{error}</div>}
+    </div>
+  );
+}
+
+/**
+ * Brand colour (INS-077): the native picker plus a synced hex field. The TEXT box
+ * is what submits, so an invalid value actually reaches the API and its 400
+ * surfaces — the picker can only ever emit #rrggbb, and is deliberately unnamed.
+ */
+function HexColorField({ defaultValue }: { defaultValue: string }) {
+  const [hex, setHex] = useState(defaultValue);
+  const [swatch, setSwatch] = useState(HEX_RE.test(defaultValue) ? defaultValue.toLowerCase() : ui.accent);
+  const invalid = hex.trim() !== '' && !HEX_RE.test(hex.trim());
+  return (
+    <div>
+      <label style={fieldLabel}>Brand Color</label>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type="color"
+          aria-label="Pick brand color"
+          value={swatch}
+          onChange={(e) => { setHex(e.target.value); setSwatch(e.target.value); }}
+          style={{ width: 44, height: 34, padding: '2px 4px', border: `1px solid ${ui.line}`, borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+        />
+        <input
+          name="primaryColor"
+          aria-label="Brand color hex value"
+          value={hex}
+          onChange={(e) => {
+            setHex(e.target.value);
+            if (HEX_RE.test(e.target.value.trim())) setSwatch(e.target.value.trim().toLowerCase());
+          }}
+          placeholder="#1457A3"
+          spellCheck={false}
+          style={{ ...boxInput, ...monoStyle, border: `1px solid ${invalid ? ui.danger : ui.line}` }}
+        />
+      </div>
+      {invalid && <div style={{ marginTop: 4, fontSize: 11, color: ui.danger }}>Expected #RRGGBB.</div>}
+    </div>
+  );
+}
+
+/**
+ * Supplier GPS (INS-071): a structured numeric pair. Replaces a single hand-typed
+ * JSON field whose JSON.parse sat in an EMPTY catch, so a mistyped brace saved the
+ * supplier with no coordinates and no error. Range checks stay on the API.
+ */
+function GpsFields({ lat, lng }: { lat?: number; lng?: number }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={fieldLabel}>GPS coordinates</label>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <input name="lat" type="number" step="any" min={-90} max={90} inputMode="decimal" aria-label="Latitude"
+          defaultValue={lat === undefined ? '' : String(lat)} placeholder="Latitude (−90…90)" style={{ ...boxInput, ...monoStyle }} />
+        <input name="lng" type="number" step="any" min={-180} max={180} inputMode="decimal" aria-label="Longitude"
+          defaultValue={lng === undefined ? '' : String(lng)} placeholder="Longitude (−180…180)" style={{ ...boxInput, ...monoStyle }} />
+      </div>
+      <div style={{ fontSize: 11, color: ui.faint, marginTop: 5 }}>Decimal degrees — leave both blank for no pin.</div>
     </div>
   );
 }
@@ -299,13 +475,9 @@ export function DirectoryClient({
               <form action={buyerAction}>
                 {buyerState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: ui.danger }}>{buyerState.error}</div>}
                 <InputRow label="Name *" name="name" placeholder="Buyer company name" />
-                <InputRow label="Logo URL" name="logoUrl" placeholder="https://…" />
+                <LogoUploadField />
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>Brand Color</label>
-                    <input name="primaryColor" type="color" defaultValue="#037BF4"
-                      style={{ width: '100%', height: 34, padding: '2px 4px', border: `1px solid ${ui.line}`, borderRadius: 8, cursor: 'pointer' }} />
-                  </div>
+                  <HexColorField defaultValue={ui.accent} />
                   <div>
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>Default Preset</label>
                     <select name="defaultLoopPresetId"
@@ -343,11 +515,16 @@ export function DirectoryClient({
                 {visibleBuyers.map((b, i) => {
                   const color = b.primaryColor || BRANDS[i % BRANDS.length];
                   const initials = initialsOf(b.name);
+                  // INS-072: render from the API's short-lived presigned GET (or a
+                  // legacy absolute URL). `logoUrl` itself is now an object key and
+                  // is NOT fetchable — using it directly would show a broken image.
+                  const logoSrc = logoSrcOf(b);
                   return (
                     <tr key={b.id} style={{ cursor: 'pointer', opacity: b.archivedAt ? 0.6 : 1 }} onClick={() => { if (!menuOpen) window.location.href = `/buyers/${b.id}`; }}>
                       <td style={td}>
-                        {b.logoUrl ? (
-                          <img src={b.logoUrl} alt={b.name} style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain', border: `1px solid ${ui.lineSoft}` }} />
+                        {logoSrc ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={logoSrc} alt={b.name} style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain', border: `1px solid ${ui.lineSoft}` }} />
                         ) : (
                           <div style={{ width: 32, height: 32, borderRadius: 6, background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>{initials}</div>
                         )}
@@ -403,7 +580,7 @@ export function DirectoryClient({
                   <textarea name="address" rows={2} placeholder="City, Country"
                     style={{ width: '100%', padding: '6px 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', resize: 'none', boxSizing: 'border-box' as const }} />
                 </div>
-                <InputRow label="GPS (JSON)" name="gpsJson" placeholder='{"lat":0,"lng":0}' />
+                <GpsFields />
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
                   <Btn kind="ghost" onClick={() => setShowAddSupplier(false)}>Cancel</Btn>
                   <Btn kind="primary" type="submit" style={{ opacity: supplierPending ? 0.65 : 1 }}>
@@ -438,9 +615,13 @@ export function DirectoryClient({
                       </div>
                       <div style={{ color: ui.faint, fontSize: 12, marginTop: 2 }}>{s.address || '—'}</div>
                     </td>
+                    {/* INS-071: the real coordinates, not a "Pinned" badge that hid a wrong pin. */}
                     <td style={td}>
                       {s.gps ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#1F8A4C' }}><MapPin size={13} color="#1F8A4C" /> Pinned</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          <MapPin size={13} color={ui.accent} />
+                          <Mono style={{ fontSize: 12, color: ui.sub }}>{coord(s.gps.lat)}, {coord(s.gps.lng)}</Mono>
+                        </span>
                       ) : (
                         <span style={{ fontSize: 12, color: ui.faint }}>—</span>
                       )}

@@ -46,7 +46,7 @@ touch a DB-bound or write path, assume you are the first to run it.
 
 ## Two things to know before any deploy
 - [INS-001](docs/future/BACKLOG.md) — stand the stack up against a real DB and drive the core loop end-to-end. **Recommended first task.**
-- [INS-002](docs/future/BACKLOG.md) — `.env.example` ships real-looking Railway credentials; rotate + scrub them.
+- [INS-002](docs/future/BACKLOG.md) — `.env.example` itself is scrubbed to placeholders, but the real-looking Railway credentials remain in **git history** and the live secrets are unrotated.
 
 ## Don't
 - The canonical (and only) Prisma schema is `apps/api/prisma/schema.prisma` — the old root `LoopQC_schema.prisma` mirror was removed 2026-06-20; don't recreate it.

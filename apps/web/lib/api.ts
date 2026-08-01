@@ -1,5 +1,7 @@
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { auth } from './auth';
+import { getToken } from 'next-auth/jwt';
+import { refreshApiAccessToken } from './auth';
 import { getAssumedOrgId } from './admin-org';
 
 const API_URL = process.env.INSPECT_API_URL ?? 'http://localhost:3000';
@@ -17,10 +19,68 @@ export class ApiError extends Error {
   }
 }
 
+// ── Session token access (INS-045) ──────────────────────────────────────────
+// The API bearer token lives ONLY inside the encrypted (JWE) NextAuth cookie —
+// it is no longer copied onto the session object, because NextAuth serves that
+// object to the browser at GET /api/auth/session, where any XSS/extension/kiosk
+// foothold could exfiltrate it and replay it against the API. Auth.js derives
+// the JWE salt from the session cookie's NAME, and prefixes that name with
+// `__Secure-` when the deployment URL is https — so the name has to be detected
+// from the request, never assumed, or the decrypt silently yields null.
+// Oversized sessions are split into `.0`, `.1`, … chunks; getToken reassembles.
+const SESSION_COOKIE = 'authjs.session-token';
+const SECURE_SESSION_COOKIE = `__Secure-${SESSION_COOKIE}`;
+const SECURE_SESSION_COOKIE_RE = /(?:^|;\s*)__Secure-authjs\.session-token(?:\.\d+)?=/;
+
+/** The subset of the NextAuth JWT this module needs. */
+interface SessionJwt {
+  accessToken?: string;
+  refreshToken?: string;
+  accessTokenExpires?: number;
+  role?: string;
+}
+
+/**
+ * Decrypt the current request's NextAuth JWT, server-side. Uses `headers()`,
+ * which is available in every context this module is called from (Server
+ * Components, Server Actions, Route Handlers) — the same contexts `auth()`
+ * required, so no call site loses reach. Returns null when unauthenticated.
+ */
+async function readSessionJwt(): Promise<SessionJwt | null> {
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+  if (!secret) return null;
+  const cookie = (await headers()).get('cookie');
+  if (!cookie) return null;
+  const secureCookie = SECURE_SESSION_COOKIE_RE.test(cookie);
+  const cookieName = secureCookie ? SECURE_SESSION_COOKIE : SESSION_COOKIE;
+  return (await getToken({
+    req: { headers: { cookie } },
+    secret,
+    cookieName,
+    salt: cookieName,
+    secureCookie,
+  })) as SessionJwt | null;
+}
+
+/**
+ * The access token to send, renewed on the spot when it has expired — mirroring
+ * the `jwt` callback in lib/auth.ts, same 60s clock-skew buffer, so a call
+ * landing right at expiry still authenticates instead of 401-ing. As before this
+ * change the renewal is in-memory only: Auth.js discards Set-Cookie outside
+ * middleware, so middleware.ts stays the one place that persists a rotated token.
+ * On refresh failure we send the stale token and let the API return 401, exactly
+ * as the previous `session.accessToken` path did.
+ */
+async function accessTokenFrom(jwt: SessionJwt | null): Promise<string | null> {
+  if (!jwt?.accessToken) return null;
+  if (Date.now() < ((jwt.accessTokenExpires ?? 0) - 60_000)) return jwt.accessToken;
+  const refreshed = await refreshApiAccessToken(jwt.refreshToken);
+  return refreshed?.accessToken ?? jwt.accessToken;
+}
+
 /** Current session's API access token (server-side only). */
 export async function apiToken(): Promise<string | null> {
-  const session = (await auth()) as unknown as { accessToken?: string } | null;
-  return session?.accessToken ?? null;
+  return accessTokenFrom(await readSessionJwt());
 }
 
 /**
@@ -29,14 +89,14 @@ export async function apiToken(): Promise<string | null> {
  * check is defense-in-depth (the API guard ignores the header for anyone else
  * regardless) against a stale `inspect_admin_org` cookie surviving into a
  * different session on a shared browser (final review, finding 2) — reads the
- * one `auth()` call already needed here for the bearer token, rather than a
- * second call. Deliberately NOT used by apiGetPublic/apiPostPublic — those are
+ * one decrypted JWT already needed here for the bearer token, rather than a
+ * second lookup. Deliberately NOT used by apiGetPublic/apiPostPublic — those are
  * unauthenticated by contract.
  */
 async function authHeaders(): Promise<Record<string, string>> {
-  const session = (await auth()) as unknown as { accessToken?: string; role?: string } | null;
-  const token = session?.accessToken ?? null;
-  const orgId = session?.role === 'PLATFORM_ADMIN' ? await getAssumedOrgId() : null;
+  const jwt = await readSessionJwt();
+  const token = await accessTokenFrom(jwt);
+  const orgId = jwt?.role === 'PLATFORM_ADMIN' ? await getAssumedOrgId() : null;
   return {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(orgId ? { 'X-Org-Id': orgId } : {}),
@@ -176,9 +236,37 @@ export const apiPatch = <T>(path: string, body?: unknown): Promise<T> => apiSend
 export const apiDelete = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('DELETE', path, body);
 
 // ── Response shapes (subset of the Prisma models the screens read) ──
-/** GET /dashboard/summary — org-scoped rollups for the console dashboard (INS-005). */
+/** Binding QA-call rollup (INS-068). PENDING = submitted, awaiting the QA decision. */
+export interface ApiQaDecisionCounts {
+  PASS: number;
+  FAIL: number;
+  HOLD: number;
+  PENDING: number;
+}
+
+/**
+ * Org quality metrics (INS-068). `dphu`/`passRate` are `null` — not 0 — until
+ * there is something to divide by, so the tiles render "—" instead of NaN.
+ */
+export interface ApiQualityMetrics {
+  decidedInspections: number;
+  sampledUnits: number;
+  defectsFound: number;
+  /** Defects per hundred units: 100 × defectsFound / sampledUnits, 2dp. */
+  dphu: number | null;
+  /** 100 × PASS / (PASS + FAIL), 1dp. HOLD is unresolved and excluded. */
+  passRate: number | null;
+  /** PASS + FAIL — the passRate denominator. */
+  verdicts: number;
+  /** DPHU covers only the most recent bounded window of decided inspections. */
+  truncated: boolean;
+}
+
+/** GET /dashboard/summary — org-scoped rollups for the console dashboard (INS-005, KPIs in INS-068). */
 export interface ApiDashboardSummary {
   inspectionsByStatus: Record<string, number>;
+  qaDecisionCounts: ApiQaDecisionCounts;
+  quality: ApiQualityMetrics;
   buyers: number;
   suppliers: number;
   products: number;
@@ -188,7 +276,20 @@ export interface ApiDashboardSummary {
 export interface ApiBuyer {
   id: string;
   name: string;
+  /**
+   * DURABLE value (INS-072): either an object key in this org's buyer namespace
+   * (`orgs/{orgId}/buyers/<uuid>.<ext>`) or a legacy absolute `https://…` URL.
+   * Never a presigned URL — it freezes verbatim into the signed report's
+   * brandingSnapshot, so a ~900s URL here would rot the artifact permanently.
+   * Submit this value on write; render `logoViewUrl`.
+   */
   logoUrl?: string | null;
+  /**
+   * Render-time only (INS-072): a short-lived presigned GET for `logoUrl`, or the
+   * legacy URL echoed verbatim, or null (foreign-org key / storage unconfigured).
+   * Decorated onto GET /buyers and GET /buyers/:id — never persisted or submitted.
+   */
+  logoViewUrl?: string | null;
   primaryColor?: string | null;
   branding?: Record<string, unknown> | null;
   defaultLoopPresetId?: string | null;

@@ -4,19 +4,59 @@ import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
 
+/**
+ * `logoUrl` is a DURABLE value, never a presigned URL (INS-072). It holds either
+ *   - an object key in this org's namespace: `orgs/{orgId}/buyers/<uuid>.<ext>`
+ *     (produced by POST /buyers/presign), or
+ *   - a legacy absolute `https://…` URL stored verbatim before INS-072.
+ *
+ * CONTRACT for anything that renders a buyer logo (notably the PDF renderer,
+ * INS-003): this column freezes verbatim into `Report.brandingSnapshot`, so a
+ * consumer must presign the key at RENDER time (see BuyersController's
+ * `logoViewUrl` decoration for the org-prefix guard + legacy fallback). Storing
+ * a ~900s presigned URL here would permanently rot the tamper-proof artifact.
+ */
 export interface CreateBuyerInput {
   name: string;
-  logoUrl?: string;
-  primaryColor?: string;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
   branding?: unknown;
   defaultLoopPresetId?: string;
 }
 export interface UpdateBuyerInput {
   name?: string;
-  logoUrl?: string;
-  primaryColor?: string;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
   branding?: unknown;
   defaultLoopPresetId?: string | null;
+}
+
+/** Exactly `#RRGGBB` — the only shape the console's colour picker emits. */
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * INS-077: `primaryColor` freezes into the signed report's `brandingSnapshot`,
+ * so an unvalidated value ("red", "", "javascript:…") becomes permanent garbage
+ * in a tamper-proof artifact. Accept only `#RRGGBB`, normalised to lower case so
+ * the stored value is canonical (`#1457A3` and `#1457a3` are the same colour and
+ * must not produce two different snapshots).
+ *
+ * `undefined` = field absent (no change); `null`/`''` = explicit clear.
+ */
+export function normalizePrimaryColor(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== 'string') {
+    throw new BadRequestException('primaryColor must be a hex colour string like #1457A3');
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  if (!HEX_COLOR_RE.test(trimmed)) {
+    throw new BadRequestException(
+      `primaryColor must be a hex colour like #1457A3 (got ${JSON.stringify(value)})`,
+    );
+  }
+  return trimmed.toLowerCase();
 }
 
 @Injectable()
@@ -53,39 +93,78 @@ export class BuyersService {
     return buyer;
   }
 
-  async create(orgId: string, userId: string, input: CreateBuyerInput) {
+  async create(orgId: string, actor: AuthUser, input: CreateBuyerInput) {
     if (!input?.name?.trim()) {
       throw new BadRequestException('name is required');
     }
+    // Validate before touching the DB (INS-077).
+    const primaryColor = normalizePrimaryColor(input.primaryColor);
     await this.assertPresetInOrg(orgId, input.defaultLoopPresetId);
-    return this.prisma.buyer.create({
-      data: {
-        orgId,
-        name: input.name.trim(),
-        logoUrl: input.logoUrl,
-        primaryColor: input.primaryColor,
-        branding: input.branding as object | undefined,
-        defaultLoopPresetId: input.defaultLoopPresetId,
-        createdByUserId: userId,
-      },
+    // INS-006: the audit row is written INSIDE the same transaction as the
+    // business mutation, so the chain can never record a write that rolled back
+    // (nor miss one that committed).
+    return this.prisma.$transaction(async (tx) => {
+      const buyer = await tx.buyer.create({
+        data: {
+          orgId,
+          name: input.name.trim(),
+          logoUrl: input.logoUrl,
+          primaryColor,
+          branding: input.branding as object | undefined,
+          defaultLoopPresetId: input.defaultLoopPresetId,
+          createdByUserId: actor.userId,
+        },
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'buyer.created',
+          entityType: 'Buyer',
+          entityId: buyer.id,
+          metadata: { name: buyer.name },
+        },
+        tx,
+      );
+      return buyer;
     });
   }
 
-  async update(orgId: string, id: string, input: UpdateBuyerInput) {
+  async update(orgId: string, actor: AuthUser, id: string, input: UpdateBuyerInput) {
+    // Validate before touching the DB (INS-077).
+    const primaryColor = normalizePrimaryColor(input.primaryColor);
     await this.get(orgId, id);
     await this.assertPresetInOrg(orgId, input.defaultLoopPresetId);
-    return this.prisma.buyer.update({
-      where: { id },
-      data: {
-        name: input.name?.trim(),
-        logoUrl: input.logoUrl,
-        primaryColor: input.primaryColor,
-        branding: input.branding as object | undefined,
-        defaultLoopPresetId:
-          input.defaultLoopPresetId === undefined
-            ? undefined
-            : input.defaultLoopPresetId,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const buyer = await tx.buyer.update({
+        where: { id },
+        data: {
+          name: input.name?.trim(),
+          logoUrl: input.logoUrl,
+          primaryColor,
+          branding: input.branding as object | undefined,
+          defaultLoopPresetId:
+            input.defaultLoopPresetId === undefined
+              ? undefined
+              : input.defaultLoopPresetId,
+        },
+      });
+      await this.audit.append(
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'buyer.updated',
+          entityType: 'Buyer',
+          entityId: id,
+          // Which fields the caller actually supplied — enough to reconstruct
+          // intent without copying (potentially large) branding blobs.
+          metadata: { fields: Object.keys(input ?? {}).sort() },
+        },
+        tx,
+      );
+      return buyer;
     });
   }
 

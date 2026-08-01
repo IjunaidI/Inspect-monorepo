@@ -21,11 +21,11 @@ export class BuyerGuestsController {
     @Param('buyerId') buyerId: string,
     @Body() body: InviteGuestInput,
   ) {
-    return this.guests.invite(requireOrgId(user), buyerId, body);
+    return this.guests.invite(requireOrgId(user), user, buyerId, body);
   }
 
   @Delete('buyer-guests/:id')
   revoke(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.guests.revoke(requireOrgId(user), id);
+    return this.guests.revoke(requireOrgId(user), user, id);
   }
 }
