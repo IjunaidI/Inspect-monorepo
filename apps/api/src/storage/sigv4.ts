@@ -3,8 +3,10 @@
  * API can issue presigned upload URLs without the AWS SDK (spec §13: presigned
  * uploads, no base64 through the API). Works with S3 and MinIO (path-style).
  *
- * `now` is injectable for deterministic tests. Validate against a live MinIO/S3
- * before production (no live endpoint is available in this environment).
+ * `now` is injectable for deterministic tests. The signer is exercised against a
+ * real S3-compatible endpoint by test/integration/storage-bytes.e2e-spec.ts
+ * (presigned PUT of real bytes + presigned GET round-trip), which CI runs with
+ * REQUIRE_STORAGE=1 so that coverage cannot silently vanish.
  */
 import { createHash, createHmac } from 'node:crypto';
 
@@ -17,7 +19,7 @@ export interface PresignOptions {
   secretAccessKey: string;
   expiresSeconds: number;
   now: Date;
-  forcePathStyle?: boolean; // true for MinIO
+  forcePathStyle?: boolean; // true for MinIO and most non-AWS S3-compatible endpoints
   method?: 'GET' | 'PUT'; // default PUT (upload); GET presigns a download/view URL
 }
 

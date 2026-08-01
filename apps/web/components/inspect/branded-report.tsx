@@ -223,7 +223,7 @@ export function BrandedReport({
                   {row.flaggedCount > 0 && <SeverityTag sev="major" dot={false}>{row.flaggedCount} major flagged</SeverityTag>}
                 </div>
                 {row.shots.length === 0 ? (
-                  <div style={{ fontSize: 12, color: ui.faint, fontStyle: 'italic' }}>No photos uploaded yet (MinIO/INS-023 pending).</div>
+                  <div style={{ fontSize: 12, color: ui.faint, fontStyle: 'italic' }}>No photos uploaded yet.</div>
                 ) : (
                   <div style={{ display: 'flex', gap: 12 }}>
                     {row.shots.map((photo, i) => (
