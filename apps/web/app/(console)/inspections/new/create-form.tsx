@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { ui, mono, severity } from '@/components/inspect/tokens';
+import { Spinner } from '@/components/inspect/loading';
 import type { ApiPurchaseOrder, ApiLoopPreset, ApiUser, AqlPreview } from '@/lib/api';
 import { createInspection, previewAql } from '../actions';
 
@@ -138,7 +139,8 @@ export function CreateInspectionForm({ pos, presets, inspectors }: { pos: ApiPur
 
         {state?.error && <div style={{ color: ui.danger, fontSize: 13 }}>{state.error}</div>}
         <div>
-          <button type="submit" disabled={pending} style={{ height: 40, padding: '0 16px', background: ui.accent, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.7 : 1 }}>
+          <button type="submit" disabled={pending} aria-busy={pending || undefined} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 40, padding: '0 16px', background: ui.accent, color: '#fff', borderWidth: 0, borderStyle: 'solid', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.7 : 1 }}>
+            {pending && <Spinner size={13} />}
             {pending ? 'Creating…' : 'Create inspection'}
           </button>
         </div>

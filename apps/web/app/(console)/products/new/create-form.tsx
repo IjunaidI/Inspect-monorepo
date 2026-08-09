@@ -53,7 +53,7 @@ export function CreateProductForm() {
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <Btn kind="ghost" href="/products">Cancel</Btn>
-          <Btn kind="primary" type="submit" style={{ opacity: pending ? 0.65 : 1 }}>
+          <Btn kind="primary" type="submit" loading={pending}>
             {pending ? 'Creating…' : 'Create Product'}
           </Btn>
         </div>

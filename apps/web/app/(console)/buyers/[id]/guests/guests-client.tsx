@@ -99,7 +99,7 @@ export function GuestsClient({ buyerId, initialGuests }: { buyerId: string; init
                 <option value="90">90 days</option>
               </select>
             </div>
-            <Btn kind="primary" type="submit" style={{ opacity: pending ? 0.65 : 1, marginBottom: 1 }}>
+            <Btn kind="primary" type="submit" loading={pending} style={{ marginBottom: 1 }}>
               {pending ? 'Sending…' : 'Invite'}
             </Btn>
           </div>

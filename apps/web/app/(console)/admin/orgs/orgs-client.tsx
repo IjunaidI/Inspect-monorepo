@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from 'react';
 import { ui } from '@/components/inspect/tokens';
 import { Mono } from '@/components/inspect/shell';
+import { Spinner } from '@/components/inspect/loading';
 import { createOrg, enterOrg, type CreateOrgState } from '../actions';
 import type { ApiOrganization } from '@/lib/api';
 
@@ -75,8 +76,14 @@ export function OrgsClient({ orgs }: { orgs: ApiOrganization[] }) {
         <button
           type="submit"
           disabled={pending || isDuplicate}
-          style={{ ...buttonStyle, ...(pending || isDuplicate ? { opacity: 0.6, cursor: 'default' } : null) }}
+          aria-busy={pending || undefined}
+          style={{
+            ...buttonStyle,
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            ...(pending || isDuplicate ? { opacity: 0.6, cursor: 'default' } : null),
+          }}
         >
+          {pending && <Spinner size={13} />}
           {pending ? 'Creating…' : 'Create organization'}
         </button>
       </form>

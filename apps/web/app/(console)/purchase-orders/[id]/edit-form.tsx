@@ -33,7 +33,7 @@ export function EditPurchaseOrderForm({ po }: { po: ApiPurchaseOrder }) {
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Btn kind="ghost" href="/purchase-orders">Back</Btn>
-            <Btn kind="primary" type="submit" style={{ opacity: pending ? 0.65 : 1 }}>
+            <Btn kind="primary" type="submit" loading={pending}>
               {pending ? 'Saving…' : 'Save changes'}
             </Btn>
           </div>

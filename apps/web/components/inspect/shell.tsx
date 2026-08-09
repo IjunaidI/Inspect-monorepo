@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { CSSProperties, ReactNode } from 'react';
 import {
@@ -13,8 +14,10 @@ import {
   Repeat,
   Upload,
   Users,
+  type LucideIcon,
 } from 'lucide-react';
 import { mono as monoStyle, roles, severity, ui, type RoleKey, type SeverityKey } from './tokens';
+import { Spinner } from './loading';
 import { initialsFrom } from '@/lib/roles';
 import { signOutAction } from '@/app/(console)/actions';
 import { exitOrg } from '@/app/(console)/admin/actions';
@@ -23,6 +26,33 @@ import { CommandPalette } from './command-palette';
 // ─── Primitives ──────────────────────────────────────────────
 export function Mono({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return <span style={{ ...monoStyle, ...style }}>{children}</span>;
+}
+
+/**
+ * Navigation feedback for a `Btn href`. `useLinkStatus` must be rendered INSIDE
+ * the <Link>, which is why this is a child component rather than a hook call in
+ * Btn itself. It reports pending for the gap between the click and the target
+ * segment's Server Components resolving — exactly the window where the console
+ * previously looked frozen.
+ */
+function BtnContent({ icon, children }: { icon?: ReactNode; children?: ReactNode }) {
+  const { pending } = useLinkStatus();
+  return (
+    <>
+      {pending ? <Spinner size={14} /> : icon}
+      {children}
+    </>
+  );
+}
+
+/**
+ * Sidebar nav icon that becomes a spinner while its destination is loading, so
+ * the click has visible feedback in place rather than only at the top of the
+ * screen. Same useLinkStatus constraint as BtnContent: must live inside <Link>.
+ */
+function NavIconOrSpinner({ icon: Icon }: { icon: LucideIcon }) {
+  const { pending } = useLinkStatus();
+  return pending ? <Spinner size={16} /> : <Icon size={16} />;
 }
 
 type BtnKind = 'primary' | 'ghost' | 'quiet' | 'dark';
@@ -35,6 +65,8 @@ export function Btn({
   href,
   onClick,
   type = 'button',
+  loading = false,
+  disabled = false,
 }: {
   kind?: BtnKind;
   children?: ReactNode;
@@ -44,6 +76,9 @@ export function Btn({
   href?: string;
   onClick?: () => void;
   type?: 'button' | 'submit';
+  /** Server action in flight: swaps the icon for a spinner and blocks re-submits. */
+  loading?: boolean;
+  disabled?: boolean;
 }) {
   const base: CSSProperties = {
     display: 'inline-flex',
@@ -72,18 +107,23 @@ export function Btn({
     quiet: { background: 'transparent', color: ui.sub, fontWeight: 500 },
     dark: { background: ui.ink, color: '#fff' },
   };
-  const merged = { ...base, ...kinds[kind], ...style };
+  const inert = loading || disabled;
+  const merged = {
+    ...base,
+    ...kinds[kind],
+    ...style,
+    ...(inert ? { opacity: 0.65, cursor: 'default' as const, pointerEvents: 'none' as const } : null),
+  };
   if (href) {
     return (
-      <Link href={href} style={merged}>
-        {icon}
-        {children}
+      <Link href={href} style={merged} aria-disabled={inert || undefined}>
+        <BtnContent icon={icon}>{children}</BtnContent>
       </Link>
     );
   }
   return (
-    <button type={type} onClick={onClick} style={merged}>
-      {icon}
+    <button type={type} onClick={onClick} style={merged} disabled={inert} aria-busy={loading || undefined}>
+      {loading ? <Spinner size={14} /> : icon}
       {children}
     </button>
   );
@@ -311,7 +351,7 @@ function Sidebar({ org, user, isAssuming }: { org: string; user: typeof DEFAULT_
             {on && (
               <span style={{ position: 'absolute', left: -14, top: 6, bottom: 6, width: 2, background: ui.accent, borderRadius: 2 }} />
             )}
-            <NavIcon size={16} />
+            <NavIconOrSpinner icon={NavIcon} />
             <span>{n.label}</span>
           </Link>
         );

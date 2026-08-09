@@ -74,7 +74,7 @@ export function EditSupplierForm({ supplier }: { supplier: ApiSupplier }) {
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Btn kind="ghost" href="/dashboard">Cancel</Btn>
-            <Btn kind="primary" type="submit" style={{ opacity: pending ? 0.65 : 1 }}>
+            <Btn kind="primary" type="submit" loading={pending}>
               {pending ? 'Saving…' : 'Save changes'}
             </Btn>
           </div>

@@ -4,6 +4,7 @@ import { useActionState, useTransition, useState, useEffect, useRef } from 'reac
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, Plus, Search, MoreVertical } from 'lucide-react';
 import { Avatar, Mono, RoleBadge } from '@/components/inspect/shell';
+import { Spinner } from '@/components/inspect/loading';
 import { severity, ui, type RoleKey } from '@/components/inspect/tokens';
 import type { ApiUser } from '@/lib/api';
 import { addMember, deactivateUser, inviteUser, reactivateUser, updateUserRole } from './actions';
@@ -284,8 +285,9 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
                         <option value="ORG_OWNER">Org Owner</option>
                       </select>
                     </div>
-                    <button type="submit" disabled={pending}
-                      style={{ height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 550, fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.65 : 1, marginBottom: 1 }}>
+                    <button type="submit" disabled={pending} aria-busy={pending || undefined}
+                      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 550, fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.65 : 1, marginBottom: 1 }}>
+                      {pending && <Spinner size={13} />}
                       {pending ? 'Sending…' : 'Send invite'}
                     </button>
                   </div>
@@ -327,8 +329,9 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-                  <button type="submit" disabled={addPending}
-                    style={{ height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 550, fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0, cursor: addPending ? 'default' : 'pointer', opacity: addPending ? 0.65 : 1 }}>
+                  <button type="submit" disabled={addPending} aria-busy={addPending || undefined}
+                    style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 550, fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0, cursor: addPending ? 'default' : 'pointer', opacity: addPending ? 0.65 : 1 }}>
+                    {addPending && <Spinner size={13} />}
                     {addPending ? 'Adding…' : 'Add member'}
                   </button>
                 </div>
