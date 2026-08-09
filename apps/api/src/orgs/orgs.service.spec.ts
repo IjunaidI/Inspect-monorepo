@@ -3,6 +3,7 @@ import { OrgsService } from './orgs.service';
 function makeService(
   mailResult: { sent: boolean; messageId?: string } = { sent: true },
   existingUser: { id: string } | null = null,
+  existingOrg: { id: string; name: string } | null = null,
 ) {
   const tx = {
     organization: {
@@ -27,6 +28,10 @@ function makeService(
     user: {
       findUnique: jest.fn(async () => existingUser),
     },
+    // Name-uniqueness pre-check; default stub: no org by that name.
+    organization: {
+      findFirst: jest.fn(async () => existingOrg),
+    },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<any>) => fn(tx)),
   };
@@ -34,7 +39,7 @@ function makeService(
   const mail = { sendUserInvitation: jest.fn(async () => mailResult) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const service = new OrgsService(prisma as any, audit as any, mail as any);
-  return { service, tx, audit, mail };
+  return { service, tx, audit, mail, prisma };
 }
 
 describe('OrgsService.create', () => {
@@ -114,5 +119,44 @@ describe('OrgsService.create', () => {
 
     expect(tx.organization.create).not.toHaveBeenCalled();
     expect(mail.sendUserInvitation).not.toHaveBeenCalled();
+  });
+
+  it('rejects a duplicate name and writes nothing', async () => {
+    const { service, tx, mail } = makeService({ sent: true }, null, { id: 'org-existing', name: 'Polo' });
+
+    await expect(
+      service.create('admin-1', { name: 'Polo', type: 'MANUFACTURER', ownerEmail: 'x@y.com' }),
+    ).rejects.toThrow('An organization named "Polo" already exists');
+
+    expect(tx.organization.create).not.toHaveBeenCalled();
+    expect(mail.sendUserInvitation).not.toHaveBeenCalled();
+  });
+
+  it('compares the name case-insensitively on the trimmed value', async () => {
+    const { service, prisma } = makeService();
+
+    await service.create('admin-1', {
+      name: '  Acme Apparel  ',
+      type: 'MANUFACTURER',
+      ownerEmail: 'x@y.com',
+    });
+
+    expect(prisma.organization.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { name: { equals: 'Acme Apparel', mode: 'insensitive' } },
+      }),
+    );
+  });
+
+  // The pre-check is advisory: concurrent creates can both pass it, and the DB
+  // unique index is what actually rejects the loser. That must read as the same
+  // 409, not a raw 500.
+  it('maps a P2002 unique-violation from the race to the same conflict error', async () => {
+    const { service, tx } = makeService();
+    tx.organization.create.mockRejectedValueOnce(Object.assign(new Error('unique'), { code: 'P2002' }));
+
+    await expect(
+      service.create('admin-1', { name: 'Polo', type: 'MANUFACTURER', ownerEmail: 'x@y.com' }),
+    ).rejects.toThrow('An organization named "Polo" already exists');
   });
 });

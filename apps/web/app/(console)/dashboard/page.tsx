@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { redirect } from 'next/navigation';
 import {
   apiGet,
   loadOrFallback,
@@ -8,7 +9,10 @@ import {
   type ApiQualityMetrics,
   type ApiSupplier,
 } from '@/lib/api';
+import { auth } from '@/lib/auth';
+import { apiRoleAtLeast } from '@/lib/roles';
 import { Mono, PageHead } from '@/components/inspect/shell';
+import { ErrorBoundary } from '@/components/inspect/error-boundary';
 import { ui } from '@/components/inspect/tokens';
 import { DirectoryClient } from './directory-client';
 
@@ -150,6 +154,15 @@ export default async function DashboardPage({
 }: {
   searchParams: Promise<{ includeArchived?: string; q?: string; page?: string }>;
 }) {
+  // Every read below (/dashboard/summary, /buyers, /suppliers) floors at
+  // QA_MANAGER, and loadOrFallback deliberately RETHROWS 401/403 rather than
+  // showing demo data to an authenticated user. An INSPECTOR therefore hit the
+  // console error boundary here — and `/` redirects to this screen, so it was
+  // the first thing they saw after logging in. Same gate + destination the
+  // users screen already uses.
+  const session = (await auth()) as unknown as { role?: string } | null;
+  if (!apiRoleAtLeast(session?.role, 'QA_MANAGER')) redirect('/inspections');
+
   const { includeArchived, q, page } = await searchParams;
   const pageNum = Math.max(parseInt(page ?? '1', 10) || 1, 1);
 
@@ -174,14 +187,16 @@ export default async function DashboardPage({
         sub="Buyers receive branded reports. Suppliers are the factories you inspect. Linked by POs and products."
       />
       <StatTiles summary={summaryRes.data} />
-      <DirectoryClient
-        buyers={buyersRes.data}
-        suppliers={suppliersRes.data}
-        presets={presets}
-        live={buyersRes.live}
-        page={pageNum}
-        pageSize={PAGE_SIZE}
-      />
+      <ErrorBoundary label="The buyers & suppliers directory">
+        <DirectoryClient
+          buyers={buyersRes.data}
+          suppliers={suppliersRes.data}
+          presets={presets}
+          live={buyersRes.live}
+          page={pageNum}
+          pageSize={PAGE_SIZE}
+        />
+      </ErrorBoundary>
     </div>
   );
 }

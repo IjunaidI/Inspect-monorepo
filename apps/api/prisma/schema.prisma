@@ -160,6 +160,10 @@ enum BillableEventKind {
 
 /// A paying customer workspace — fully isolated. An Org is either an inspection
 /// company or a manufacturer (spec §2, §3). Root of tenant isolation.
+/// NOTE: name uniqueness is case-insensitive + trimmed and enforced by a raw
+/// UNIQUE INDEX on lower(btrim(name)) in the migration, because Prisma's DSL
+/// cannot express a functional index. @@unique([name]) would let "polo" and
+/// "Polo " both through.
 model Organization {
   id        String    @id @default(cuid())
   name      String

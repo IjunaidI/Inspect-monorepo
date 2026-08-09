@@ -57,7 +57,13 @@ export function Btn({
     cursor: 'pointer',
     fontFamily: 'inherit',
     whiteSpace: 'nowrap',
-    border: '1px solid transparent',
+    // Longhand, not `border: '1px solid transparent'`: the `ghost` kind below
+    // overrides only borderColor, and mixing the shorthand with a longhand in
+    // one merged style object makes React warn and leaves a stale border colour
+    // behind when a Btn re-renders as a different kind.
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'transparent',
     textDecoration: 'none',
   };
   const kinds: Record<BtnKind, CSSProperties> = {

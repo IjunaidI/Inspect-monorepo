@@ -187,35 +187,47 @@ export class InspectionsService {
       throw new BadRequestException(e instanceof Error ? e.message : 'invalid AQL plan');
     }
 
-    return this.prisma.inspection.create({
-      data: {
-        orgId,
-        buyerId: po.buyerId,
-        supplierId: po.supplierId,
-        poId: po.id,
-        productId: po.productId,
-        lotSize: input.lotSize,
-        loopPresetId: preset.id,
-        loopPresetSnapshot: snapshot as unknown as Prisma.InputJsonValue,
-        aqlLevel: 'II',
-        aqlPlan: aqlPlan as unknown as Prisma.InputJsonValue,
-        computedSampling: computedSampling as unknown as Prisma.InputJsonValue,
-        assignedInspectorId: input.assignedInspectorId,
-        supersedesInspectionId: input.supersedesInspectionId,
-        clientRequestId: input.clientRequestId,
-        createdByUserId: userId,
-        status: input.assignedInspectorId ? 'ASSIGNED' : 'DRAFT',
-        loops: {
-          create: snapshot.steps.map((s) => ({
-            orgId,
-            position: s.position,
-            zoneName: s.zoneName,
-            requiredShotCount: s.requiredShotCount,
-            allowedDefectsSnapshot: s.allowedDefects as unknown as Prisma.InputJsonValue,
-          })),
+    // Loops are created as a second step rather than a nested `loops: { create }`
+    // write: INS-010 gave InspectionLoop a composite FK to Inspection(id, orgId)
+    // *alongside* its existing singular FK to Organization(id), and Prisma's
+    // nested-create input for a field claimed by two relations drops the raw
+    // `orgId` scalar ("Unknown argument `orgId`") — a 500 on every create, not
+    // just this one. createMany() has no such ambiguity.
+    return this.prisma.$transaction(async (tx) => {
+      const inspection = await tx.inspection.create({
+        data: {
+          orgId,
+          buyerId: po.buyerId,
+          supplierId: po.supplierId,
+          poId: po.id,
+          productId: po.productId,
+          lotSize: input.lotSize,
+          loopPresetId: preset.id,
+          loopPresetSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+          aqlLevel: 'II',
+          aqlPlan: aqlPlan as unknown as Prisma.InputJsonValue,
+          computedSampling: computedSampling as unknown as Prisma.InputJsonValue,
+          assignedInspectorId: input.assignedInspectorId,
+          supersedesInspectionId: input.supersedesInspectionId,
+          clientRequestId: input.clientRequestId,
+          createdByUserId: userId,
+          status: input.assignedInspectorId ? 'ASSIGNED' : 'DRAFT',
         },
-      },
-      include: { loops: { orderBy: { position: 'asc' } } },
+      });
+      await tx.inspectionLoop.createMany({
+        data: snapshot.steps.map((s) => ({
+          inspectionId: inspection.id,
+          orgId,
+          position: s.position,
+          zoneName: s.zoneName,
+          requiredShotCount: s.requiredShotCount,
+          allowedDefectsSnapshot: s.allowedDefects as unknown as Prisma.InputJsonValue,
+        })),
+      });
+      return tx.inspection.findUniqueOrThrow({
+        where: { id: inspection.id },
+        include: { loops: { orderBy: { position: 'asc' } } },
+      });
     });
   }
 

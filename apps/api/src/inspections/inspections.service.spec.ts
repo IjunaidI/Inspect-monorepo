@@ -259,11 +259,15 @@ interface CreateOpts {
 }
 
 function makeCreateService(opts: CreateOpts = {}) {
+  const inspection = {
+    findFirst: jest.fn(async () => opts.existingInspection ?? null),
+    create: jest.fn(async () => ({ id: 'insp-new' })),
+    findUniqueOrThrow: jest.fn(async () => ({ id: 'insp-new', loops: [] })),
+  };
+  const inspectionLoop = { createMany: jest.fn(async () => ({ count: 1 })) };
   const prisma = {
-    inspection: {
-      findFirst: jest.fn(async () => opts.existingInspection ?? null),
-      create: jest.fn(async () => ({ id: 'insp-new', loops: [] })),
-    },
+    inspection,
+    inspectionLoop,
     purchaseOrder: { findFirst: jest.fn(async () => (opts.po === undefined ? PO : opts.po)) },
     loopPreset: { findFirst: jest.fn(async () => (opts.preset === undefined ? PRESET : opts.preset)) },
     user: {
@@ -271,6 +275,7 @@ function makeCreateService(opts: CreateOpts = {}) {
         opts.inspector === undefined ? { id: 'u-insp', orgId: 'org1' } : opts.inspector,
       ),
     },
+    $transaction: jest.fn(async (fn: (t: unknown) => Promise<unknown>) => fn({ inspection, inspectionLoop })),
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const service = new InspectionsService(prisma as any, { append: jest.fn() } as any, {} as any);
@@ -307,9 +312,28 @@ describe('InspectionsService.create — snapshot + computed sampling (INS-021)',
       name: 'Broken stitch',
       severity: 'MAJOR',
     });
-    expect(data.loops.create).toEqual([
-      expect.objectContaining({ orgId: 'org1', position: 1, zoneName: 'Front', requiredShotCount: 2 }),
+    expect(firstArg(prisma.inspectionLoop.createMany).data).toEqual([
+      expect.objectContaining({
+        inspectionId: 'insp-new',
+        orgId: 'org1',
+        position: 1,
+        zoneName: 'Front',
+        requiredShotCount: 2,
+      }),
     ]);
+  });
+
+  /*
+   * Regression guard: loops must NOT be written as a nested `loops: { create }`.
+   * InspectionLoop.orgId is claimed by two relations after INS-010 (the composite
+   * FK to Inspection(id, orgId) and the FK to Organization), and Prisma rejects
+   * the raw orgId scalar in that nested input — a 500 on every single create.
+   */
+  it('writes loops via a separate createMany, never nested under inspection.create', async () => {
+    const { service, prisma } = makeCreateService();
+    await service.create('org1', 'u-qa', baseInput);
+    expect(createdData(prisma).loops).toBeUndefined();
+    expect(prisma.inspectionLoop.createMany).toHaveBeenCalledTimes(1);
   });
 
   it('computes the sampling from the lot size and locks the level to II (lot 1000 -> code J, n 80)', async () => {

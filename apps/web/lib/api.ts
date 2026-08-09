@@ -344,8 +344,15 @@ export interface ApiMeasurementField {
   position: number;
 }
 
+/**
+ * PresetStepAllowedDefect is a join row keyed by @@id([presetLoopStepId,
+ * defectCatalogId]) — it has NO `id` column. Declaring one here made `ad.id`
+ * type-check while being undefined at runtime, which silently produced
+ * `key={undefined}` on every rendered chip.
+ */
 export interface ApiAllowedDefect {
-  id: string;
+  presetLoopStepId: string;
+  defectCatalogId: string;
   defectCatalog: {
     id: string;
     name: string;

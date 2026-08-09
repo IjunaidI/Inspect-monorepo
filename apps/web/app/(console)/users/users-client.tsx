@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useTransition, useState } from 'react';
+import { useActionState, useTransition, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, Plus, Search, MoreVertical } from 'lucide-react';
 import { Avatar, Mono, RoleBadge } from '@/components/inspect/shell';
@@ -170,6 +170,19 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
   const [state, action, pending] = useActionState(inviteUser, {});
   const [mode, setMode] = useState<'direct' | 'invite'>('direct');
   const [addState, addAction, addPending] = useActionState(addMember, {} as { error?: string; data?: { email: string } });
+  const addFormRef = useRef<HTMLFormElement>(null);
+  const [addedEmail, setAddedEmail] = useState<string | null>(null);
+
+  // Clear the inputs after a successful add so the SAME form can be reused.
+  // Previously the form was unmounted and replaced by the success message, and
+  // useActionState keeps `data` set until the next action — with no form left to
+  // submit, a second add was impossible without a full page reload. The member
+  // list itself is refetched by the revalidatePath('/users') in addMember.
+  useEffect(() => {
+    if (!addState.data) return;
+    setAddedEmail(addState.data.email);
+    addFormRef.current?.reset();
+  }, [addState.data]);
 
   const rows = users.map((u, i) => ({ ...mapUser(u, i), you: u.id === currentUserId }));
   const filtered = rows.filter((r) =>
@@ -280,12 +293,12 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
               )}
             </>
           ) : (
-            addState.data ? (
-              <div style={{ padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#16A34A' }}>
-                {addState.data.email} was added and can sign in now with the password you set.
-              </div>
-            ) : (
-              <form action={addAction}>
+              <form action={addAction} ref={addFormRef}>
+                {addedEmail && !addState.error && (
+                  <div style={{ marginBottom: 12, padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#16A34A' }}>
+                    {addedEmail} was added and can sign in now with the password you set. Add another below.
+                  </div>
+                )}
                 {addState.error && (
                   <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12.5, color: ui.danger }}>
                     {addState.error}
@@ -320,7 +333,6 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
                   </button>
                 </div>
               </form>
-            )
           )}
         </div>
       )}

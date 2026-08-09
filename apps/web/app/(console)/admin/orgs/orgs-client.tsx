@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { ui } from '@/components/inspect/tokens';
 import { Mono } from '@/components/inspect/shell';
 import { createOrg, enterOrg, type CreateOrgState } from '../actions';
@@ -8,9 +8,25 @@ import type { ApiOrganization } from '@/lib/api';
 
 const INITIAL: CreateOrgState = { ok: false };
 
+/** Must match the server's comparison (OrgsService.create) and the DB's
+ *  unique index on lower(btrim(name)) — trimmed, case-insensitive. */
+const normalizeOrgName = (value: string) => value.trim().toLowerCase();
+
 export function OrgsClient({ orgs }: { orgs: ApiOrganization[] }) {
   const [state, formAction, pending] = useActionState(createOrg, INITIAL);
   const [copied, setCopied] = useState(false);
+  const [name, setName] = useState('');
+
+  // Advisory only — the API is the authority and re-checks. This exists so the
+  // operator sees the collision while typing instead of after a round trip.
+  const duplicateOf = orgs.find((o) => normalizeOrgName(o.name) === normalizeOrgName(name));
+  const isDuplicate = name.trim() !== '' && duplicateOf !== undefined;
+
+  // Clear the field once the org exists, otherwise the freshly created name is
+  // still in the input when the refreshed list arrives and flags itself.
+  useEffect(() => {
+    if (state.created) setName('');
+  }, [state.created]);
 
   const inviteUrl = state.created
     ? `${typeof window === 'undefined' ? '' : window.location.origin}/invite?token=${state.created.token}`
@@ -28,7 +44,22 @@ export function OrgsClient({ orgs }: { orgs: ApiOrganization[] }) {
       >
         <label style={{ flex: '1 1 220px', fontSize: 11.5, color: ui.sub }}>
           Organization name
-          <input name="name" required style={inputStyle} />
+          <input
+            name="name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-invalid={isDuplicate}
+            style={{
+              ...inputStyle,
+              ...(isDuplicate ? { borderColor: ui.danger } : null),
+            }}
+          />
+          {isDuplicate && (
+            <span style={{ display: 'block', marginTop: 4, fontSize: 11.5, color: ui.danger }}>
+              “{duplicateOf?.name}” already exists. Pick a different name.
+            </span>
+          )}
         </label>
         <label style={{ flex: '1 1 180px', fontSize: 11.5, color: ui.sub }}>
           Type
@@ -41,7 +72,11 @@ export function OrgsClient({ orgs }: { orgs: ApiOrganization[] }) {
           First Org Owner email
           <input name="ownerEmail" type="email" required style={inputStyle} />
         </label>
-        <button type="submit" disabled={pending} style={buttonStyle}>
+        <button
+          type="submit"
+          disabled={pending || isDuplicate}
+          style={{ ...buttonStyle, ...(pending || isDuplicate ? { opacity: 0.6, cursor: 'default' } : null) }}
+        >
           {pending ? 'Creating…' : 'Create organization'}
         </button>
       </form>
@@ -101,9 +136,13 @@ export function OrgsClient({ orgs }: { orgs: ApiOrganization[] }) {
   );
 }
 
+// Longhand borders: the name input overrides borderColor on its own to flag a
+// duplicate, and mixing that with a `border` shorthand in the same merged style
+// object is what produces React's shorthand/longhand conflict warning.
 const inputStyle: React.CSSProperties = {
   display: 'block', width: '100%', marginTop: 4, padding: '7px 9px',
-  border: `1px solid ${ui.line}`, borderRadius: 7, fontSize: 13, fontFamily: 'inherit',
+  borderWidth: 1, borderStyle: 'solid', borderColor: ui.line,
+  borderRadius: 7, fontSize: 13, fontFamily: 'inherit',
 };
 
 const buttonStyle: React.CSSProperties = {

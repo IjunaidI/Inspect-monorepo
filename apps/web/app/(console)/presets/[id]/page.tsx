@@ -106,7 +106,7 @@ export default async function PresetDetailPage({
                     const s = severity[sk];
                     return (
                       <span
-                        key={ad.id}
+                        key={ad.defectCatalogId}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 26, padding: '0 9px', borderRadius: 999, fontSize: 12, fontWeight: 500, background: s.bg, color: s.fg }}
                       >
                         <span style={{ width: 5, height: 5, borderRadius: 999, background: s.dot }} />
