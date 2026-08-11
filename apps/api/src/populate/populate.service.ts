@@ -10,6 +10,7 @@ import { StorageService } from '../storage/storage.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
+import { cycleState } from '../inspections/cycle-state';
 
 type Severity = 'CRITICAL' | 'MAJOR' | 'MINOR';
 
@@ -19,7 +20,9 @@ export interface PresignInput {
 export interface RegisterPhotoInput {
   storageKey: string;
   contentHash: string;
-  inspectionLoopId?: string;
+  /** INS-081: every upload targets a slot — (loop item, cycle). Both required. */
+  inspectionLoopItemId: string;
+  cycleIndex: number;
   thumbnailKey?: string;
   capturedAt?: string;
   deviceId?: string;
@@ -27,8 +30,18 @@ export interface RegisterPhotoInput {
   exif?: unknown;
   clientRequestId?: string;
 }
+export interface RetakePhotoInput {
+  storageKey: string;
+  contentHash: string;
+  thumbnailKey?: string;
+  capturedAt?: string;
+  deviceId?: string;
+  gps?: unknown;
+  exif?: unknown;
+}
 export interface AddDefectInput {
-  inspectionLoopId?: string;
+  inspectionLoopItemId: string;
+  cycleIndex: number;
   defectCatalogId?: string;
   customText?: string;
   severity?: Severity;
@@ -37,7 +50,7 @@ export interface AddDefectInput {
   clientRequestId?: string;
 }
 export interface AddMeasurementInput {
-  inspectionLoopId: string;
+  cycleIndex: number;
   label: string;
   recordedValue?: string;
   unit?: string;
@@ -94,9 +107,9 @@ export class PopulateService {
    *    it asked for — evidence silently missing from a signed report. This is a
    *    client bug (a reused token); fail loudly so it is fixable.
    *
-   * Note: `InspectionMeasurement` has no `clientRequestId` column, so
-   * `addMeasurement` has no idempotency token to honour; if one is added to the
-   * schema it must route through this same helper.
+   * Note: `InspectionMeasurement` has no `clientRequestId` column; INS-081 gives
+   * it a natural key instead — (inspectionId, cycleIndex, label) — so
+   * `addMeasurement` upserts and is idempotent without a token.
    */
   private replayOrConflict<T extends { id: string; inspectionId: string }>(
     existing: T | null,
@@ -114,13 +127,40 @@ export class PopulateService {
     return existing;
   }
 
-  private async assertLoop(inspectionId: string, inspectionLoopId: string) {
-    const loop = await this.prisma.inspectionLoop.findFirst({
-      where: { id: inspectionLoopId, inspectionId },
+  private assertCycleIndex(cycleIndex: number) {
+    if (!Number.isInteger(cycleIndex) || cycleIndex < 0) {
+      throw new BadRequestException('cycleIndex must be a non-negative integer');
+    }
+  }
+
+  private async assertItem(inspectionId: string, inspectionLoopItemId: string) {
+    const item = await this.prisma.inspectionLoopItem.findFirst({
+      where: { id: inspectionLoopItemId, inspectionId },
       select: { id: true },
     });
-    if (!loop) {
-      throw new BadRequestException('inspectionLoopId not found on this inspection');
+    if (!item) {
+      throw new BadRequestException('inspectionLoopItemId not found on this inspection');
+    }
+  }
+
+  /**
+   * A slot is (item, cycle). A defect must hang off a slot that already holds
+   * evidence, so "Unit 7 · Right sleeve" on the report always resolves to a
+   * photo a buyer can look at.
+   */
+  private async assertSlotHasPhoto(
+    inspectionId: string,
+    inspectionLoopItemId: string,
+    cycleIndex: number,
+  ) {
+    const photo = await this.prisma.photo.findFirst({
+      where: { inspectionId, inspectionLoopItemId, cycleIndex },
+      select: { id: true },
+    });
+    if (!photo) {
+      throw new BadRequestException(
+        `no photo has been uploaded for unit ${cycleIndex + 1} of that loop item yet`,
+      );
     }
   }
 
@@ -134,9 +174,11 @@ export class PopulateService {
     const insp = await this.loadOpenInspection(inspectionId);
     if (!input?.storageKey) throw new BadRequestException('storageKey is required');
     if (!input?.contentHash) throw new BadRequestException('contentHash is required');
-    if (input.inspectionLoopId) {
-      await this.assertLoop(inspectionId, input.inspectionLoopId);
+    if (!input?.inspectionLoopItemId) {
+      throw new BadRequestException('inspectionLoopItemId is required');
     }
+    this.assertCycleIndex(input.cycleIndex);
+    await this.assertItem(inspectionId, input.inspectionLoopItemId);
     // Idempotency (INS-016): replay returns the original row; a token reused
     // against a different inspection is a 409 — see replayOrConflict().
     if (input.clientRequestId) {
@@ -152,7 +194,8 @@ export class PopulateService {
           data: {
             orgId: insp.orgId,
             inspectionId: insp.id,
-            inspectionLoopId: input.inspectionLoopId,
+            inspectionLoopItemId: input.inspectionLoopItemId,
+            cycleIndex: input.cycleIndex,
             storageKey: input.storageKey,
             thumbnailKey: input.thumbnailKey,
             source: 'MANUAL_UPLOAD', // Admin manual upload — badged unverified (spec §9)
@@ -177,7 +220,8 @@ export class PopulateService {
             // belongs in the immutable audit payload.
             metadata: {
               inspectionId: insp.id,
-              inspectionLoopId: photo.inspectionLoopId,
+              inspectionLoopItemId: photo.inspectionLoopItemId,
+              cycleIndex: photo.cycleIndex,
               contentHash: photo.contentHash,
             },
           },
@@ -186,17 +230,24 @@ export class PopulateService {
         return photo;
       });
     } catch (e) {
-      // Concurrent replay (double-click / parallel offline sync): the
-      // check-then-insert above can race, and the loser hits
-      // @@unique([orgId, clientRequestId]). Converge to the winner's row rather
-      // than surfacing an opaque 500 (INS-016, mirrors addDefect/INS-044).
-      if (
-        input.clientRequestId &&
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
-        const replay = await this.findPhotoReplay(insp.orgId, insp.id, input.clientRequestId);
-        if (replay) return replay;
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        const target = Array.isArray(e.meta?.target) ? (e.meta.target as string[]) : [];
+        // INS-081: the SLOT constraint is a different failure from the
+        // idempotency one. This is not a retry — it is a second photo aimed at a
+        // filled slot, and silently replaying would hide the operator's mistake.
+        if (target.includes('cycleIndex')) {
+          throw new ConflictException(
+            `Unit ${input.cycleIndex + 1} already has a photo for that loop item; use retake to replace it`,
+          );
+        }
+        // Concurrent replay (double-click / parallel offline sync): the
+        // check-then-insert above can race, and the loser hits
+        // @@unique([orgId, clientRequestId]). Converge to the winner's row rather
+        // than surfacing an opaque 500 (INS-016, mirrors addDefect/INS-044).
+        if (input.clientRequestId) {
+          const replay = await this.findPhotoReplay(insp.orgId, insp.id, input.clientRequestId);
+          if (replay) return replay;
+        }
       }
       throw e;
     }
@@ -209,41 +260,106 @@ export class PopulateService {
     return this.replayOrConflict(existing, 'photo', inspectionId, clientRequestId);
   }
 
-  /** Drag a photo into the correct loop slot (spec §6). */
-  async assignPhotoToLoop(
+  /**
+   * INS-081 — replace the bytes in an existing slot, pre-submit only.
+   *
+   * The row is updated IN PLACE rather than deleted and re-inserted because the
+   * slot is the identity: defect links (DefectInstancePhoto) survive untouched
+   * and the @@unique([inspectionLoopItemId, cycleIndex]) is never transiently
+   * violated. Provenance is carried by the audit chain — the entry records BOTH
+   * content hashes — not by the row's immutability. The superseded object is
+   * left in storage; MVP has no object-lifecycle policy.
+   */
+  async retakePhoto(
     inspectionId: string,
     actor: AuthUser,
     photoId: string,
-    inspectionLoopId: string,
+    input: RetakePhotoInput,
   ) {
     const insp = await this.loadOpenInspection(inspectionId);
+    if (!input?.storageKey) throw new BadRequestException('storageKey is required');
+    if (!input?.contentHash) throw new BadRequestException('contentHash is required');
     const photo = await this.prisma.photo.findFirst({ where: { id: photoId, inspectionId } });
-    if (!photo) {
-      throw new NotFoundException('Photo not found on this inspection');
-    }
-    await this.assertLoop(inspectionId, inspectionLoopId);
+    if (!photo) throw new NotFoundException('Photo not found on this inspection');
+
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.photo.update({
         where: { id: photoId },
-        data: { inspectionLoopId },
+        data: {
+          storageKey: input.storageKey,
+          thumbnailKey: input.thumbnailKey ?? null,
+          contentHash: input.contentHash,
+          capturedAt: input.capturedAt ? new Date(input.capturedAt) : null,
+          deviceId: input.deviceId ?? null,
+          gps: input.gps as Prisma.InputJsonValue,
+          exif: input.exif as Prisma.InputJsonValue,
+          uploaderUserId: actor.userId,
+          source: 'MANUAL_UPLOAD',
+        },
       });
       await this.audit.append(
         {
           orgId: insp.orgId,
           actorType: actorTypeFor(actor),
           actorUserId: actor.userId,
-          action: 'populate.photoAssignedToLoop',
+          action: 'populate.photoRetaken',
           entityType: 'Photo',
           entityId: photoId,
           metadata: {
-            inspectionId,
-            from: photo.inspectionLoopId ?? null,
-            to: inspectionLoopId,
+            inspectionId: insp.id,
+            inspectionLoopItemId: photo.inspectionLoopItemId,
+            cycleIndex: photo.cycleIndex,
+            fromContentHash: photo.contentHash,
+            toContentHash: updated.contentHash,
           },
         },
         tx,
       );
       return updated;
+    });
+  }
+
+  /**
+   * INS-081 — the "remove" half of the end-of-loop rule: a unit is either
+   * finished or discarded whole. Deleting one photo out of a unit is deliberately
+   * NOT offered; that is what would create an unfinishable hole in history.
+   */
+  async discardCycle(inspectionId: string, actor: AuthUser, cycleIndex: number) {
+    const insp = await this.loadOpenInspection(inspectionId);
+    this.assertCycleIndex(cycleIndex);
+    return this.prisma.$transaction(async (tx) => {
+      // Defects first: their DefectInstancePhoto junction rows must go with
+      // their parent defect rather than block the photo delete.
+      const defects = await tx.defectInstance.deleteMany({ where: { inspectionId, cycleIndex } });
+      const photos = await tx.photo.deleteMany({ where: { inspectionId, cycleIndex } });
+      const measurements = await tx.inspectionMeasurement.deleteMany({
+        where: { inspectionId, cycleIndex },
+      });
+      await this.audit.append(
+        {
+          orgId: insp.orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'populate.cycleDiscarded',
+          entityType: 'Inspection',
+          entityId: insp.id,
+          metadata: {
+            cycleIndex,
+            photos: photos.count,
+            defects: defects.count,
+            measurements: measurements.count,
+          },
+        },
+        tx,
+      );
+      return {
+        cycleIndex,
+        deleted: {
+          photos: photos.count,
+          defects: defects.count,
+          measurements: measurements.count,
+        },
+      };
     });
   }
 
@@ -274,9 +390,14 @@ export class PopulateService {
     if (!severity) {
       throw new BadRequestException('severity is required for a custom defect');
     }
-    if (input.inspectionLoopId) {
-      await this.assertLoop(inspectionId, input.inspectionLoopId);
+    // INS-081: a defect pins to a SLOT. The taggable list is loop-global, but
+    // the recorded instance names the unit and the item it was seen on.
+    if (!input?.inspectionLoopItemId) {
+      throw new BadRequestException('inspectionLoopItemId is required');
     }
+    this.assertCycleIndex(input.cycleIndex);
+    await this.assertItem(inspectionId, input.inspectionLoopItemId);
+    await this.assertSlotHasPhoto(inspectionId, input.inspectionLoopItemId, input.cycleIndex);
     if (input.photoIds?.length) {
       const count = await this.prisma.photo.count({
         where: { id: { in: input.photoIds }, inspectionId },
@@ -294,7 +415,8 @@ export class PopulateService {
           data: {
             orgId: insp.orgId,
             inspectionId: insp.id,
-            inspectionLoopId: input.inspectionLoopId,
+            inspectionLoopItemId: input.inspectionLoopItemId,
+            cycleIndex: input.cycleIndex,
             defectCatalogId: input.defectCatalogId,
             customText: input.customText,
             severity,
@@ -316,7 +438,8 @@ export class PopulateService {
             entityId: defect.id,
             metadata: {
               inspectionId: insp.id,
-              inspectionLoopId: defect.inspectionLoopId,
+              inspectionLoopItemId: defect.inspectionLoopItemId,
+              cycleIndex: defect.cycleIndex,
               severity: defect.severity,
               defectCatalogId: defect.defectCatalogId,
               photoIds: [...(input.photoIds ?? [])].sort(),
@@ -367,16 +490,15 @@ export class PopulateService {
         supplier: true,
         product: true,
         purchaseOrder: true,
-        loops: {
+        items: {
           orderBy: { position: 'asc' },
           include: {
-            photos: true,
+            photos: { orderBy: { cycleIndex: 'asc' } },
             defects: { include: { defectCatalog: true } },
-            measurements: true,
           },
         },
+        measurements: { orderBy: [{ cycleIndex: 'asc' }, { label: 'asc' }] },
         assignedInspector: { select: { id: true, name: true, email: true } },
-        photos: { orderBy: { createdAt: 'asc' } },
         aqlResult: true,
         report: true,
       },
@@ -384,13 +506,25 @@ export class PopulateService {
     if (!inspection) {
       throw new NotFoundException('Inspection not found');
     }
+    const items = inspection.items ?? [];
+    const slots = items.flatMap((item) =>
+      (item.photos ?? []).map((p) => ({
+        inspectionLoopItemId: item.id,
+        cycleIndex: p.cycleIndex,
+      })),
+    );
     return {
       ...inspection,
-      photos: inspection.photos?.map((p) => this.withViewUrl(p)),
-      loops: inspection.loops?.map((loop) => ({
-        ...loop,
-        photos: loop.photos?.map((p) => this.withViewUrl(p)),
+      items: items.map((item) => ({
+        ...item,
+        photos: (item.photos ?? []).map((p) => this.withViewUrl(p)),
       })),
+      // The console renders the SAME rule the submit guard enforces (INS-081) —
+      // a divergence between them is how a half-shot unit reaches a report.
+      cycleState: cycleState(
+        items.map((i) => ({ id: i.id, position: i.position })),
+        slots,
+      ),
     };
   }
 
@@ -407,18 +541,34 @@ export class PopulateService {
     }
   }
 
+  /**
+   * INS-081 — the measurement sheet is loop-global and filled once per CYCLE, so
+   * a measurement is keyed by (inspection, cycle, label) rather than by a loop
+   * FK. That natural key is also the idempotency token: re-entering a value
+   * updates the row instead of duplicating the point.
+   */
   async addMeasurement(inspectionId: string, actor: AuthUser, input: AddMeasurementInput) {
     const insp = await this.loadOpenInspection(inspectionId);
-    if (!input?.inspectionLoopId) throw new BadRequestException('inspectionLoopId is required');
+    this.assertCycleIndex(input?.cycleIndex);
     if (!input?.label?.trim()) throw new BadRequestException('label is required');
-    await this.assertLoop(inspectionId, input.inspectionLoopId);
+    const label = input.label.trim();
     // INS-006: audit inside the business transaction. Measurements are rendered
     // into the signed report, so the recorded value is evidence.
     return this.prisma.$transaction(async (tx) => {
-      const measurement = await tx.inspectionMeasurement.create({
-        data: {
-          inspectionLoopId: input.inspectionLoopId,
-          label: input.label.trim(),
+      const measurement = await tx.inspectionMeasurement.upsert({
+        where: {
+          inspectionId_cycleIndex_label: { inspectionId, cycleIndex: input.cycleIndex, label },
+        },
+        create: {
+          inspectionId,
+          orgId: insp.orgId,
+          cycleIndex: input.cycleIndex,
+          label,
+          recordedValue: input.recordedValue,
+          unit: input.unit,
+          notes: input.notes,
+        },
+        update: {
           recordedValue: input.recordedValue,
           unit: input.unit,
           notes: input.notes,
@@ -434,7 +584,7 @@ export class PopulateService {
           entityId: measurement.id,
           metadata: {
             inspectionId,
-            inspectionLoopId: measurement.inspectionLoopId,
+            cycleIndex: measurement.cycleIndex,
             label: measurement.label,
             recordedValue: measurement.recordedValue,
             unit: measurement.unit,

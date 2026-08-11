@@ -42,7 +42,9 @@ type Row = Record<string, unknown>;
 interface HarnessOpts {
   status?: string;
   inspectionExists?: boolean;
-  loopExists?: boolean;
+  itemExists?: boolean;
+  /** Whether the (item, cycle) slot already holds a photo — INS-081 defect gate. */
+  slotPhoto?: Row | null;
   existingPhoto?: Row | null;
   existingDefect?: Row | null;
   catalog?: Row | null;
@@ -51,18 +53,21 @@ interface HarnessOpts {
   createThrows?: unknown;
 }
 
-function p2002(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+function p2002(target?: string[]): Prisma.PrismaClientKnownRequestError {
+  const e = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
     code: 'P2002',
     clientVersion: 'test',
   });
+  if (target) Object.assign(e, { meta: { target } });
+  return e;
 }
 
 function makeService(opts: HarnessOpts = {}) {
   const {
     status = 'IN_PROGRESS',
     inspectionExists = true,
-    loopExists = true,
+    itemExists = true,
+    slotPhoto = { id: 'photo-in-slot' },
     existingPhoto = null,
     existingDefect = null,
     catalog = null,
@@ -86,8 +91,23 @@ function makeService(opts: HarnessOpts = {}) {
     throwOnce();
     return { id: 'defect-new', ...data };
   });
-  const measurementCreate = jest.fn(async ({ data }: { data: Row }) => ({ id: 'm-new', ...data }));
+  const measurementUpsert = jest.fn(async ({ create }: { create: Row }) => ({
+    id: 'm-new',
+    ...create,
+  }));
   const photoUpdate = jest.fn(async ({ data }: { data: Row }) => ({ id: 'photo-1', ...data }));
+
+  /**
+   * INS-081: photo.findFirst serves two distinct lookups — the clientRequestId
+   * replay (keyed by orgId) and the slot-occupancy check (keyed by
+   * inspectionLoopItemId). Route by the shape of the where clause so both paths
+   * stay independently controllable.
+   */
+  const photoFindFirst = jest.fn(async (args?: { where?: Row }) => {
+    const where = args?.where ?? {};
+    if ('inspectionLoopItemId' in where) return slotPhoto;
+    return existingPhoto;
+  });
 
   const prisma = {
     inspection: {
@@ -95,23 +115,28 @@ function makeService(opts: HarnessOpts = {}) {
         inspectionExists ? { id: INSPECTION_ID, orgId: TENANT_ORG, status } : null,
       ),
     },
-    inspectionLoop: {
-      findFirst: jest.fn(async () => (loopExists ? { id: 'loop-1' } : null)),
+    inspectionLoopItem: {
+      findFirst: jest.fn(async () => (itemExists ? { id: 'item-1' } : null)),
     },
     photo: {
-      findFirst: jest.fn(async () => existingPhoto),
+      findFirst: photoFindFirst,
       count: jest.fn(async () => photoCount),
       create: photoCreate,
       update: photoUpdate,
+      deleteMany: jest.fn(async () => ({ count: 2 })),
     },
     defectInstance: {
       findFirst: jest.fn(async () => existingDefect),
       create: defectCreate,
+      deleteMany: jest.fn(async () => ({ count: 1 })),
     },
     defectCatalog: {
       findFirst: jest.fn(async () => catalog),
     },
-    inspectionMeasurement: { create: measurementCreate },
+    inspectionMeasurement: {
+      upsert: measurementUpsert,
+      deleteMany: jest.fn(async () => ({ count: 3 })),
+    },
     // INS-006: each populate write now appends its audit row in the same
     // transaction. Yielding the same object as `tx` keeps every delegate mock
     // above observable exactly as before.
@@ -128,10 +153,27 @@ function makeService(opts: HarnessOpts = {}) {
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const service = new PopulateService(prisma as any, storage as any, audit as any);
   /* eslint-enable @typescript-eslint/no-explicit-any */
-  return { service, prisma, storage, audit, photoCreate, defectCreate, measurementCreate, photoUpdate };
+  return {
+    service,
+    prisma,
+    storage,
+    audit,
+    photoCreate,
+    defectCreate,
+    measurementUpsert,
+    photoUpdate,
+  };
 }
 
-const VALID_PHOTO = { storageKey: 'k/1.jpg', contentHash: 'a'.repeat(64) };
+/** INS-081: every upload names its slot — (loop item, cycle). */
+const VALID_PHOTO = {
+  storageKey: 'k/1.jpg',
+  contentHash: 'a'.repeat(64),
+  inspectionLoopItemId: 'item-1',
+  cycleIndex: 0,
+};
+/** A defect always names the slot it was seen on. */
+const SLOT = { inspectionLoopItemId: 'item-1', cycleIndex: 0 };
 
 /**
  * INS-006 — the populate writes are the evidence-capture path for a signed
@@ -158,6 +200,7 @@ describe('PopulateService audit-on-write (INS-006)', () => {
   it('addDefect audits the severity that will drive the AQL verdict', async () => {
     const h = makeService();
     await h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+      ...SLOT,
       customText: 'Loose thread',
       severity: 'MAJOR',
     });
@@ -214,21 +257,30 @@ describe('PopulateService immutability guard (INS-007)', () => {
     await expect(
       h.service.registerPhoto(INSPECTION_ID, ADMIN_USER, VALID_PHOTO),
     ).rejects.toBeInstanceOf(BadRequestException);
+    // INS-081: retake and cycle-discard are populate writes too, and destroy or
+    // replace evidence — the LOCKED guard must cover them.
     await expect(
-      h.service.assignPhotoToLoop(INSPECTION_ID, ADMIN_USER, 'photo-1', 'loop-1'),
+      h.service.retakePhoto(INSPECTION_ID, ADMIN_USER, 'photo-1', {
+        storageKey: 'k/2.jpg',
+        contentHash: 'b'.repeat(64),
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(h.service.discardCycle(INSPECTION_ID, ADMIN_USER, 0)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(
+      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { ...SLOT, customText: 'x', severity: 'MINOR' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { customText: 'x', severity: 'MINOR' }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    await expect(
-      h.service.addMeasurement(INSPECTION_ID, ADMIN_USER, { inspectionLoopId: 'loop-1', label: 'Length' }),
+      h.service.addMeasurement(INSPECTION_ID, ADMIN_USER, { cycleIndex: 0, label: 'Length' }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     // Nothing was written, and no presigned upload URL was minted.
     expect(h.photoCreate).not.toHaveBeenCalled();
     expect(h.defectCreate).not.toHaveBeenCalled();
-    expect(h.measurementCreate).not.toHaveBeenCalled();
+    expect(h.measurementUpsert).not.toHaveBeenCalled();
     expect(h.photoUpdate).not.toHaveBeenCalled();
+    expect(h.prisma.photo.deleteMany).not.toHaveBeenCalled();
     expect(h.storage.presignUpload).not.toHaveBeenCalled();
   });
 
@@ -267,7 +319,7 @@ describe('PopulateService immutability guard (INS-007)', () => {
 describe('PopulateService.addDefect catalog XOR custom (INS-007)', () => {
   it('rejects when NEITHER defectCatalogId nor customText is provided', async () => {
     const h = makeService();
-    await expect(h.service.addDefect(INSPECTION_ID, ADMIN_USER, {})).rejects.toThrow(
+    await expect(h.service.addDefect(INSPECTION_ID, ADMIN_USER, { ...SLOT } as never)).rejects.toThrow(
       /either defectCatalogId or customText is required/,
     );
     expect(h.defectCreate).not.toHaveBeenCalled();
@@ -276,7 +328,7 @@ describe('PopulateService.addDefect catalog XOR custom (INS-007)', () => {
   it('rejects whitespace-only customText as absent', async () => {
     const h = makeService();
     await expect(
-      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { customText: '   ', severity: 'MINOR' }),
+      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { ...SLOT, customText: '   ', severity: 'MINOR' }),
     ).rejects.toThrow(/either defectCatalogId or customText is required/);
     expect(h.defectCreate).not.toHaveBeenCalled();
   });
@@ -285,6 +337,7 @@ describe('PopulateService.addDefect catalog XOR custom (INS-007)', () => {
     const h = makeService({ catalog: { id: 'cat-1', defaultSeverity: 'MAJOR' } });
     await expect(
       h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+        ...SLOT,
         defectCatalogId: 'cat-1',
         customText: 'also custom',
       }),
@@ -295,21 +348,21 @@ describe('PopulateService.addDefect catalog XOR custom (INS-007)', () => {
   it('still enforces the XOR when a clientRequestId is present but unseen', async () => {
     const h = makeService({ existingDefect: null });
     await expect(
-      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { clientRequestId: 'req-fresh' }),
+      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { ...SLOT, clientRequestId: 'req-fresh' } as never),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(h.defectCreate).not.toHaveBeenCalled();
   });
 
   it('inherits severity from the catalog entry for a catalog defect', async () => {
     const h = makeService({ catalog: { id: 'cat-1', defaultSeverity: 'CRITICAL' } });
-    const out = await h.service.addDefect(INSPECTION_ID, ADMIN_USER, { defectCatalogId: 'cat-1' });
+    const out = await h.service.addDefect(INSPECTION_ID, ADMIN_USER, { ...SLOT, defectCatalogId: 'cat-1' });
     expect(out).toMatchObject({ severity: 'CRITICAL', defectCatalogId: 'cat-1' });
   });
 
   it('rejects a catalog id that is neither this org’s nor global', async () => {
     const h = makeService({ catalog: null });
     await expect(
-      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { defectCatalogId: 'cat-foreign' }),
+      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { ...SLOT, defectCatalogId: 'cat-foreign' }),
     ).rejects.toThrow(/not accessible/);
     expect(h.defectCreate).not.toHaveBeenCalled();
   });
@@ -317,7 +370,7 @@ describe('PopulateService.addDefect catalog XOR custom (INS-007)', () => {
   it('requires an explicit severity for a custom defect', async () => {
     const h = makeService();
     await expect(
-      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { customText: 'Loose thread' }),
+      h.service.addDefect(INSPECTION_ID, ADMIN_USER, { ...SLOT, customText: 'Loose thread' }),
     ).rejects.toThrow(/severity is required for a custom defect/);
     expect(h.defectCreate).not.toHaveBeenCalled();
   });
@@ -326,6 +379,7 @@ describe('PopulateService.addDefect catalog XOR custom (INS-007)', () => {
     const h = makeService({ photoCount: 1 });
     await expect(
       h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+        ...SLOT,
         customText: 'Stain',
         severity: 'MAJOR',
         photoIds: ['p1', 'p2'],
@@ -423,7 +477,7 @@ describe('PopulateService.registerPhoto idempotency (INS-016)', () => {
     expect(h.photoCreate).toHaveBeenCalledTimes(1);
   });
 
-  it('validates storageKey/contentHash and the loop before writing', async () => {
+  it('validates storageKey/contentHash and the slot before writing', async () => {
     const missingHash = makeService();
     await expect(
       missingHash.service.registerPhoto(INSPECTION_ID, ADMIN_USER, {
@@ -438,14 +492,44 @@ describe('PopulateService.registerPhoto idempotency (INS-016)', () => {
       } as never),
     ).rejects.toThrow(/storageKey is required/);
 
-    const foreignLoop = makeService({ loopExists: false });
+    const missingItem = makeService();
     await expect(
-      foreignLoop.service.registerPhoto(INSPECTION_ID, ADMIN_USER, {
+      missingItem.service.registerPhoto(INSPECTION_ID, ADMIN_USER, {
+        storageKey: 'k',
+        contentHash: 'h',
+      } as never),
+    ).rejects.toThrow(/inspectionLoopItemId is required/);
+
+    const foreignItem = makeService({ itemExists: false });
+    await expect(
+      foreignItem.service.registerPhoto(INSPECTION_ID, ADMIN_USER, {
         ...VALID_PHOTO,
-        inspectionLoopId: 'loop-of-another-inspection',
+        inspectionLoopItemId: 'item-of-another-inspection',
       }),
-    ).rejects.toThrow(/inspectionLoopId not found on this inspection/);
-    expect(foreignLoop.photoCreate).not.toHaveBeenCalled();
+    ).rejects.toThrow(/inspectionLoopItemId not found on this inspection/);
+    expect(foreignItem.photoCreate).not.toHaveBeenCalled();
+  });
+
+  it.each([-1, 1.5, NaN, undefined])('rejects a cycleIndex of %p', async (cycleIndex) => {
+    const h = makeService();
+    await expect(
+      h.service.registerPhoto(INSPECTION_ID, ADMIN_USER, {
+        ...VALID_PHOTO,
+        cycleIndex: cycleIndex as number,
+      }),
+    ).rejects.toThrow(/cycleIndex must be a non-negative integer/);
+    expect(h.photoCreate).not.toHaveBeenCalled();
+  });
+
+  it('turns a taken slot into a 409 that points at retake, not an idempotent replay', async () => {
+    const h = makeService({ createThrows: p2002(['inspectionLoopItemId', 'cycleIndex']) });
+    await expect(
+      h.service.registerPhoto(INSPECTION_ID, ADMIN_USER, {
+        ...VALID_PHOTO,
+        cycleIndex: 6,
+        clientRequestId: 'req-1',
+      }),
+    ).rejects.toThrow(/Unit 7 already has a photo for that loop item.*retake/);
   });
 });
 
@@ -454,6 +538,7 @@ describe('PopulateService.addDefect idempotency (INS-044 / INS-016)', () => {
     const existing = { id: 'defect-1', inspectionId: INSPECTION_ID, orgId: TENANT_ORG };
     const h = makeService({ existingDefect: existing });
     const out = await h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+      ...SLOT,
       customText: 'Loose thread',
       severity: 'MINOR',
       clientRequestId: 'req-d1',
@@ -468,6 +553,7 @@ describe('PopulateService.addDefect idempotency (INS-044 / INS-016)', () => {
     });
     await expect(
       h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+        ...SLOT,
         customText: 'Loose thread',
         severity: 'MINOR',
         clientRequestId: 'req-d1',
@@ -484,6 +570,7 @@ describe('PopulateService.addDefect idempotency (INS-044 / INS-016)', () => {
       .mockResolvedValueOnce(winner as never);
 
     const out = await h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+      ...SLOT,
       customText: 'Loose thread',
       severity: 'MINOR',
       clientRequestId: 'req-race',
@@ -498,6 +585,7 @@ describe('PopulateService.addDefect idempotency (INS-044 / INS-016)', () => {
       .mockResolvedValueOnce({ id: 'defect-x', inspectionId: OTHER_INSPECTION } as never);
     await expect(
       h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+        ...SLOT,
         customText: 'Loose thread',
         severity: 'MINOR',
         clientRequestId: 'req-race',
@@ -508,6 +596,7 @@ describe('PopulateService.addDefect idempotency (INS-044 / INS-016)', () => {
   it('skips the dedupe lookup entirely when no clientRequestId is supplied', async () => {
     const h = makeService();
     await h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+      ...SLOT,
       customText: 'Loose thread',
       severity: 'MINOR',
     });
@@ -540,7 +629,7 @@ describe('PopulateService cross-tenant Platform-Admin scoping (INS-007)', () => 
 
   it('stamps the INSPECTION’s orgId on a new defect and scopes the catalog lookup', async () => {
     const h = makeService({ catalog: { id: 'cat-1', defaultSeverity: 'MINOR' } });
-    await h.service.addDefect(INSPECTION_ID, ADMIN_USER, { defectCatalogId: 'cat-1' });
+    await h.service.addDefect(INSPECTION_ID, ADMIN_USER, { ...SLOT, defectCatalogId: 'cat-1' });
     const data = h.defectCreate.mock.calls[0][0].data as Row;
     expect(data.orgId).toBe(TENANT_ORG);
     expect(data.createdByUserId).toBe(ADMIN_USER.userId);
@@ -558,46 +647,184 @@ describe('PopulateService cross-tenant Platform-Admin scoping (INS-007)', () => 
   });
 });
 
-describe('PopulateService.assignPhotoToLoop / addMeasurement (INS-007)', () => {
-  it('refuses to move a photo that is not on this inspection', async () => {
+describe('PopulateService.addDefect slot gate (INS-081)', () => {
+  it('requires a loop item', async () => {
     const h = makeService();
-    h.prisma.photo.findFirst.mockResolvedValueOnce(null as never);
     await expect(
-      h.service.assignPhotoToLoop(INSPECTION_ID, ADMIN_USER, 'photo-elsewhere', 'loop-1'),
+      h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+        cycleIndex: 0,
+        customText: 'Stain',
+        severity: 'MINOR',
+      } as never),
+    ).rejects.toThrow(/inspectionLoopItemId is required/);
+    expect(h.defectCreate).not.toHaveBeenCalled();
+  });
+
+  it('refuses a defect on a slot that holds no photo yet', async () => {
+    const h = makeService({ slotPhoto: null });
+    await expect(
+      h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+        ...SLOT,
+        cycleIndex: 6,
+        customText: 'Stain',
+        severity: 'MINOR',
+      }),
+    ).rejects.toThrow(/no photo has been uploaded for unit 7/);
+    expect(h.defectCreate).not.toHaveBeenCalled();
+  });
+
+  it('records the slot on the row so the report can say "Unit N · item"', async () => {
+    const h = makeService();
+    await h.service.addDefect(INSPECTION_ID, ADMIN_USER, {
+      inspectionLoopItemId: 'item-1',
+      cycleIndex: 3,
+      customText: 'Stain',
+      severity: 'MINOR',
+    });
+    const data = h.defectCreate.mock.calls[0][0].data as Row;
+    expect(data.inspectionLoopItemId).toBe('item-1');
+    expect(data.cycleIndex).toBe(3);
+  });
+});
+
+describe('PopulateService.retakePhoto (INS-081)', () => {
+  it('404s on a photo that is not on this inspection', async () => {
+    const h = makeService({ existingPhoto: null });
+    await expect(
+      h.service.retakePhoto(INSPECTION_ID, ADMIN_USER, 'photo-elsewhere', {
+        storageKey: 'k/2.jpg',
+        contentHash: 'b'.repeat(64),
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(h.photoUpdate).not.toHaveBeenCalled();
   });
 
-  it('refuses to move a photo into a loop from another inspection', async () => {
-    const h = makeService({ loopExists: false });
-    h.prisma.photo.findFirst.mockResolvedValueOnce({
-      id: 'photo-1',
-      inspectionId: INSPECTION_ID,
-    } as never);
+  it('validates the replacement bytes before touching the row', async () => {
+    const h = makeService({ existingPhoto: { id: 'photo-1', inspectionId: INSPECTION_ID } });
     await expect(
-      h.service.assignPhotoToLoop(INSPECTION_ID, ADMIN_USER, 'photo-1', 'loop-foreign'),
-    ).rejects.toThrow(/inspectionLoopId not found on this inspection/);
+      h.service.retakePhoto(INSPECTION_ID, ADMIN_USER, 'photo-1', {
+        contentHash: 'b'.repeat(64),
+      } as never),
+    ).rejects.toThrow(/storageKey is required/);
+    await expect(
+      h.service.retakePhoto(INSPECTION_ID, ADMIN_USER, 'photo-1', {
+        storageKey: 'k/2.jpg',
+      } as never),
+    ).rejects.toThrow(/contentHash is required/);
     expect(h.photoUpdate).not.toHaveBeenCalled();
   });
 
-  it('requires an inspectionLoopId and a non-blank label, and trims the label', async () => {
+  it('updates in place, keeping the slot, and audits BOTH content hashes', async () => {
+    const h = makeService({
+      existingPhoto: {
+        id: 'photo-1',
+        inspectionId: INSPECTION_ID,
+        inspectionLoopItemId: 'item-1',
+        cycleIndex: 2,
+        contentHash: 'a'.repeat(64),
+      },
+    });
+    await h.service.retakePhoto(INSPECTION_ID, ADMIN_USER, 'photo-1', {
+      storageKey: 'k/2.jpg',
+      contentHash: 'b'.repeat(64),
+    });
+    // The slot columns are NOT in the update payload — the slot is the identity.
+    const data = h.photoUpdate.mock.calls[0][0].data as Row;
+    expect(data).not.toHaveProperty('inspectionLoopItemId');
+    expect(data).not.toHaveProperty('cycleIndex');
+    expect(data.contentHash).toBe('b'.repeat(64));
+
+    const [entry] = h.audit.append.mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(entry).toMatchObject({
+      orgId: TENANT_ORG,
+      action: 'populate.photoRetaken',
+      entityType: 'Photo',
+      metadata: expect.objectContaining({
+        inspectionLoopItemId: 'item-1',
+        cycleIndex: 2,
+        fromContentHash: 'a'.repeat(64),
+        toContentHash: 'b'.repeat(64),
+      }),
+    });
+  });
+});
+
+describe('PopulateService.discardCycle (INS-081)', () => {
+  it("deletes the unit's defects, photos and measurements and audits the counts", async () => {
+    const h = makeService();
+    const result = await h.service.discardCycle(INSPECTION_ID, ADMIN_USER, 2);
+    expect(h.prisma.defectInstance.deleteMany).toHaveBeenCalledWith({
+      where: { inspectionId: INSPECTION_ID, cycleIndex: 2 },
+    });
+    expect(h.prisma.photo.deleteMany).toHaveBeenCalledWith({
+      where: { inspectionId: INSPECTION_ID, cycleIndex: 2 },
+    });
+    expect(h.prisma.inspectionMeasurement.deleteMany).toHaveBeenCalledWith({
+      where: { inspectionId: INSPECTION_ID, cycleIndex: 2 },
+    });
+    expect(result).toEqual({
+      cycleIndex: 2,
+      deleted: { photos: 2, defects: 1, measurements: 3 },
+    });
+    const [entry] = h.audit.append.mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(entry).toMatchObject({
+      orgId: TENANT_ORG,
+      action: 'populate.cycleDiscarded',
+      metadata: expect.objectContaining({ cycleIndex: 2, photos: 2 }),
+    });
+  });
+
+  it('rejects a nonsense cycleIndex without deleting anything', async () => {
+    const h = makeService();
+    await expect(h.service.discardCycle(INSPECTION_ID, ADMIN_USER, -1)).rejects.toThrow(
+      /cycleIndex must be a non-negative integer/,
+    );
+    expect(h.prisma.photo.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('PopulateService.addMeasurement — per-cycle sheet (INS-081)', () => {
+  it('requires a valid cycleIndex and a non-blank label, and trims the label', async () => {
     const h = makeService();
     await expect(
       h.service.addMeasurement(INSPECTION_ID, ADMIN_USER, { label: 'Length' } as never),
-    ).rejects.toThrow(/inspectionLoopId is required/);
+    ).rejects.toThrow(/cycleIndex must be a non-negative integer/);
     await expect(
-      h.service.addMeasurement(INSPECTION_ID, ADMIN_USER, { inspectionLoopId: 'loop-1', label: '  ' }),
+      h.service.addMeasurement(INSPECTION_ID, ADMIN_USER, { cycleIndex: 0, label: '  ' }),
     ).rejects.toThrow(/label is required/);
-    expect(h.measurementCreate).not.toHaveBeenCalled();
+    expect(h.measurementUpsert).not.toHaveBeenCalled();
 
     await h.service.addMeasurement(INSPECTION_ID, ADMIN_USER, {
-      inspectionLoopId: 'loop-1',
+      cycleIndex: 4,
       label: '  Length  ',
       recordedValue: '42.0',
       unit: 'cm',
     });
-    const data = h.measurementCreate.mock.calls[0][0].data as Row;
-    expect(data.label).toBe('Length');
-    expect(data.inspectionLoopId).toBe('loop-1');
+    const args = h.measurementUpsert.mock.calls[0][0] as unknown as {
+      where: Row;
+      create: Row;
+      update: Row;
+    };
+    expect(args.create.label).toBe('Length');
+    expect(args.create.cycleIndex).toBe(4);
+    expect(args.create.orgId).toBe(TENANT_ORG);
+  });
+
+  it('is idempotent on (inspection, cycle, label) — re-entering a value updates it', async () => {
+    const h = makeService();
+    await h.service.addMeasurement(INSPECTION_ID, ADMIN_USER, {
+      cycleIndex: 1,
+      label: 'Chest',
+      recordedValue: '53',
+    });
+    const args = h.measurementUpsert.mock.calls[0][0] as unknown as { where: Row; update: Row };
+    expect(args.where).toEqual({
+      inspectionId_cycleIndex_label: {
+        inspectionId: INSPECTION_ID,
+        cycleIndex: 1,
+        label: 'Chest',
+      },
+    });
+    expect(args.update).toMatchObject({ recordedValue: '53' });
   });
 });
