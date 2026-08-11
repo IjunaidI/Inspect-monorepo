@@ -79,18 +79,25 @@ export interface ReportCanonicalSnapshot {
     customText?: string | null;
     severity?: string | null;
     notes?: string | null;
-    inspectionLoopId?: string | null;
+    /** INS-081: the slot the defect was seen on. */
+    itemPosition?: number | null;
+    cycleIndex?: number | null;
     photoIds?: string[] | null;
   }> | null;
-  loops?: Array<{
+  /** INS-081: the loop's single-image capture points, in order. */
+  items?: Array<{
     position?: number | null;
-    zoneName?: string | null;
+    itemName?: string | null;
     notes?: string | null;
-    measurements?: Array<{
-      label?: string | null;
-      recordedValue?: string | null;
-      unit?: string | null;
-    }> | null;
+  }> | null;
+  /** INS-081: units photographed vs the sampling plan's n. */
+  cycles?: { completed?: number | null; sampleSize?: number | null } | null;
+  /** INS-081: the loop-global sheet, one set of values per unit. */
+  measurements?: Array<{
+    cycleIndex?: number | null;
+    label?: string | null;
+    recordedValue?: string | null;
+    unit?: string | null;
   }> | null;
   photoHashes?: string[] | null;
   tamperProof?: unknown;
@@ -597,11 +604,15 @@ function drawSamplingPlan(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsho
   p.section(1, 'Sampling plan (AQL)', 'ANSI/ASQ Z1.4 - single, normal');
 
   const cs = snap.computedSampling;
+  // INS-081: the sample size is a TARGET, not a gate — an inspection may end on
+  // any complete unit. Showing both figures keeps a short inspection visible to
+  // the buyer instead of silently equivalent to a full one.
+  const completed = snap.cycles?.completed;
   const stats: Array<[string, string]> = [
     ['Level', snap.aqlLevel || (cs ? 'II' : '—')],
     ['Code letter', cs?.sampleSizeCodeLetter || '—'],
     ['Lot size', num(snap.lotSize)],
-    ['Sample size', num(cs?.sampleSize)],
+    ['Units / sample', completed != null ? `${completed} / ${num(cs?.sampleSize)}` : num(cs?.sampleSize)],
   ];
   p.ensure(46);
   const boxY = p.y - 36;
@@ -738,15 +749,22 @@ function drawDefectNarrative(p: Painter, fonts: Fonts, snap: ReportCanonicalSnap
     p.paragraph('No defects were recorded during this inspection.', { size: 9.5, color: SUB });
     return;
   }
-  const zoneByLoopId = new Map<string, string>();
-  (snap.loops ?? []).forEach((l, i) => {
-    if (l && typeof l === 'object') {
-      const label = l.zoneName || `Loop ${l.position ?? i + 1}`;
-      // Loop ids are not part of the signed payload; only the defect's own
-      // inspectionLoopId is. Index by position as a best-effort label source.
-      zoneByLoopId.set(String(i), label);
+  // INS-081: the defect carries its slot — (item position, cycle) — and items[]
+  // carries the names, so the narrative resolves to "Unit 7 · Right sleeve".
+  // (The old zoneByLoopId map was built from loop ids that are not in the signed
+  // payload at all, and was never read.)
+  const itemNameByPosition = new Map<number, string>();
+  (snap.items ?? []).forEach((item, i) => {
+    if (item && typeof item === 'object') {
+      const position = item.position ?? i + 1;
+      itemNameByPosition.set(position, item.itemName || `Item ${position}`);
     }
   });
+  const slotLabel = (d: { itemPosition?: number | null; cycleIndex?: number | null }): string => {
+    const item = d.itemPosition != null ? itemNameByPosition.get(d.itemPosition) : undefined;
+    const unit = d.cycleIndex != null ? `Unit ${d.cycleIndex + 1}` : null;
+    return [unit, item].filter(Boolean).join(' · ');
+  };
 
   defects.forEach((d, i) => {
     const sev = (d.severity ?? '').toUpperCase() || 'UNCLASSIFIED';
@@ -770,6 +788,10 @@ function drawDefectNarrative(p: Painter, fonts: Fonts, snap: ReportCanonicalSnap
       font: fonts.bold,
       color: sev === 'CRITICAL' ? CRITICAL : sev === 'MAJOR' ? AMBER : SUB,
     });
+    const where = slotLabel(d);
+    if (where) {
+      p.text(where, { x: MARGIN + 90, y: p.y, size: 8.5, color: SUB });
+    }
     p.text(`${d.photoIds?.length ?? 0} photo(s)`, {
       x: MARGIN + CONTENT_W,
       y: p.y,
@@ -821,9 +843,19 @@ function drawPhotoEvidence(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsh
 }
 
 function drawMeasurementSheet(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
-  const loops = (snap.loops ?? []).filter((l) => (l.measurements?.length ?? 0) > 0);
-  if (loops.length === 0) return;
-  p.section(6, 'Measurement sheet', 'Free-form - as recorded');
+  const rows = snap.measurements ?? [];
+  if (rows.length === 0) return;
+
+  // INS-081: measurements are recorded once per UNIT (the sheet is loop-global),
+  // so the sheet groups by cycleIndex ascending rather than by loop item.
+  const byCycle = new Map<number, typeof rows>();
+  for (const m of rows) {
+    const cycleIndex = m.cycleIndex ?? 0;
+    byCycle.set(cycleIndex, [...(byCycle.get(cycleIndex) ?? []), m]);
+  }
+  const cycles = [...byCycle.keys()].sort((a, b) => a - b);
+
+  p.section(6, 'Measurement sheet', 'Free-form - as recorded, per unit');
   p.ensure(20);
   p.rect(MARGIN, p.y - 6, CONTENT_W, 20, FILL);
   p.text('POINT', { x: MARGIN + 6, y: p.y, size: 7.5, color: SUB });
@@ -831,9 +863,9 @@ function drawMeasurementSheet(p: Painter, fonts: Fonts, snap: ReportCanonicalSna
   p.text('UNIT', { x: MARGIN + CONTENT_W, y: p.y, size: 7.5, color: SUB, align: 'right' });
   p.y -= 20;
 
-  for (const loop of loops) {
+  for (const cycleIndex of cycles) {
     p.ensure(18);
-    p.text(loop.zoneName || `Loop ${loop.position ?? ''}`.trim(), {
+    p.text(`Unit ${cycleIndex + 1}`, {
       x: MARGIN + 6,
       y: p.y,
       size: 9,
@@ -841,7 +873,7 @@ function drawMeasurementSheet(p: Painter, fonts: Fonts, snap: ReportCanonicalSna
       color: SUB,
     });
     p.y -= 15;
-    for (const m of loop.measurements ?? []) {
+    for (const m of byCycle.get(cycleIndex) ?? []) {
       p.ensure(18);
       p.hairline(p.y + 11, LINE_SOFT);
       p.text(m.label || '—', { x: MARGIN + 14, y: p.y, size: 9.5, color: INK });

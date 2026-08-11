@@ -60,7 +60,8 @@ const SNAPSHOT: ReportCanonicalSnapshot = {
       customText: 'Loose thread at side seam',
       severity: 'MINOR',
       notes: 'Observed on 4 pieces',
-      inspectionLoopId: 'loop_1',
+      itemPosition: 1,
+      cycleIndex: 0,
       photoIds: ['ph_1', 'ph_2'],
     },
     {
@@ -68,21 +69,20 @@ const SNAPSHOT: ReportCanonicalSnapshot = {
       customText: null,
       severity: 'MAJOR',
       notes: null,
-      inspectionLoopId: 'loop_2',
+      itemPosition: 2,
+      cycleIndex: 6,
       photoIds: ['ph_3'],
     },
   ],
-  loops: [
-    {
-      position: 1,
-      zoneName: 'Front panel',
-      notes: null,
-      measurements: [
-        { label: 'Chest width', recordedValue: '52.0', unit: 'cm' },
-        { label: 'Body length', recordedValue: '71.5', unit: 'cm' },
-      ],
-    },
-    { position: 2, zoneName: 'Collar', notes: null, measurements: [] },
+  items: [
+    { position: 1, itemName: 'Front panel', notes: null },
+    { position: 2, itemName: 'Collar', notes: null },
+  ],
+  cycles: { completed: 7, sampleSize: 200 },
+  measurements: [
+    { cycleIndex: 0, label: 'Chest width', recordedValue: '52.0', unit: 'cm' },
+    { cycleIndex: 0, label: 'Body length', recordedValue: '71.5', unit: 'cm' },
+    { cycleIndex: 6, label: 'Chest width', recordedValue: '52.4', unit: 'cm' },
   ],
   photoHashes: ['a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64)],
 };

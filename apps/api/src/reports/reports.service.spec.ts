@@ -67,25 +67,47 @@ function approvedInspection(overrides: Record<string, unknown> = {}) {
       decidedByUserId: 'u-qa',
       decidedAt: new Date('2026-07-30T10:00:00.000Z'),
     },
-    loops: [
+    // INS-081: two single-image items, photographed for one complete unit.
+    items: [
       {
+        id: 'item1',
         position: 1,
-        zoneName: 'Front',
+        itemName: 'Front',
         notes: null,
-        measurements: [{ label: 'Length', recordedValue: '42.0', unit: 'cm' }],
+        photos: [
+          {
+            contentHash: 'a'.repeat(64),
+            inspectionLoopItemId: 'item1',
+            cycleIndex: 0,
+          },
+        ],
+      },
+      {
+        id: 'item2',
+        position: 2,
+        itemName: 'Back',
+        notes: null,
+        photos: [
+          {
+            contentHash: 'b'.repeat(64),
+            inspectionLoopItemId: 'item2',
+            cycleIndex: 0,
+          },
+        ],
       },
     ],
+    measurements: [{ cycleIndex: 0, label: 'Length', recordedValue: '42.0', unit: 'cm' }],
     defects: [
       {
         defectCatalogId: null,
         customText: 'Loose thread',
         severity: 'MINOR',
         notes: null,
-        inspectionLoopId: 'loop1',
+        inspectionLoopItemId: 'item1',
+        cycleIndex: 0,
         photos: [{ photoId: 'ph1' }],
       },
     ],
-    photos: [{ contentHash: 'a'.repeat(64) }, { contentHash: 'b'.repeat(64) }],
     report: null,
     ...overrides,
   };
@@ -268,6 +290,52 @@ describe('ReportsService.generate — signed envelope (INS-019)', () => {
       BadRequestException,
     );
     expect(created).not.toHaveBeenCalled();
+  });
+});
+
+describe('ReportsService.generate — loop items + cycle depth (INS-081)', () => {
+  function snapshotOf(created: { mock: { calls: unknown[][] } }) {
+    const arg = created.mock.calls[0][0] as { data: { canonicalSnapshot: unknown } };
+    return arg.data.canonicalSnapshot as Record<string, unknown>;
+  }
+
+  it('freezes the loop items in order, without shot counts or zone names', async () => {
+    const { service, created } = makeService();
+    await service.generate('org1', OWNER, 'insp1');
+    expect(snapshotOf(created).items).toEqual([
+      { position: 1, itemName: 'Front', notes: null },
+      { position: 2, itemName: 'Back', notes: null },
+    ]);
+    expect(snapshotOf(created)).not.toHaveProperty('loops');
+  });
+
+  it('records units photographed against the sampling plan n', async () => {
+    const { service, created } = makeService();
+    await service.generate('org1', OWNER, 'insp1');
+    // One complete pass over both items, against a plan calling for 80.
+    expect(snapshotOf(created).cycles).toEqual({ completed: 1, sampleSize: 80 });
+  });
+
+  it('attributes each defect to its slot so the narrative can name the unit', async () => {
+    const { service, created } = makeService();
+    await service.generate('org1', OWNER, 'insp1');
+    expect(snapshotOf(created).defects).toEqual([
+      expect.objectContaining({ itemPosition: 1, cycleIndex: 0, severity: 'MINOR' }),
+    ]);
+  });
+
+  it('carries the per-unit measurement sheet', async () => {
+    const { service, created } = makeService();
+    await service.generate('org1', OWNER, 'insp1');
+    expect(snapshotOf(created).measurements).toEqual([
+      { cycleIndex: 0, label: 'Length', recordedValue: '42.0', unit: 'cm' },
+    ]);
+  });
+
+  it('orders the signed photo hashes by unit, then by item position', async () => {
+    const { service, created } = makeService();
+    await service.generate('org1', OWNER, 'insp1');
+    expect(snapshotOf(created).photoHashes).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
   });
 });
 

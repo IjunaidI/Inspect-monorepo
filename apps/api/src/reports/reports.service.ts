@@ -13,6 +13,7 @@ import { actorTypeFor } from '../audit/actor-type';
 import { AuthUser } from '../auth/auth-user';
 import { MailService } from '../mail/mail.service';
 import { StorageService } from '../storage/storage.service';
+import { cycleState } from '../inspections/cycle-state';
 import { contentHash } from '../tamper-proof/content-hash';
 import { sign, verify } from '../tamper-proof/signature';
 import { renderReportPdf } from './report-pdf';
@@ -103,12 +104,12 @@ export class ReportsService {
         product: true,
         purchaseOrder: true,
         aqlResult: true,
-        loops: { orderBy: { position: 'asc' }, include: { measurements: true } },
+        items: { orderBy: { position: 'asc' }, include: { photos: true } },
+        measurements: { orderBy: [{ cycleIndex: 'asc' }, { label: 'asc' }] },
         defects: {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           include: { photos: true },
         },
-        photos: { orderBy: { createdAt: 'asc' } },
         report: true,
       },
     });
@@ -120,7 +121,23 @@ export class ReportsService {
       throw new BadRequestException('Only an APPROVED inspection can be reported');
     }
 
-    const orderedPhotoHashes = inspection.photos.map((p) => p.contentHash);
+    // INS-081: deterministic evidence ordering — by unit, then by the item's
+    // position within the loop. The signature covers this exact sequence, so the
+    // sort happens here in JS rather than depending on relation-ordering support.
+    const orderedPhotos = inspection.items
+      .flatMap((item) => item.photos.map((p) => ({ ...p, itemPosition: item.position })))
+      .sort((a, b) => a.cycleIndex - b.cycleIndex || a.itemPosition - b.itemPosition);
+    const orderedPhotoHashes = orderedPhotos.map((p) => p.contentHash);
+    const itemPositionById = new Map(inspection.items.map((i) => [i.id, i.position]));
+    const state = cycleState(
+      inspection.items.map((i) => ({ id: i.id, position: i.position })),
+      orderedPhotos.map((p) => ({
+        inspectionLoopItemId: p.inspectionLoopItemId,
+        cycleIndex: p.cycleIndex,
+      })),
+    );
+    const sampleSize =
+      (inspection.computedSampling as { sampleSize?: number } | null)?.sampleSize ?? null;
     // Everything a buyer can see on the report MUST be inside the signed envelope
     // (security review): the defect list + its photo evidence, the quantity/carton
     // verification, workmanship/packaging notes, supplier/product identity, and the
@@ -168,19 +185,28 @@ export class ReportsService {
         customText: d.customText ?? null,
         severity: d.severity,
         notes: d.notes ?? null,
-        inspectionLoopId: d.inspectionLoopId ?? null,
+        // INS-081: a defect names the SLOT it was seen on, so the narrative can
+        // read "Unit 7 · Right sleeve" instead of an opaque loop id.
+        itemPosition: d.inspectionLoopItemId
+          ? (itemPositionById.get(d.inspectionLoopItemId) ?? null)
+          : null,
+        cycleIndex: d.cycleIndex ?? null,
         photoIds: d.photos.map((p) => p.photoId).sort(),
       })),
       tamperProof: inspection.tamperProof,
-      loops: inspection.loops.map((l) => ({
-        position: l.position,
-        zoneName: l.zoneName,
-        notes: l.notes,
-        measurements: l.measurements.map((m) => ({
-          label: m.label,
-          recordedValue: m.recordedValue,
-          unit: m.unit,
-        })),
+      items: inspection.items.map((i) => ({
+        position: i.position,
+        itemName: i.itemName,
+        notes: i.notes,
+      })),
+      // Evidence depth versus the sampling plan, so a short inspection is visible
+      // to the buyer rather than silently equivalent to a full one (INS-081).
+      cycles: { completed: state.completedCycles, sampleSize },
+      measurements: inspection.measurements.map((m) => ({
+        cycleIndex: m.cycleIndex,
+        label: m.label,
+        recordedValue: m.recordedValue,
+        unit: m.unit,
       })),
       photoHashes: orderedPhotoHashes,
     };
