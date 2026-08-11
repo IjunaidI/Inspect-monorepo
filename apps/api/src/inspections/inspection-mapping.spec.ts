@@ -21,33 +21,54 @@ describe('toDefectCounts', () => {
   });
 });
 
-describe('buildPresetSnapshot', () => {
-  it('resolves defect names + severities (not just FKs) for immutability', () => {
-    const preset: PresetLike = {
-      id: 'p1',
-      version: 2,
-      steps: [
-        {
-          position: 1,
-          zoneName: 'Collar',
-          referenceImageUrls: ['u1'],
-          requiredShotCount: 2,
-          measurementFields: [{ label: 'Collar length', unit: 'cm' }],
-          allowedDefects: [
-            { defectCatalogId: 'd1', defectCatalog: { name: 'Skipped stitches', defaultSeverity: 'MAJOR' } },
-          ],
-        },
-      ],
-    };
+describe('buildPresetSnapshot — INS-081', () => {
+  const preset: PresetLike = {
+    id: 'lp_1',
+    version: 3,
+    items: [
+      {
+        position: 1,
+        itemName: 'Right sleeve',
+        description: null,
+        referenceImageUrl: 'orgs/o/presets/a.jpg',
+      },
+      { position: 2, itemName: 'Neck hole', description: 'inside seam', referenceImageUrl: null },
+    ],
+    measurementFields: [{ label: 'Chest', unit: 'cm' }],
+    allowedDefects: [
+      {
+        defectCatalogId: 'dc_1',
+        defectCatalog: { name: 'Broken stitch', defaultSeverity: 'MAJOR' as const },
+      },
+    ],
+  };
+
+  it('freezes items in order with their reference image', () => {
     const snap = buildPresetSnapshot(preset);
-    expect(snap.presetId).toBe('p1');
-    expect(snap.version).toBe(2);
-    expect(snap.steps[0].allowedDefects[0]).toEqual({
-      defectCatalogId: 'd1',
-      name: 'Skipped stitches',
-      severity: 'MAJOR',
-    });
-    expect(snap.steps[0].measurementFields[0]).toEqual({ label: 'Collar length', unit: 'cm' });
+    expect(snap.presetId).toBe('lp_1');
+    expect(snap.version).toBe(3);
+    expect(snap.items).toEqual([
+      {
+        position: 1,
+        itemName: 'Right sleeve',
+        description: undefined,
+        referenceImageUrl: 'orgs/o/presets/a.jpg',
+      },
+      {
+        position: 2,
+        itemName: 'Neck hole',
+        description: 'inside seam',
+        referenceImageUrl: undefined,
+      },
+    ]);
+  });
+
+  it('resolves defect names and severities loop-global, not per item', () => {
+    const snap = buildPresetSnapshot(preset);
+    expect(snap.allowedDefects).toEqual([
+      { defectCatalogId: 'dc_1', name: 'Broken stitch', severity: 'MAJOR' },
+    ]);
+    expect(snap.measurementFields).toEqual([{ label: 'Chest', unit: 'cm' }]);
   });
 });
 
