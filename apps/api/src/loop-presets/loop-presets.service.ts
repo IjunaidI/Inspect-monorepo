@@ -6,19 +6,22 @@ import { actorTypeFor } from '../audit/actor-type';
 
 type AqlLevelInput = 'I' | 'II' | 'III' | 'S1' | 'S2' | 'S3' | 'S4';
 
-export interface PresetStepInput {
-  zoneName: string;
+export interface PresetItemInput {
+  itemName: string;
   description?: string;
-  referenceImageUrls?: string[];
-  requiredShotCount?: number;
-  measurementFields?: Array<{ label: string; unit?: string }>;
-  allowedDefectCatalogIds?: string[];
+  /** Storage key under orgs/<orgId>/presets/ — one reference illustration per item. */
+  referenceImageUrl?: string;
 }
 export interface CreateLoopPresetInput {
   name: string;
   description?: string;
   aqlLevel?: AqlLevelInput;
-  steps: PresetStepInput[];
+  /** INS-081: the ordered single-image capture points that make up this loop. */
+  items: PresetItemInput[];
+  /** Loop-global (INS-081): the sheet filled once per cycle. */
+  measurementFields?: Array<{ label: string; unit?: string }>;
+  /** Loop-global (INS-081): the taggable defect list for the whole loop. */
+  allowedDefectCatalogIds?: string[];
 }
 
 @Injectable()
@@ -41,7 +44,7 @@ export class LoopPresetsService {
       // INS-005: usage counts so the presets screen renders real figures.
       include: {
         _count: {
-          select: { steps: true, inspections: true, defaultForBuyers: true },
+          select: { items: true, inspections: true, defaultForBuyers: true },
         },
       },
     });
@@ -51,13 +54,9 @@ export class LoopPresetsService {
     const preset = await this.prisma.loopPreset.findFirst({
       where: { id, orgId },
       include: {
-        steps: {
-          orderBy: { position: 'asc' },
-          include: {
-            measurementFields: { orderBy: { position: 'asc' } },
-            allowedDefects: { include: { defectCatalog: true } },
-          },
-        },
+        items: { orderBy: { position: 'asc' } },
+        measurementFields: { orderBy: { position: 'asc' } },
+        allowedDefects: { include: { defectCatalog: true } },
       },
     });
     if (!preset) {
@@ -77,31 +76,30 @@ export class LoopPresetsService {
         `Only AQL General Level II is supported in the MVP (got '${input.aqlLevel}')`,
       );
     }
-    if (!Array.isArray(input.steps) || input.steps.length === 0) {
-      throw new BadRequestException('at least one step is required');
+    if (!Array.isArray(input.items) || input.items.length === 0) {
+      throw new BadRequestException('at least one loop item is required');
     }
     const refPrefix = `orgs/${orgId}/presets/`;
-    input.steps.forEach((s, i) => {
-      if (!s?.zoneName?.trim()) {
-        throw new BadRequestException(`step ${i + 1}: zoneName is required`);
+    input.items.forEach((it, i) => {
+      if (!it?.itemName?.trim()) {
+        throw new BadRequestException(`item ${i + 1}: itemName is required`);
       }
-      // Tenant isolation (security review): reference-image keys must live in
+      // Tenant isolation (security review): the reference-image key must live in
       // THIS org's preset namespace. Storing an arbitrary key would let the
       // preset-detail presign turn the API into a signing oracle over any other
       // tenant's object (keys leak via viewUrls + inspection detail).
-      for (const key of s.referenceImageUrls ?? []) {
-        if (typeof key !== 'string' || !key.startsWith(refPrefix)) {
+      if (it.referenceImageUrl != null) {
+        if (typeof it.referenceImageUrl !== 'string' || !it.referenceImageUrl.startsWith(refPrefix)) {
           throw new BadRequestException(
-            `step ${i + 1}: referenceImageUrls must be keys under ${refPrefix} (use POST /loop-presets/presign)`,
+            `item ${i + 1}: referenceImageUrl must be a key under ${refPrefix} (use POST /loop-presets/presign)`,
           );
         }
       }
     });
 
-    // Allowed defects must be accessible: a global entry (orgId null) or this org's.
-    const catalogIds = [
-      ...new Set(input.steps.flatMap((s) => s.allowedDefectCatalogIds ?? [])),
-    ];
+    // Allowed defects must be accessible: a global entry (orgId null) or this
+    // org's. INS-081: one loop-global list, not a union across steps.
+    const catalogIds = [...new Set(input.allowedDefectCatalogIds ?? [])];
     if (catalogIds.length > 0) {
       const found = await this.prisma.defectCatalog.findMany({
         where: { id: { in: catalogIds }, OR: [{ orgId }, { orgId: null }] },
@@ -130,29 +128,26 @@ export class LoopPresetsService {
           aqlLevel: input.aqlLevel,
           version,
           createdByUserId: actor.userId,
-          steps: {
-            create: input.steps.map((s, i) => ({
+          items: {
+            create: input.items.map((it, i) => ({
               position: i + 1,
-              zoneName: s.zoneName.trim(),
-              description: s.description,
-              referenceImageUrls: s.referenceImageUrls ?? [],
-              requiredShotCount: s.requiredShotCount ?? 1,
-              measurementFields: {
-                create: (s.measurementFields ?? []).map((m, j) => ({
-                  position: j + 1,
-                  label: m.label,
-                  unit: m.unit,
-                })),
-              },
-              allowedDefects: {
-                create: (s.allowedDefectCatalogIds ?? []).map((cid) => ({
-                  defectCatalogId: cid,
-                })),
-              },
+              itemName: it.itemName.trim(),
+              description: it.description,
+              referenceImageUrl: it.referenceImageUrl,
             })),
           },
+          measurementFields: {
+            create: (input.measurementFields ?? []).map((m, j) => ({
+              position: j + 1,
+              label: m.label,
+              unit: m.unit,
+            })),
+          },
+          allowedDefects: {
+            create: catalogIds.map((cid) => ({ defectCatalogId: cid })),
+          },
         },
-        include: { steps: { include: { measurementFields: true, allowedDefects: true } } },
+        include: { items: true, measurementFields: true, allowedDefects: true },
       });
       await this.audit.append(
         {
@@ -162,7 +157,7 @@ export class LoopPresetsService {
           action: 'loopPreset.created',
           entityType: 'LoopPreset',
           entityId: preset.id,
-          metadata: { name: preset.name, version: preset.version, steps: preset.steps.length },
+          metadata: { name: preset.name, version: preset.version, items: preset.items.length },
         },
         tx,
       );
