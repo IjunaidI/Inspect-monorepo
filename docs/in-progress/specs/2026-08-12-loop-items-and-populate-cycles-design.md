@@ -246,10 +246,22 @@ The API enforces the same rule independently in `submit()`, listing the unit and
 
 ## 9. Migration
 
-Clean break, per decision 8. One forward Prisma migration that reshapes the tables and drops the rows in
-`loop_presets`, `preset_loop_steps`, `inspections`, `inspection_loops`, `photos`, `defect_instances`,
-`inspection_measurements`, `reports`. The global defect library (`defect_catalog`, `orgId IS NULL`) and all
-org/user/buyer/supplier/product/PO data survive; re-run the seed afterwards.
+Clean break, per decision 8. One forward Prisma migration that reshapes the tables and truncates
+`reports`, `inspections` and `loop_presets` with `CASCADE`; re-run the seed afterwards.
+
+**Applied to the Railway dev database 2026-08-12.** The cascade reached further than first assumed:
+`Buyer.defaultLoopPresetId` references `loop_presets`, so truncating presets also emptied **buyers**, and
+buyers in turn took **buyer_guests** and **purchase_orders** with them.
+
+- **Emptied:** photos, defect_instances, defect_instance_photos, inspection_measurements, inspection_loops,
+  inspections, aql_results, billable_events, reports, report_deliveries, report_accesses, loop_presets,
+  preset_loop_steps, preset_step_allowed_defects, preset_measurement_fields, buyers, buyer_guests,
+  purchase_orders.
+- **Survived:** organizations (258), users (436), suppliers (104), products (101), defect_catalog (16),
+  audit_logs (872), invitations.
+
+Buyers and purchase orders must be recreated before the console can drive a new inspection. The integration
+suite creates its own per run, so automated testing is unaffected.
 
 This is destructive and irreversible. It is acceptable only because the product is pre-launch and no buyer
 holds a signed report that would fail verification afterwards — a fact to re-confirm at execution time, not

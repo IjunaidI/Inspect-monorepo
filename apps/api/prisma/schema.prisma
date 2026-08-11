@@ -178,7 +178,7 @@ model Organization {
   loopPresets     LoopPreset[]
   defectCatalog   DefectCatalog[]
   inspections     Inspection[]
-  inspectionLoops InspectionLoop[]
+  inspectionItems InspectionLoopItem[]
   photos          Photo[]
   defectInstances DefectInstance[]
   aqlResults      AqlResult[]
@@ -382,11 +382,13 @@ model LoopPreset {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  organization     Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  createdBy        User?            @relation("LoopPresetCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  steps            PresetLoopStep[]
-  inspections      Inspection[]
-  defaultForBuyers Buyer[]          @relation("BuyerDefaultPreset")
+  organization      Organization             @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  createdBy         User?                    @relation("LoopPresetCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  items             PresetLoopItem[]
+  measurementFields PresetMeasurementField[]
+  allowedDefects    PresetAllowedDefect[]
+  inspections       Inspection[]
+  defaultForBuyers  Buyer[]                  @relation("BuyerDefaultPreset")
 
   @@unique([orgId, name, version])
   @@index([orgId])
@@ -394,54 +396,53 @@ model LoopPreset {
   @@map("loop_presets")
 }
 
-/// One ordered zone step in a preset (the spec's "LoopStep"). Carries reference
-/// illustrations and a required shot COUNT — no named shot slots (spec §5, §6).
-model PresetLoopStep {
-  id                 String   @id @default(cuid())
-  loopPresetId       String
-  position           Int
-  zoneName           String
-  description        String?
-  referenceImageUrls String[]
-  requiredShotCount  Int      @default(1)
-  createdAt          DateTime @default(now())
+/// One ordered capture point in a loop (INS-081). Takes exactly ONE image —
+/// there is no shot count, because an item IS a shot.
+model PresetLoopItem {
+  id                String   @id @default(cuid())
+  loopPresetId      String
+  position          Int
+  itemName          String
+  description       String?
+  referenceImageUrl String?
+  createdAt         DateTime @default(now())
 
-  loopPreset        LoopPreset                @relation(fields: [loopPresetId], references: [id], onDelete: Cascade)
-  allowedDefects    PresetStepAllowedDefect[]
-  measurementFields PresetMeasurementField[]
+  loopPreset LoopPreset @relation(fields: [loopPresetId], references: [id], onDelete: Cascade)
 
   @@unique([loopPresetId, position])
   @@index([loopPresetId])
-  @@map("preset_loop_steps")
+  @@map("preset_loop_items")
 }
 
-/// Free-form measurement field label for a preset step (spec §9, §14#9: no
-/// target/tolerance/grading). `unit` is optional free text (e.g. "cm", "GSM").
+/// Measurement sheet defined ONCE per loop (INS-081) and filled once per cycle.
+/// Free-form (spec §9, §14#9: no target/tolerance/grading); `unit` is optional
+/// free text (e.g. "cm", "GSM").
 model PresetMeasurementField {
-  id               String  @id @default(cuid())
-  presetLoopStepId String
-  position         Int
-  label            String
-  unit             String?
+  id           String  @id @default(cuid())
+  loopPresetId String
+  position     Int
+  label        String
+  unit         String?
 
-  presetLoopStep PresetLoopStep @relation(fields: [presetLoopStepId], references: [id], onDelete: Cascade)
+  loopPreset LoopPreset @relation(fields: [loopPresetId], references: [id], onDelete: Cascade)
 
-  @@unique([presetLoopStepId, position])
-  @@index([presetLoopStepId])
+  @@unique([loopPresetId, position])
+  @@index([loopPresetId])
   @@map("preset_measurement_fields")
 }
 
-/// Junction: which catalog defects are allowed (taggable) in a preset step.
-model PresetStepAllowedDefect {
-  presetLoopStepId String
-  defectCatalogId  String
+/// Junction: which catalog defects are taggable anywhere in this loop (INS-081 —
+/// loop-global, no longer per item).
+model PresetAllowedDefect {
+  loopPresetId    String
+  defectCatalogId String
 
-  presetLoopStep PresetLoopStep @relation(fields: [presetLoopStepId], references: [id], onDelete: Cascade)
-  defectCatalog  DefectCatalog  @relation(fields: [defectCatalogId], references: [id], onDelete: Restrict)
+  loopPreset    LoopPreset    @relation(fields: [loopPresetId], references: [id], onDelete: Cascade)
+  defectCatalog DefectCatalog @relation(fields: [defectCatalogId], references: [id], onDelete: Restrict)
 
-  @@id([presetLoopStepId, defectCatalogId])
+  @@id([loopPresetId, defectCatalogId])
   @@index([defectCatalogId])
-  @@map("preset_step_allowed_defects")
+  @@map("preset_allowed_defects")
 }
 
 // ─────────────────────────────────────────────
@@ -464,8 +465,8 @@ model DefectCatalog {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  organization    Organization?             @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  presetUsages    PresetStepAllowedDefect[]
+  organization    Organization?         @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  presetUsages    PresetAllowedDefect[]
   defectInstances DefectInstance[]
 
   @@unique([orgId, name])
@@ -538,7 +539,8 @@ model Inspection {
   supersedes        Inspection?   @relation("ReInspection", fields: [supersedesInspectionId], references: [id], onDelete: Restrict)
   supersededBy      Inspection[]  @relation("ReInspection")
 
-  loops         InspectionLoop[]
+  items         InspectionLoopItem[]
+  measurements  InspectionMeasurement[]
   photos        Photo[]
   defects       DefectInstance[]
   aqlResult     AqlResult?
@@ -560,46 +562,51 @@ model Inspection {
   @@map("inspections")
 }
 
-/// A loop instance within an inspection. Per-loop status is informational only
-/// (spec §8: pass/fail is whole-inspection). Snapshot of the resolved step is
-/// frozen here so later preset/catalog edits don't mutate history.
-model InspectionLoop {
-  id                     String   @id @default(cuid())
-  inspectionId           String
-  orgId                  String
-  position               Int
-  zoneName               String
-  description            String?
-  requiredShotCount      Int      @default(1)
-  allowedDefectsSnapshot Json? // resolved [{defectCatalogId?, name, severity}] frozen at creation
-  notes                  String?
-  createdAt              DateTime @default(now())
+/// The inspection's frozen copy of one loop item (INS-081). No shot count and no
+/// per-item defect snapshot: the allowed-defect list is loop-global and already
+/// resolved inside Inspection.loopPresetSnapshot. Per-item status does not exist
+/// (spec §8: pass/fail is whole-inspection).
+model InspectionLoopItem {
+  id                String   @id @default(cuid())
+  inspectionId      String
+  orgId             String
+  position          Int
+  itemName          String
+  description       String?
+  referenceImageUrl String?
+  notes             String?
+  createdAt         DateTime @default(now())
 
   // INS-010: tenant-aligned composite FK (see Inspection.@@unique([id, orgId])).
-  inspection   Inspection              @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
-  organization Organization            @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  inspection   Inspection       @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
   photos       Photo[]
   defects      DefectInstance[]
-  measurements InspectionMeasurement[]
 
   @@unique([inspectionId, position])
   @@index([inspectionId])
   @@index([orgId])
-  @@map("inspection_loops")
+  @@map("inspection_loop_items")
 }
 
-/// Free-form measured value recorded during a loop (spec §9, §14#9).
+/// Free-form measured value recorded once per CYCLE (INS-081) — the sheet is
+/// loop-global, so a measurement belongs to a unit, not to an item
+/// (spec §9, §14#9).
 model InspectionMeasurement {
-  id               String  @id @default(cuid())
-  inspectionLoopId String
-  label            String
-  recordedValue    String?
-  unit             String?
-  notes            String?
+  id            String  @id @default(cuid())
+  inspectionId  String
+  orgId         String
+  cycleIndex    Int
+  label         String
+  recordedValue String?
+  unit          String?
+  notes         String?
 
-  inspectionLoop InspectionLoop @relation(fields: [inspectionLoopId], references: [id], onDelete: Cascade)
+  // INS-010: tenant-aligned composite FK.
+  inspection Inspection @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
 
-  @@index([inspectionLoopId])
+  @@unique([inspectionId, cycleIndex, label])
+  @@index([inspectionId])
   @@map("inspection_measurements")
 }
 
@@ -607,41 +614,43 @@ model InspectionMeasurement {
 // PHOTOS & PROVENANCE  (spec §9)
 // ─────────────────────────────────────────────
 
-/// A captured/uploaded photo. Lives on the inspection; inspectionLoopId is null
-/// until the Admin drags it into the correct loop (spec §6). `source` drives the
+/// A captured/uploaded photo, addressed by its SLOT: (loop item, cycle). INS-081
+/// removed the "floating photo" state — every upload targets a known slot, and
+/// @@unique([inspectionLoopItemId, cycleIndex]) makes one-image-per-slot a
+/// database guarantee rather than a UI convention. `source` drives the
 /// verified/unverified badge; contentHash feeds the report signature.
 model Photo {
-  id               String      @id @default(cuid())
-  orgId            String
-  inspectionId     String
-  inspectionLoopId String? // null until placed into a loop slot
-  storageKey       String
-  thumbnailKey     String?
-  source           PhotoSource
-  uploaderUserId   String?
-  capturedAt       DateTime?
-  gps              Json?
-  deviceId         String?
-  exif             Json?
-  contentHash      String
-  annotations      Json?
-  position         Int?
-  clientRequestId  String?
-  createdAt        DateTime    @default(now())
+  id                   String      @id @default(cuid())
+  orgId                String
+  inspectionId         String
+  inspectionLoopItemId String
+  /// 0-based; rendered 1-based ("Unit 7"). Gaps are legal — see cycle-state.ts.
+  cycleIndex           Int
+  storageKey           String
+  thumbnailKey         String?
+  source               PhotoSource
+  uploaderUserId       String?
+  capturedAt           DateTime?
+  gps                  Json?
+  deviceId             String?
+  exif                 Json?
+  contentHash          String
+  annotations          Json?
+  clientRequestId      String?
+  createdAt            DateTime    @default(now())
 
-  organization   Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  // INS-010: tenant-aligned composite FK to the inspection aggregate. The
-  // inspectionLoop link stays single-column ON PURPOSE: it is `onDelete: SetNull`,
-  // and a composite FK would have to null the NOT NULL orgId alongside it.
-  inspection     Inspection            @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
-  inspectionLoop InspectionLoop?       @relation(fields: [inspectionLoopId], references: [id], onDelete: SetNull)
-  uploader       User?                 @relation("PhotoUploader", fields: [uploaderUserId], references: [id], onDelete: SetNull)
-  defects        DefectInstancePhoto[]
+  organization       Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  // INS-010: tenant-aligned composite FK to the inspection aggregate.
+  inspection         Inspection            @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
+  inspectionLoopItem InspectionLoopItem    @relation(fields: [inspectionLoopItemId], references: [id], onDelete: Cascade)
+  uploader           User?                 @relation("PhotoUploader", fields: [uploaderUserId], references: [id], onDelete: SetNull)
+  defects            DefectInstancePhoto[]
 
   @@unique([orgId, clientRequestId])
+  @@unique([inspectionLoopItemId, cycleIndex])
   @@index([orgId])
   @@index([inspectionId])
-  @@index([inspectionLoopId])
+  @@index([inspectionLoopItemId])
   @@index([contentHash])
   @@map("photos")
 }
@@ -650,35 +659,40 @@ model Photo {
 // DEFECT INSTANCES  (spec §5, §7)
 // ─────────────────────────────────────────────
 
-/// A defect recorded on an inspection/loop. Either references a DefectCatalog
-/// entry OR carries free-text (one-off). Severity feeds AQL class counts.
+/// A defect recorded on an inspection. Either references a DefectCatalog entry
+/// OR carries free-text (one-off). Severity feeds AQL class counts.
+/// INS-081: the taggable list is loop-global, but the recorded instance pins to
+/// a SLOT — (inspectionLoopItemId, cycleIndex) — so the report can say
+/// "Unit 7 · Right sleeve". Both are set together or both omitted.
 model DefectInstance {
-  id               String         @id @default(cuid())
-  orgId            String
-  inspectionId     String
-  inspectionLoopId String?
-  defectCatalogId  String?
-  customText       String?
-  severity         DefectSeverity
-  notes            String?
-  createdByUserId  String?
+  id                   String         @id @default(cuid())
+  orgId                String
+  inspectionId         String
+  inspectionLoopItemId String?
+  cycleIndex           Int?
+  defectCatalogId      String?
+  customText           String?
+  severity             DefectSeverity
+  notes                String?
+  createdByUserId      String?
   /// Idempotency token (INS-044): a retried add-defect must not duplicate the
   /// row — a phantom duplicate could flip the AQL verdict. Mirrors Inspection
   /// and Photo.
-  clientRequestId  String?
-  createdAt        DateTime       @default(now())
+  clientRequestId      String?
+  createdAt            DateTime       @default(now())
 
-  organization   Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  // INS-010: tenant-aligned composite FK (loop link stays single-column — SetNull).
-  inspection     Inspection            @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
-  inspectionLoop InspectionLoop?       @relation(fields: [inspectionLoopId], references: [id], onDelete: SetNull)
-  defectCatalog  DefectCatalog?        @relation(fields: [defectCatalogId], references: [id], onDelete: Restrict)
-  photos         DefectInstancePhoto[]
+  organization       Organization          @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  // INS-010: tenant-aligned composite FK (item link stays single-column — SetNull).
+  inspection         Inspection            @relation(fields: [inspectionId, orgId], references: [id, orgId], onDelete: Cascade)
+  inspectionLoopItem InspectionLoopItem?   @relation(fields: [inspectionLoopItemId], references: [id], onDelete: SetNull)
+  defectCatalog      DefectCatalog?        @relation(fields: [defectCatalogId], references: [id], onDelete: Restrict)
+  photos             DefectInstancePhoto[]
 
   @@unique([orgId, clientRequestId])
   @@index([orgId])
   @@index([inspectionId])
   @@index([inspectionId, severity])
+  @@index([inspectionId, cycleIndex])
   @@map("defect_instances")
 }
 
