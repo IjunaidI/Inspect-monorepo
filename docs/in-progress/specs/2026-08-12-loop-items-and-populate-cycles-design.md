@@ -114,10 +114,14 @@ both the submit guard and the populate read:
 cycleState(items: {id: string; position: number}[],
            photos: {inspectionLoopItemId: string; cycleIndex: number}[])
   → { completedCycles: number
-      partialCycle: { cycleIndex: number; missingItemIds: string[] } | null
-      nextSlot: { cycleIndex: number; itemId: string }
+      partialCycles: { cycleIndex: number; missingItemIds: string[] }[]
+      nextSlot: { cycleIndex: number; itemId: string } | null
       totalPhotos: number }
 ```
+
+`partialCycles` is a list rather than a single value: retake-in-place cannot punch a hole in a finished
+cycle, so in practice at most one is ever open — but the submit error should be able to name all of them
+rather than report the first and hide the rest. `nextSlot` is null only when the loop has no items.
 
 Keeping this pure matters: it is the rule the API enforces and the UI renders, and a divergence between the
 two is exactly how a half-photographed unit would reach a signed report.
