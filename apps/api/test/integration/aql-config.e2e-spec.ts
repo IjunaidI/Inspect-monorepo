@@ -84,7 +84,7 @@ describe('AQL configurability end-to-end (INS-063)', () => {
       'POST /inspections (major 1.5)',
     );
     configuredId = created.id;
-    configuredLoopId = created.loops?.[0]?.id;
+    configuredLoopId = created.items?.[0]?.id;
     expect(configuredId).toBeTruthy();
     expect(configuredLoopId).toBeTruthy();
 
@@ -211,7 +211,7 @@ describe('AQL configurability end-to-end (INS-063)', () => {
         body: {
           storageKey: `e2e/${tag}/aqlcfg.jpg`,
           contentHash: createHash('sha256').update(`${tag}-aqlcfg`).digest('hex'),
-          inspectionLoopId: configuredLoopId,
+          inspectionLoopItemId: configuredLoopId, cycleIndex: 0,
           clientRequestId: `photo-${tag}`,
         },
       }),
@@ -228,7 +228,7 @@ describe('AQL configurability end-to-end (INS-063)', () => {
           body: {
             customText: `Open seam #${i} (${tag})`,
             severity: 'MAJOR',
-            inspectionLoopId: configuredLoopId,
+            inspectionLoopItemId: configuredLoopId, cycleIndex: 0,
             clientRequestId: `defect-${tag}-${i}`,
           },
         }),

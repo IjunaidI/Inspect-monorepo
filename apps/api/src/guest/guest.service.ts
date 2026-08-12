@@ -85,10 +85,18 @@ export class GuestService {
     await this.recordAccess(report.id, guest.id, 'VIEW', ipAddress, userAgent);
     // Buyer-visible photo evidence (INS-049): short-lived presigned GET URLs.
     // Never fails the read — presign problems degrade to viewUrl:null.
+    // INS-081: ordered by unit, then by the item's position in the loop — the
+    // same sequence the signed snapshot's photoHashes use.
     const photoRows = await this.prisma.photo.findMany({
       where: { inspectionId: report.inspectionId },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, contentHash: true, storageKey: true, inspectionLoopId: true },
+      orderBy: [{ cycleIndex: 'asc' }, { inspectionLoopItem: { position: 'asc' } }],
+      select: {
+        id: true,
+        contentHash: true,
+        storageKey: true,
+        inspectionLoopItemId: true,
+        cycleIndex: true,
+      },
     });
     const photos = photoRows.map(({ storageKey, ...p }) => {
       try {

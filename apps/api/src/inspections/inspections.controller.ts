@@ -68,12 +68,13 @@ export class InspectionsController {
   @Roles('INSPECTOR')
   async get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     const inspection = await this.inspections.get(requireOrgId(user), user, id);
+    // INS-081: there is no orphan photo list any more — every photo lives in a
+    // (loop item, cycle) slot, so the view URLs are decorated per item.
     return {
       ...inspection,
-      photos: inspection.photos?.map((p) => this.withViewUrl(p)),
-      loops: inspection.loops?.map((loop) => ({
-        ...loop,
-        photos: loop.photos?.map((p) => this.withViewUrl(p)),
+      items: inspection.items?.map((item) => ({
+        ...item,
+        photos: item.photos?.map((p) => this.withViewUrl(p)),
       })),
     };
   }

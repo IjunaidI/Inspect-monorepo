@@ -100,7 +100,7 @@ describe('Photo byte upload via presigned URL (integration)', () => {
       }),
       'POST /inspections',
     );
-    const loopId = inspection.loops?.[0]?.id;
+    const loopId = inspection.items?.[0]?.id;
 
     const presign = expect2xx(
       await client.post(`/inspections/${inspection.id}/populate/photos/presign`, {
@@ -126,7 +126,7 @@ describe('Photo byte upload via presigned URL (integration)', () => {
         body: {
           storageKey: presign.storageKey,
           contentHash,
-          inspectionLoopId: loopId,
+          inspectionLoopItemId: loopId, cycleIndex: 0,
           clientRequestId: `bytes-photo-${tag}`,
         },
       }),
@@ -141,7 +141,7 @@ describe('Photo byte upload via presigned URL (integration)', () => {
       await client.get(`/inspections/${inspection.id}`, { token: org.ownerToken }),
       'GET /inspections/:id (viewUrl)',
     );
-    const detailPhoto = detail.loops
+    const detailPhoto = detail.items
       ?.flatMap((l: { photos?: Array<{ id: string; viewUrl?: string | null }> }) => l.photos ?? [])
       .find((p: { id: string }) => p.id === photo.id);
     expect(detailPhoto?.viewUrl).toBeTruthy();

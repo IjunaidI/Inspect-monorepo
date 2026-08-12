@@ -141,20 +141,16 @@ async function main() {
   const minorDefect = Array.isArray(catalog) ? catalog.find((d) => d.defaultSeverity === 'MINOR') : null;
   ok(`defect catalog: ${Array.isArray(catalog) ? catalog.length : 0} entries${minorDefect ? `, using MINOR "${minorDefect.name}"` : ' (no MINOR -> custom)'}`);
 
-  // 5c. Loop preset (one zone, allowing the MINOR defect if present)
+  // 5c. Loop preset (INS-081: one single-image item; defects + measurement sheet
+  // are loop-global, allowing the MINOR defect if present)
   const preset = await req('POST', '/loop-presets', {
     token: ownerToken,
     body: {
       name: `Smoke Loop ${stamp}`,
       aqlLevel: 'II',
-      steps: [
-        {
-          zoneName: 'Front',
-          requiredShotCount: 1,
-          measurementFields: [{ label: 'Length', unit: 'cm' }],
-          allowedDefectCatalogIds: minorDefect ? [minorDefect.id] : [],
-        },
-      ],
+      items: [{ itemName: 'Front' }],
+      measurementFields: [{ label: 'Length', unit: 'cm' }],
+      allowedDefectCatalogIds: minorDefect ? [minorDefect.id] : [],
     },
   });
   assert(preset.id, 'loop preset created');
@@ -166,9 +162,9 @@ async function main() {
     body: { poId: po.id, loopPresetId: preset.id, lotSize: 1000, clientRequestId: `smoke-${stamp}` },
   });
   const inspectionId = inspection.id;
-  const loopId = inspection.loops?.[0]?.id;
-  assert(inspectionId && loopId, 'inspection + at least one loop created');
-  ok(`inspection ${inspectionId} status=${inspection.status}, loop=${loopId}`);
+  const loopId = inspection.items?.[0]?.id;
+  assert(inspectionId && loopId, 'inspection + at least one loop item created');
+  ok(`inspection ${inspectionId} status=${inspection.status}, item=${loopId}`);
   assert(inspection.computedSampling?.sampleSizeCodeLetter === 'J', `code letter J (got ${inspection.computedSampling?.sampleSizeCodeLetter})`);
   ok(`computed sampling: letter=${inspection.computedSampling.sampleSizeCodeLetter}, n=${inspection.computedSampling.sampleSize}`);
 
@@ -183,27 +179,29 @@ async function main() {
   const contentHash = createHash('sha256').update(`smoke-photo-${stamp}`).digest('hex');
   const photo = await req('POST', `/inspections/${inspectionId}/populate/photos`, {
     token: adminToken,
-    body: { storageKey: presign.storageKey, contentHash, inspectionLoopId: loopId, clientRequestId: `photo-${stamp}` },
+    body: {
+      storageKey: presign.storageKey,
+      contentHash,
+      // INS-081: a photo is addressed by its slot — (loop item, cycle).
+      inspectionLoopItemId: loopId,
+      cycleIndex: 0,
+      clientRequestId: `photo-${stamp}`,
+    },
   });
-  assert(photo.id, 'photo registered (metadata-only, no S3 byte upload)');
-  ok(`photo ${photo.id} source=${photo.source}`);
+  assert(photo.id, 'photo registered into slot (metadata-only, no S3 byte upload)');
+  ok(`photo ${photo.id} source=${photo.source} unit=${photo.cycleIndex + 1}`);
 
-  await req('PATCH', `/inspections/${inspectionId}/populate/photos/${photo.id}/loop`, {
-    token: adminToken,
-    body: { inspectionLoopId: loopId },
-  });
-  ok('photo assigned to loop');
-
+  const slot = { inspectionLoopItemId: loopId, cycleIndex: 0 };
   const defectBody = minorDefect
-    ? { defectCatalogId: minorDefect.id, inspectionLoopId: loopId, photoIds: [photo.id], notes: 'smoke' }
-    : { customText: 'Loose thread (smoke)', severity: 'MINOR', inspectionLoopId: loopId, photoIds: [photo.id] };
+    ? { defectCatalogId: minorDefect.id, ...slot, photoIds: [photo.id], notes: 'smoke' }
+    : { customText: 'Loose thread (smoke)', severity: 'MINOR', ...slot, photoIds: [photo.id] };
   const defect = await req('POST', `/inspections/${inspectionId}/populate/defects`, { token: adminToken, body: defectBody });
   assert(defect.severity === 'MINOR', `defect tagged MINOR (got ${defect.severity})`);
   ok(`defect ${defect.id} severity=${defect.severity}`);
 
   const measurement = await req('POST', `/inspections/${inspectionId}/populate/measurements`, {
     token: adminToken,
-    body: { inspectionLoopId: loopId, label: 'Length', recordedValue: '42.0', unit: 'cm' },
+    body: { cycleIndex: 0, label: 'Length', recordedValue: '42.0', unit: 'cm' },
   });
   assert(measurement.id, 'measurement recorded');
   ok(`measurement ${measurement.id}`);

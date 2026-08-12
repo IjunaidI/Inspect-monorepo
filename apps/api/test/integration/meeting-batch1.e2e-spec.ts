@@ -63,7 +63,7 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       }),
       'POST /inspections (fixture)',
     );
-    return { id: created.id, loopId: created.loops[0].id };
+    return { id: created.id, loopId: created.items[0].id };
   }
 
   /** Register a fabricated photo directly onto a loop (Platform-Admin populate route). */
@@ -75,7 +75,7 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
         body: {
           storageKey: `e2e/${seed}.jpg`,
           contentHash,
-          inspectionLoopId: loopId,
+          inspectionLoopItemId: loopId, cycleIndex: 0,
           clientRequestId: seed,
         },
       }),
@@ -157,7 +157,8 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
         body: {},
       });
       expect(refused.status).toBe(400);
-      expect(String(refused.body.message)).toContain('photo evidence incomplete');
+      // INS-081 reshaped the gate: it is cycle-complete, not shot-count-based.
+      expect(String(refused.body.message)).toContain('no complete unit has been photographed');
 
       await registerPhoto(insp.id, insp.loopId, `gate-${tag}`);
       const ok = expect2xx(
@@ -360,10 +361,10 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
         await client.get(`/inspections/${insp.id}/populate`, { token: adminToken }),
         'admin GET /inspections/:id/populate',
       );
-      expect(Array.isArray(admin.loops)).toBe(true);
-      expect(admin.loops.length).toBeGreaterThan(0);
-      const loop = admin.loops.find((l: { id: string }) => l.id === insp.loopId);
-      expect(loop.requiredShotCount).toBeGreaterThan(0);
+      expect(Array.isArray(admin.items)).toBe(true);
+      expect(admin.items.length).toBeGreaterThan(0);
+      const loop = admin.items.find((l: { id: string }) => l.id === insp.loopId);
+      expect(loop.itemName).toBeTruthy();
       // The regression this guards: the loop's `include` dropping photos/defects/
       // measurements would still leave `loops` non-empty — assert the registered
       // photo actually rides along on its loop.

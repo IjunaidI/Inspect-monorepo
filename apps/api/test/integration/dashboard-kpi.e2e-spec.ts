@@ -88,7 +88,7 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
       `POST /inspections (${opts.label})`,
     );
     const inspectionId: string = inspection.id;
-    const loopId: string = inspection.loops[0].id;
+    const loopId: string = inspection.items[0].id;
     // Lot 1000 -> code J -> n=80. The whole DPHU denominator rests on this.
     expect(inspection.computedSampling.sampleSize).toBe(80);
 
@@ -105,7 +105,7 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
         body: {
           storageKey: presign.storageKey,
           contentHash: createHash('sha256').update(`${tag}-${opts.label}`).digest('hex'),
-          inspectionLoopId: loopId,
+          inspectionLoopItemId: loopId, cycleIndex: 0,
         },
       }),
       `register photo (${opts.label})`,
@@ -119,7 +119,7 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
             ...(ws.minorDefectId
               ? { defectCatalogId: ws.minorDefectId }
               : { customText: `KPI defect ${i}`, severity: 'MINOR' }),
-            inspectionLoopId: loopId,
+            inspectionLoopItemId: loopId, cycleIndex: 0,
             clientRequestId: `kpi-${tag}-${opts.label}-${i}`,
           },
         }),

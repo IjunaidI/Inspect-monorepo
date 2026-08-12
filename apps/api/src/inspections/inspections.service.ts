@@ -204,11 +204,14 @@ export class InspectionsService {
         status: input.assignedInspectorId ? 'ASSIGNED' : 'DRAFT',
         items: {
           create: snapshot.items.map((i) => ({
-            orgId,
             position: i.position,
             itemName: i.itemName,
             description: i.description,
             referenceImageUrl: i.referenceImageUrl,
+            // orgId is carried by BOTH the composite inspection FK (implied by
+            // this nesting) and the organization FK, so Prisma exposes it only
+            // through the relation — a bare `orgId` scalar is rejected here.
+            organization: { connect: { id: orgId } },
           })),
         },
       },
