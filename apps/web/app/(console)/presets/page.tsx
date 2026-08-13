@@ -37,7 +37,7 @@ export default async function PresetsPage() {
         name: p.name,
         desc: `v${p.version}${p.description ? ` · ${p.description}` : ''}`,
         loops: [],
-        loopCount: p._count?.steps ?? 0,
+        loopCount: p._count?.items ?? 0,
         used: p._count?.inspections ?? 0,
         updatedAt: p.updatedAt ?? '',
         edited: p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '—',
