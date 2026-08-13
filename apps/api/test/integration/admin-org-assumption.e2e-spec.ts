@@ -186,7 +186,7 @@ describe('Platform-Admin org assumption (INS-079)', () => {
       'POST /inspections',
     );
     const inspectionId = inspection.id as string;
-    const loopId = inspection.loops?.[0]?.id as string;
+    const loopId = inspection.items?.[0]?.id as string;
     expect(inspectionId).toBeTruthy();
     expect(loopId).toBeTruthy();
 
@@ -208,19 +208,14 @@ describe('Platform-Admin org assumption (INS-079)', () => {
         body: {
           storageKey: presign.storageKey,
           contentHash,
-          inspectionLoopId: loopId,
+          inspectionLoopItemId: loopId, cycleIndex: 0,
           clientRequestId: `photo-${tag}`,
         },
       }),
       'populate register photo',
     );
-    expect2xx(
-      await client.patch(`/inspections/${inspectionId}/populate/photos/${photo.id}/loop`, {
-        token: adminToken,
-        body: { inspectionLoopId: loopId },
-      }),
-      'populate assign photo to loop',
-    );
+    // INS-081: the photo already landed in its (item, cycle) slot at registration —
+    // there is no separate assign step, and no floating photo to assign.
 
     // Submit + QA decision as the org owner (same as the core loop).
     const submitted = expect2xx(

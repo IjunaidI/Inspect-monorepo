@@ -81,6 +81,20 @@ describe('DB-level invariants (integration)', () => {
     return created.id as string;
   }
 
+  /**
+   * INS-081: a photo row needs its slot — (loop item, cycle) — and both columns
+   * are NOT NULL, so the raw-SQL inserts below have to name a real item.
+   */
+  async function firstItemId(inspectionId: string): Promise<string> {
+    const item = await prisma.inspectionLoopItem.findFirst({
+      where: { inspectionId },
+      orderBy: { position: 'asc' },
+      select: { id: true },
+    });
+    if (!item) throw new Error('inspection has no loop items');
+    return item.id;
+  }
+
   // ── INS-010 · composite-FK tenant guard ────────────────────────────────────
 
   it('INS-010: refuses a child row whose orgId disagrees with its parent inspection', async () => {
@@ -89,12 +103,13 @@ describe('DB-level invariants (integration)', () => {
       return;
     }
     const inspectionId = await draftInspection();
+    const itemId = await firstItemId(inspectionId);
     // orgB.orgId is a REAL org, so the single-column organization FK is satisfied;
     // only the composite [inspectionId, orgId] key can catch this.
     const message = await expectRejected(() =>
       prisma.$executeRawUnsafe(
-        `INSERT INTO "photos" ("id","orgId","inspectionId","storageKey","source","contentHash","createdAt")
-         VALUES ('${tag}-crossorg', '${orgB.orgId}', '${inspectionId}', 'k', 'MANUAL_UPLOAD', 'h', now())`,
+        `INSERT INTO "photos" ("id","orgId","inspectionId","inspectionLoopItemId","cycleIndex","storageKey","source","contentHash","createdAt")
+         VALUES ('${tag}-crossorg', '${orgB.orgId}', '${inspectionId}', '${itemId}', 0, 'k', 'MANUAL_UPLOAD', 'h', now())`,
       ),
     );
     expect(message).toMatch(/photos_inspectionId_orgId_fkey|foreign key/i);
@@ -105,9 +120,10 @@ describe('DB-level invariants (integration)', () => {
 
   it('INS-010: a correctly aligned child row still inserts', async () => {
     const inspectionId = await draftInspection();
+    const itemId = await firstItemId(inspectionId);
     await prisma.$executeRawUnsafe(
-      `INSERT INTO "photos" ("id","orgId","inspectionId","storageKey","source","contentHash","createdAt")
-       VALUES ('${tag}-aligned', '${orgA.orgId}', '${inspectionId}', 'k', 'MANUAL_UPLOAD', 'h', now())`,
+      `INSERT INTO "photos" ("id","orgId","inspectionId","inspectionLoopItemId","cycleIndex","storageKey","source","contentHash","createdAt")
+       VALUES ('${tag}-aligned', '${orgA.orgId}', '${inspectionId}', '${itemId}', 0, 'k', 'MANUAL_UPLOAD', 'h', now())`,
     );
     const ok = await prisma.photo.findFirst({ where: { id: `${tag}-aligned` } });
     expect(ok?.orgId).toBe(orgA.orgId);
@@ -214,14 +230,16 @@ describe('DB-level invariants (integration)', () => {
       await client.get(`/inspections/${inspectionId}`, { token: orgA.ownerToken }),
       'GET /inspections/:id',
     );
-    for (const loop of loops.loops ?? []) {
-      for (let i = 0; i < (loop.requiredShotCount ?? 1); i++) {
+    // INS-081: one photo per loop item completes cycle 0 — the submit gate needs
+    // a whole cycle, and an item takes exactly one image.
+    for (const loop of loops.items ?? []) {
+      for (let i = 0; i < 1; i++) {
         expect2xx(
           await client.post(`/inspections/${inspectionId}/populate/photos`, {
             token: adminToken,
             orgId: orgA.orgId,
             body: {
-              inspectionLoopId: loop.id,
+              inspectionLoopItemId: loop.id, cycleIndex: 0,
               storageKey: `k-${tag}-${loop.id}-${i}`,
               source: 'MANUAL_UPLOAD',
               contentHash: `h-${tag}-${loop.id}-${i}`,

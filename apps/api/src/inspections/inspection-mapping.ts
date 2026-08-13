@@ -20,47 +20,49 @@ export function toDefectCounts(rows: SeverityRow[]): DefectCounts {
   return counts;
 }
 
-export interface PresetStepLike {
+export interface PresetItemLike {
   position: number;
-  zoneName: string;
+  itemName: string;
   description?: string | null;
-  referenceImageUrls: string[];
-  requiredShotCount: number;
+  referenceImageUrl?: string | null;
+}
+export interface PresetLike {
+  id: string;
+  version: number;
+  items: PresetItemLike[];
   measurementFields: Array<{ label: string; unit?: string | null }>;
   allowedDefects: Array<{
     defectCatalogId: string;
     defectCatalog: { name: string; defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR' };
   }>;
 }
-export interface PresetLike {
-  id: string;
-  version: number;
-  steps: PresetStepLike[];
-}
 
 /**
  * Resolve a preset into the immutable snapshot frozen onto an Inspection — defect
  * NAMES + severities are resolved (not just FKs) so later catalog edits cannot
  * mutate a historical inspection or its signed report (spec §6/§9).
+ *
+ * INS-081: defects and measurement fields are LOOP-GLOBAL, so they sit beside
+ * items[] rather than being duplicated into every item.
  */
 export function buildPresetSnapshot(preset: PresetLike) {
   return {
     presetId: preset.id,
     version: preset.version,
-    steps: preset.steps.map((s) => ({
-      position: s.position,
-      zoneName: s.zoneName,
-      requiredShotCount: s.requiredShotCount,
-      referenceImageUrls: s.referenceImageUrls,
-      measurementFields: s.measurementFields.map((m) => ({
-        label: m.label,
-        unit: m.unit ?? undefined,
-      })),
-      allowedDefects: s.allowedDefects.map((a) => ({
-        defectCatalogId: a.defectCatalogId,
-        name: a.defectCatalog.name,
-        severity: a.defectCatalog.defaultSeverity,
-      })),
+    items: preset.items.map((i) => ({
+      position: i.position,
+      itemName: i.itemName,
+      description: i.description ?? undefined,
+      referenceImageUrl: i.referenceImageUrl ?? undefined,
+    })),
+    measurementFields: preset.measurementFields.map((m) => ({
+      label: m.label,
+      unit: m.unit ?? undefined,
+    })),
+    allowedDefects: preset.allowedDefects.map((a) => ({
+      defectCatalogId: a.defectCatalogId,
+      name: a.defectCatalog.name,
+      severity: a.defectCatalog.defaultSeverity,
     })),
   };
 }

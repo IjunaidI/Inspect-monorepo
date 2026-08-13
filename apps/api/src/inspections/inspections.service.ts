@@ -11,6 +11,7 @@ import {
   qaDecisionToStatus,
   toDefectCounts,
 } from './inspection-mapping';
+import { cycleState } from './cycle-state';
 import { RawAqlPlanInput, resolveAqlPlan } from './aql-plan-input';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
@@ -98,20 +99,20 @@ export class InspectionsService {
         supplier: true,
         product: true,
         purchaseOrder: true,
-        // Loops carry their evidence: without these includes the populate
-        // workspace "loses" registered photos/defects/measurements on reload
-        // and report previews render empty.
-        loops: {
+        // Items carry their evidence: without these includes the populate
+        // workspace "loses" registered photos/defects on reload and report
+        // previews render empty. INS-081: measurements hang off the inspection
+        // (per cycle), not off an item, and there is no orphan-photo list —
+        // every upload targets a (item, cycle) slot.
+        items: {
           orderBy: { position: 'asc' },
           include: {
-            photos: true,
+            photos: { orderBy: { cycleIndex: 'asc' } },
             defects: { include: { defectCatalog: true } },
-            measurements: true,
           },
         },
+        measurements: { orderBy: [{ cycleIndex: 'asc' }, { label: 'asc' }] },
         assignedInspector: { select: { id: true, name: true, email: true } },
-        // Top-level photos too: not-yet-assigned uploads have no loop.
-        photos: { orderBy: { createdAt: 'asc' } },
         aqlResult: true,
         report: true,
       },
@@ -140,13 +141,9 @@ export class InspectionsService {
     const preset = await this.prisma.loopPreset.findFirst({
       where: { id: input.loopPresetId, orgId },
       include: {
-        steps: {
-          orderBy: { position: 'asc' },
-          include: {
-            measurementFields: { orderBy: { position: 'asc' } },
-            allowedDefects: { include: { defectCatalog: true } },
-          },
-        },
+        items: { orderBy: { position: 'asc' } },
+        measurementFields: { orderBy: { position: 'asc' } },
+        allowedDefects: { include: { defectCatalog: true } },
       },
     });
     if (!preset) throw new BadRequestException('loop preset not found in organization');
@@ -187,47 +184,44 @@ export class InspectionsService {
       throw new BadRequestException(e instanceof Error ? e.message : 'invalid AQL plan');
     }
 
-    // Loops are created as a second step rather than a nested `loops: { create }`
-    // write: INS-010 gave InspectionLoop a composite FK to Inspection(id, orgId)
-    // *alongside* its existing singular FK to Organization(id), and Prisma's
-    // nested-create input for a field claimed by two relations drops the raw
-    // `orgId` scalar ("Unknown argument `orgId`") — a 500 on every create, not
-    // just this one. createMany() has no such ambiguity.
-    return this.prisma.$transaction(async (tx) => {
-      const inspection = await tx.inspection.create({
-        data: {
-          orgId,
-          buyerId: po.buyerId,
-          supplierId: po.supplierId,
-          poId: po.id,
-          productId: po.productId,
-          lotSize: input.lotSize,
-          loopPresetId: preset.id,
-          loopPresetSnapshot: snapshot as unknown as Prisma.InputJsonValue,
-          aqlLevel: 'II',
-          aqlPlan: aqlPlan as unknown as Prisma.InputJsonValue,
-          computedSampling: computedSampling as unknown as Prisma.InputJsonValue,
-          assignedInspectorId: input.assignedInspectorId,
-          supersedesInspectionId: input.supersedesInspectionId,
-          clientRequestId: input.clientRequestId,
-          createdByUserId: userId,
-          status: input.assignedInspectorId ? 'ASSIGNED' : 'DRAFT',
+    // INS-010 gave the inspection's children a composite FK to Inspection(id, orgId)
+    // *alongside* their singular FK to Organization(id). Prisma's nested-create
+    // input for a scalar claimed by two relations drops the raw `orgId`
+    // ("Unknown argument `orgId`") — a 500 on every create. The fix is to set it
+    // through the relation, below; `main` independently hit the same wall and
+    // solved it with a second createMany() pass, which is equally valid.
+    return this.prisma.inspection.create({
+      data: {
+        orgId,
+        buyerId: po.buyerId,
+        supplierId: po.supplierId,
+        poId: po.id,
+        productId: po.productId,
+        lotSize: input.lotSize,
+        loopPresetId: preset.id,
+        loopPresetSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+        aqlLevel: 'II',
+        aqlPlan: aqlPlan as unknown as Prisma.InputJsonValue,
+        computedSampling: computedSampling as unknown as Prisma.InputJsonValue,
+        assignedInspectorId: input.assignedInspectorId,
+        supersedesInspectionId: input.supersedesInspectionId,
+        clientRequestId: input.clientRequestId,
+        createdByUserId: userId,
+        status: input.assignedInspectorId ? 'ASSIGNED' : 'DRAFT',
+        items: {
+          create: snapshot.items.map((i) => ({
+            position: i.position,
+            itemName: i.itemName,
+            description: i.description,
+            referenceImageUrl: i.referenceImageUrl,
+            // orgId is carried by BOTH the composite inspection FK (implied by
+            // this nesting) and the organization FK, so Prisma exposes it only
+            // through the relation — a bare `orgId` scalar is rejected here.
+            organization: { connect: { id: orgId } },
+          })),
         },
-      });
-      await tx.inspectionLoop.createMany({
-        data: snapshot.steps.map((s) => ({
-          inspectionId: inspection.id,
-          orgId,
-          position: s.position,
-          zoneName: s.zoneName,
-          requiredShotCount: s.requiredShotCount,
-          allowedDefectsSnapshot: s.allowedDefects as unknown as Prisma.InputJsonValue,
-        })),
-      });
-      return tx.inspection.findUniqueOrThrow({
-        where: { id: inspection.id },
-        include: { loops: { orderBy: { position: 'asc' } } },
-      });
+      },
+      include: { items: { orderBy: { position: 'asc' } } },
     });
   }
 
@@ -336,19 +330,37 @@ export class InspectionsService {
       throw new BadRequestException('lotSize must be set before submitting (required for AQL sampling)');
     }
 
-    // INS-056: a verdict must never be computed from missing evidence. The AQL
-    // engine folds absent counts to zero, so an empty inspection would otherwise
-    // mint a PASS — refuse to submit while any loop lacks its required photos.
-    const loops = await this.prisma.inspectionLoop.findMany({
+    // INS-056 + INS-081: a verdict must never be computed from missing evidence.
+    // The AQL engine folds absent counts to zero, so an empty inspection would
+    // otherwise mint a PASS. The rule is now cycle-shaped: at least one complete
+    // pass over every loop item, and no half-finished unit left behind.
+    const items = await this.prisma.inspectionLoopItem.findMany({
       where: { inspectionId: id },
-      select: { zoneName: true, requiredShotCount: true, _count: { select: { photos: true } } },
+      select: { id: true, position: true, itemName: true },
       orderBy: { position: 'asc' },
     });
-    const short = loops.filter((l) => l._count.photos < l.requiredShotCount);
-    if (short.length > 0) {
-      const detail = short.map((l) => `${l.zoneName} (${l._count.photos}/${l.requiredShotCount})`).join(', ');
+    const slots = await this.prisma.photo.findMany({
+      where: { inspectionId: id },
+      select: { inspectionLoopItemId: true, cycleIndex: true },
+    });
+    const state = cycleState(items, slots);
+    if (state.completedCycles === 0) {
       throw new BadRequestException(
-        `Cannot submit: photo evidence incomplete — ${detail}. Upload the required shots first.`,
+        'Cannot submit: no complete unit has been photographed. Shoot every loop item at least once.',
+      );
+    }
+    if (state.partialCycles.length > 0) {
+      const nameById = new Map(items.map((i) => [i.id, i.itemName]));
+      const detail = state.partialCycles
+        .map(
+          (pc) =>
+            `unit ${pc.cycleIndex + 1} (missing ${pc.missingItemIds
+              .map((itemId) => nameById.get(itemId) ?? itemId)
+              .join(', ')})`,
+        )
+        .join('; ');
+      throw new BadRequestException(
+        `Cannot submit: incomplete ${detail}. Finish or discard it before submitting.`,
       );
     }
 

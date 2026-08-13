@@ -82,24 +82,31 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
       }),
       `POST /inspections (${suffix})`,
     );
-    return { id: created.id, loopId: created.loops[0].id };
+    return { id: created.id, loopId: created.items[0].id };
   }
 
-  function photoBody(inspectionLoopId: string, clientRequestId: string, seed: string) {
+  function photoBody(
+    inspectionLoopItemId: string,
+    clientRequestId: string,
+    seed: string,
+    cycleIndex = 0,
+  ) {
     return {
       storageKey: `e2e/${tag}/${seed}.jpg`,
       contentHash: createHash('sha256').update(`${tag}-${seed}`).digest('hex'),
-      inspectionLoopId,
+      inspectionLoopItemId,
+      cycleIndex,
       clientRequestId,
     };
   }
 
-  function defectBody(inspectionLoopId: string, clientRequestId: string) {
+  function defectBody(inspectionLoopItemId: string, clientRequestId: string, cycleIndex = 0) {
     return {
       ...(ws.minorDefectId
         ? { defectCatalogId: ws.minorDefectId }
         : { customText: `Loose thread (${tag})`, severity: 'MINOR' }),
-      inspectionLoopId,
+      inspectionLoopItemId,
+      cycleIndex,
       clientRequestId,
       notes: 'populate-invariants',
     };
@@ -214,9 +221,10 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
         token: adminToken,
         body: photoBody(loopA, `${PHOTO_CRID}-late`, 'late'),
       }),
-      client.patch(`/inspections/${inspA}/populate/photos/${photoAId}/loop`, {
+      // INS-081: retake replaces assign-to-loop as the post-registration write.
+      client.post(`/inspections/${inspA}/populate/photos/${photoAId}/retake`, {
         token: adminToken,
-        body: { inspectionLoopId: loopA },
+        body: { storageKey: `e2e/${tag}/late-retake.jpg`, contentHash: 'f'.repeat(64) },
       }),
       client.post(`/inspections/${inspA}/populate/defects`, {
         token: adminToken,
@@ -224,7 +232,7 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
       }),
       client.post(`/inspections/${inspA}/populate/measurements`, {
         token: adminToken,
-        body: { inspectionLoopId: loopA, label: 'Late', recordedValue: '1', unit: 'cm' },
+        body: { cycleIndex: 0, label: 'Late', recordedValue: '1', unit: 'cm' },
       }),
     ]);
     for (const res of attempts) {

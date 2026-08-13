@@ -4,20 +4,21 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { apiPost, apiDelete, ApiError } from '@/lib/api';
 
-export interface PresetStepInput {
-  zoneName: string;
+/** INS-081: one ordered capture point taking exactly one image. */
+export interface PresetItemInput {
+  itemName: string;
   description?: string;
-  referenceImageUrls?: string[];
-  requiredShotCount?: number;
-  measurementFields?: { label: string; unit?: string }[];
-  allowedDefectCatalogIds?: string[];
+  referenceImageUrl?: string;
 }
 
 export interface CreatePresetInput {
   name: string;
   description?: string;
   aqlLevel?: string;
-  steps: PresetStepInput[];
+  items: PresetItemInput[];
+  /** Loop-global (INS-081) — defined once for the whole loop, not per item. */
+  measurementFields?: { label: string; unit?: string }[];
+  allowedDefectCatalogIds?: string[];
 }
 
 const msg = (e: unknown, fb: string) =>
@@ -27,9 +28,9 @@ export async function createPreset(
   input: CreatePresetInput,
 ): Promise<{ error?: string }> {
   if (!input.name.trim()) return { error: 'Preset name is required' };
-  if (!input.steps.length) return { error: 'Add at least one loop' };
-  for (const s of input.steps) {
-    if (!s.zoneName.trim()) return { error: 'Each loop must have a name' };
+  if (!input.items.length) return { error: 'Add at least one loop item' };
+  for (const it of input.items) {
+    if (!it.itemName.trim()) return { error: 'Each loop item must have a name' };
   }
   try {
     await apiPost<{ id: string }>('/loop-presets', input);

@@ -41,19 +41,17 @@ export class LoopPresetsController {
     const refPrefix = `orgs/${orgId}/presets/`;
     return {
       ...preset,
-      steps: preset.steps?.map((step) => ({
-        ...step,
-        referenceImages: (step.referenceImageUrls ?? []).map((key: string) => {
-          if (typeof key !== 'string' || !key.startsWith(refPrefix)) {
-            return { key, viewUrl: null as string | null };
-          }
-          try {
-            return { key, viewUrl: this.storage.presignDownload(key) };
-          } catch {
-            return { key, viewUrl: null as string | null };
-          }
-        }),
-      })),
+      items: preset.items?.map((item) => {
+        const key = item.referenceImageUrl;
+        if (typeof key !== 'string' || !key.startsWith(refPrefix)) {
+          return { ...item, referenceImage: null as { key: string; viewUrl: string | null } | null };
+        }
+        try {
+          return { ...item, referenceImage: { key, viewUrl: this.storage.presignDownload(key) } };
+        } catch {
+          return { ...item, referenceImage: { key, viewUrl: null as string | null } };
+        }
+      }),
     };
   }
 

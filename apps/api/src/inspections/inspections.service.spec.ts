@@ -12,9 +12,15 @@ const PLATFORM_ADMIN_ACTOR: AuthUser = {
   actingAsOrgId: 'org1',
 };
 
+/** INS-081 default: a single-item loop with one complete cycle, so tests that
+ *  are not about the completeness gate can submit without restating evidence. */
+const DEFAULT_ITEMS = [{ id: 'i1', position: 1, itemName: 'Front' }];
+const DEFAULT_PHOTOS = [{ inspectionLoopItemId: 'i1', cycleIndex: 0 }];
+
 interface MakeOpts {
   inspection?: Record<string, unknown>;
-  loops?: Array<{ zoneName: string; requiredShotCount: number; _count: { photos: number } }>;
+  items?: Array<{ id: string; position: number; itemName: string }>;
+  photos?: Array<{ inspectionLoopItemId: string; cycleIndex: number }>;
   users?: Array<{ email: string }>;
   /** Defect rows as prisma.defectInstance.groupBy returns them (drives the AQL verdict). */
   defects?: Array<{ severity: string; _count: { _all: number } }>;
@@ -48,7 +54,8 @@ function makeService(opts: MakeOpts = {}) {
   };
   const prisma = {
     inspection: { findFirst: jest.fn(async () => inspection) },
-    inspectionLoop: { findMany: jest.fn(async () => opts.loops ?? []) },
+    inspectionLoopItem: { findMany: jest.fn(async () => opts.items ?? DEFAULT_ITEMS) },
+    photo: { findMany: jest.fn(async () => opts.photos ?? DEFAULT_PHOTOS) },
     defectInstance: { groupBy: jest.fn(async () => opts.defects ?? []) },
     user: { findMany: jest.fn(async () => opts.users ?? []) },
     $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
@@ -63,39 +70,72 @@ function makeService(opts: MakeOpts = {}) {
   return { service, prisma, tx, audit, mail };
 }
 
-describe('InspectionsService.submit — completeness gate (INS-056)', () => {
-  it('rejects submit while a loop lacks its required photos, naming the short loops', async () => {
-    const { service, prisma } = makeService({
-      loops: [
-        { zoneName: 'Front', requiredShotCount: 2, _count: { photos: 1 } },
-        { zoneName: 'Collar', requiredShotCount: 1, _count: { photos: 1 } },
-      ],
-    });
+describe('InspectionsService.submit — cycle gate (INS-056 / INS-081)', () => {
+  const ITEMS = [
+    { id: 'a', position: 1, itemName: 'Right sleeve' },
+    { id: 'b', position: 2, itemName: 'Neck hole' },
+  ];
+
+  it('refuses an inspection with no complete unit', async () => {
+    const { service, prisma } = makeService({ items: ITEMS, photos: [] });
     await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
-      /photo evidence incomplete.*Front \(1\/2\)/,
+      'Cannot submit: no complete unit has been photographed',
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it('submits when every loop meets its required shot count', async () => {
+  it('refuses a partial unit and names the unit and its missing items', async () => {
     const { service, prisma } = makeService({
-      loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }],
+      items: ITEMS,
+      photos: [
+        { inspectionLoopItemId: 'a', cycleIndex: 0 },
+        { inspectionLoopItemId: 'b', cycleIndex: 0 },
+        { inspectionLoopItemId: 'a', cycleIndex: 1 },
+      ],
+    });
+    await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
+      'unit 2 (missing Neck hole)',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('submits when every started unit is complete', async () => {
+    const { service, prisma } = makeService({
+      items: ITEMS,
+      photos: [
+        { inspectionLoopItemId: 'a', cycleIndex: 0 },
+        { inspectionLoopItemId: 'b', cycleIndex: 0 },
+      ],
     });
     await service.submit('org1', QA, 'insp1', {});
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
-  it('an inspection with no loops still submits (nothing to be short of)', async () => {
-    const { service, prisma } = makeService({ loops: [] });
+  it('under-shooting the AQL sample size is allowed — n is a target, not a gate', async () => {
+    // lotSize 500 -> sample size 50; one complete unit still submits.
+    const { service, prisma } = makeService({
+      items: ITEMS,
+      photos: [
+        { inspectionLoopItemId: 'a', cycleIndex: 0 },
+        { inspectionLoopItemId: 'b', cycleIndex: 0 },
+      ],
+    });
     await service.submit('org1', QA, 'insp1', {});
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('an inspection with no loop items can no longer submit (INS-081 strengthens INS-056)', async () => {
+    const { service, prisma } = makeService({ items: [], photos: [] });
+    await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
+      'no complete unit has been photographed',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 
 describe('InspectionsService — status-change notifications (INS-069)', () => {
   it('submit mails every returned reviewer with the PO + inspection id', async () => {
     const { service, mail, prisma } = makeService({
-      loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }],
       users: [{ email: 'qa1@x.com' }, { email: 'owner@x.com' }],
     });
     await service.submit('org1', QA, 'insp1', {});
@@ -167,7 +207,6 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
 describe('InspectionsService.submit — audit attribution (INS-079)', () => {
   it('appends actorType USER for an ordinary org actor', async () => {
     const { service, audit } = makeService({
-      loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }],
     });
     await service.submit('org1', QA, 'insp1', {});
     expect(audit.append).toHaveBeenCalledWith(
@@ -180,7 +219,6 @@ describe('InspectionsService.submit — audit attribution (INS-079)', () => {
   // the literal 'USER' still satisfies every other assertion in this file.
   it('attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
     const { service, audit } = makeService({
-      loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }],
     });
     await service.submit('org1', PLATFORM_ADMIN_ACTOR, 'insp1', {});
     expect(audit.append).toHaveBeenCalledWith(
@@ -235,18 +273,13 @@ const PO = { id: 'po1', orgId: 'org1', buyerId: 'b1', supplierId: 's1', productI
 const PRESET = {
   id: 'preset1',
   version: 3,
-  steps: [
-    {
-      position: 1,
-      zoneName: 'Front',
-      description: null,
-      referenceImageUrls: ['ref1'],
-      requiredShotCount: 2,
-      measurementFields: [{ label: 'Length', unit: 'cm' }],
-      allowedDefects: [
-        { defectCatalogId: 'd1', defectCatalog: { name: 'Broken stitch', defaultSeverity: 'MAJOR' } },
-      ],
-    },
+  items: [
+    { position: 1, itemName: 'Front', description: null, referenceImageUrl: 'ref1' },
+    { position: 2, itemName: 'Back', description: null, referenceImageUrl: null },
+  ],
+  measurementFields: [{ label: 'Length', unit: 'cm' }],
+  allowedDefects: [
+    { defectCatalogId: 'd1', defectCatalog: { name: 'Broken stitch', defaultSeverity: 'MAJOR' } },
   ],
 };
 
@@ -259,15 +292,11 @@ interface CreateOpts {
 }
 
 function makeCreateService(opts: CreateOpts = {}) {
-  const inspection = {
-    findFirst: jest.fn(async () => opts.existingInspection ?? null),
-    create: jest.fn(async () => ({ id: 'insp-new' })),
-    findUniqueOrThrow: jest.fn(async () => ({ id: 'insp-new', loops: [] })),
-  };
-  const inspectionLoop = { createMany: jest.fn(async () => ({ count: 1 })) };
   const prisma = {
-    inspection,
-    inspectionLoop,
+    inspection: {
+      findFirst: jest.fn(async () => opts.existingInspection ?? null),
+      create: jest.fn(async () => ({ id: 'insp-new', items: [] })),
+    },
     purchaseOrder: { findFirst: jest.fn(async () => (opts.po === undefined ? PO : opts.po)) },
     loopPreset: { findFirst: jest.fn(async () => (opts.preset === undefined ? PRESET : opts.preset)) },
     user: {
@@ -275,7 +304,6 @@ function makeCreateService(opts: CreateOpts = {}) {
         opts.inspector === undefined ? { id: 'u-insp', orgId: 'org1' } : opts.inspector,
       ),
     },
-    $transaction: jest.fn(async (fn: (t: unknown) => Promise<unknown>) => fn({ inspection, inspectionLoop })),
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const service = new InspectionsService(prisma as any, { append: jest.fn() } as any, {} as any);
@@ -301,39 +329,50 @@ function createdData(prisma: { inspection: { create: jest.Mock } }): any {
 const baseInput = { poId: 'po1', loopPresetId: 'preset1', lotSize: 1000 };
 
 describe('InspectionsService.create — snapshot + computed sampling (INS-021)', () => {
-  it('freezes the resolved preset snapshot (names + severities, not just FKs) and mirrors it into loops', async () => {
+  it('freezes the resolved preset snapshot (names + severities, not just FKs) and mirrors it into items', async () => {
     const { service, prisma } = makeCreateService();
     await service.create('org1', 'u-qa', baseInput);
     const data = createdData(prisma);
     expect(data.loopPresetSnapshot.presetId).toBe('preset1');
     expect(data.loopPresetSnapshot.version).toBe(3);
-    expect(data.loopPresetSnapshot.steps[0].allowedDefects[0]).toEqual({
+    // INS-081: defects are loop-global on the snapshot, not nested per item.
+    expect(data.loopPresetSnapshot.allowedDefects[0]).toEqual({
       defectCatalogId: 'd1',
       name: 'Broken stitch',
       severity: 'MAJOR',
     });
-    expect(firstArg(prisma.inspectionLoop.createMany).data).toEqual([
+    // orgId rides through the relation, not as a scalar — Prisma rejects the
+    // bare column when two relations claim it (see the service comment).
+    expect(data.items.create).toEqual([
       expect.objectContaining({
-        inspectionId: 'insp-new',
-        orgId: 'org1',
         position: 1,
-        zoneName: 'Front',
-        requiredShotCount: 2,
+        itemName: 'Front',
+        organization: { connect: { id: 'org1' } },
+      }),
+      expect.objectContaining({
+        position: 2,
+        itemName: 'Back',
+        organization: { connect: { id: 'org1' } },
       }),
     ]);
   });
 
   /*
-   * Regression guard: loops must NOT be written as a nested `loops: { create }`.
-   * InspectionLoop.orgId is claimed by two relations after INS-010 (the composite
-   * FK to Inspection(id, orgId) and the FK to Organization), and Prisma rejects
-   * the raw orgId scalar in that nested input — a 500 on every single create.
+   * Regression guard (carried over from main, re-pointed at the INS-081 shape):
+   * InspectionLoopItem.orgId is claimed by TWO relations after INS-010 — the
+   * composite FK to Inspection(id, orgId) and the FK to Organization — so Prisma
+   * rejects a raw `orgId` scalar in the nested create ("Unknown argument
+   * `orgId`"), which is a 500 on every single inspection create. It must ride
+   * through the relation instead. Only a live DB caught this the first time.
    */
-  it('writes loops via a separate createMany, never nested under inspection.create', async () => {
+  it('never passes a bare orgId scalar in the nested item create', async () => {
     const { service, prisma } = makeCreateService();
     await service.create('org1', 'u-qa', baseInput);
-    expect(createdData(prisma).loops).toBeUndefined();
-    expect(prisma.inspectionLoop.createMany).toHaveBeenCalledTimes(1);
+    const created = createdData(prisma).items.create as Array<Record<string, unknown>>;
+    for (const item of created) {
+      expect(item).not.toHaveProperty('orgId');
+      expect(item.organization).toEqual({ connect: { id: 'org1' } });
+    }
   });
 
   it('computes the sampling from the lot size and locks the level to II (lot 1000 -> code J, n 80)', async () => {
@@ -453,7 +492,7 @@ describe('InspectionsService.create — per-class AQL configuration (INS-063)', 
 // ── submit(): evaluate -> AqlResult + BillableEvent + lock (INS-021 / INS-018) ──
 
 describe('InspectionsService.submit — lifecycle (INS-021)', () => {
-  const ready = { loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }] };
+  const ready = {};
 
   it('locks the inspection: SUBMITTED + submittedAt + tamperProof + the re-derived sampling', async () => {
     const { service, tx } = makeService(ready);
@@ -525,7 +564,7 @@ describe('InspectionsService.submit — lifecycle (INS-021)', () => {
 });
 
 describe('InspectionsService.submit — billable linkage (INS-018)', () => {
-  const ready = { loops: [{ zoneName: 'Front', requiredShotCount: 1, _count: { photos: 1 } }] };
+  const ready = {};
   const supersedingInspection = {
     id: 'insp1',
     orgId: 'org1',

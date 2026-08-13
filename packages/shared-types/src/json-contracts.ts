@@ -57,25 +57,33 @@ export interface TamperProofBlock {
   gps?: GpsPoint;
 }
 
-/** One resolved step inside Inspection.loopPresetSnapshot (immutable, spec §6). */
-export interface LoopPresetSnapshotStep {
+/**
+ * One resolved loop ITEM inside Inspection.loopPresetSnapshot (immutable, spec §6).
+ * INS-081: an item is a single capture point taking exactly one image — there is
+ * no shot count, and no per-item defect or measurement list.
+ */
+export interface LoopPresetSnapshotItem {
   position: number;
-  zoneName: string;
-  requiredShotCount: number;
-  referenceImageUrls: string[];
-  measurementFields: Array<{ label: string; unit?: string }>;
-  /** Resolved (not just FK) so later catalog edits cannot mutate history. */
-  allowedDefects: Array<{
-    defectCatalogId?: string;
-    name: string;
-    severity: DefectSeverity;
-  }>;
+  itemName: string;
+  description?: string;
+  referenceImageUrl?: string;
 }
 
 export interface LoopPresetSnapshot {
   presetId?: string;
   version?: number;
-  steps: LoopPresetSnapshotStep[];
+  items: LoopPresetSnapshotItem[];
+  /** INS-081: LOOP-GLOBAL — the sheet filled once per cycle. */
+  measurementFields: Array<{ label: string; unit?: string }>;
+  /**
+   * INS-081: LOOP-GLOBAL taggable defects. Resolved (not just FK) so later
+   * catalog edits cannot mutate history.
+   */
+  allowedDefects: Array<{
+    defectCatalogId?: string;
+    name: string;
+    severity: DefectSeverity;
+  }>;
 }
 
 /** Report.brandingSnapshot — frozen buyer theme at generation (spec §10). */

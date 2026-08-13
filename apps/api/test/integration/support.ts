@@ -172,9 +172,19 @@ export interface WorkspaceFixture {
   poId: string;
   presetId: string;
   minorDefectId: string | null;
+  /** INS-081: the preset's ordered single-image loop items. */
+  presetItems: Array<{ id: string; position: number; itemName: string }>;
 }
 
-/** Buyer + supplier + product + PO + a one-zone loop preset (MINOR defect allowed). */
+/**
+ * Buyer + supplier + product + PO + a ONE-item loop preset with a loop-global
+ * MINOR defect tag and measurement sheet (INS-081).
+ *
+ * Deliberately one item: a single-item loop completes a cycle with one upload,
+ * so every other spec keeps its existing "upload one photo, submit" shape. The
+ * multi-item cycle semantics (partial cycles, discard, the end gate) are covered
+ * by populate-cycles.e2e-spec.ts, which builds its own two-item preset.
+ */
 export async function createWorkspace(
   client: ApiClient,
   ownerToken: string,
@@ -218,14 +228,9 @@ export async function createWorkspace(
       body: {
         name: `E2E Loop ${tag}`,
         aqlLevel: 'II',
-        steps: [
-          {
-            zoneName: 'Front',
-            requiredShotCount: 1,
-            measurementFields: [{ label: 'Length', unit: 'cm' }],
-            allowedDefectCatalogIds: minor ? [minor.id] : [],
-          },
-        ],
+        items: [{ itemName: 'Front' }],
+        measurementFields: [{ label: 'Length', unit: 'cm' }],
+        allowedDefectCatalogIds: minor ? [minor.id] : [],
       },
     }),
     'POST /loop-presets',
@@ -237,6 +242,7 @@ export async function createWorkspace(
     poId: po.id,
     presetId: preset.id,
     minorDefectId: minor ? minor.id : null,
+    presetItems: preset.items ?? [],
   };
 }
 

@@ -79,7 +79,7 @@ describe('Core inspection loop (integration)', () => {
       'POST /inspections',
     );
     inspectionId = inspection.id;
-    loopId = inspection.loops?.[0]?.id;
+    loopId = inspection.items?.[0]?.id;
     expect(inspectionId).toBeTruthy();
     expect(loopId).toBeTruthy();
     expect(inspection.computedSampling?.sampleSizeCodeLetter).toBe('J');
@@ -102,7 +102,7 @@ describe('Core inspection loop (integration)', () => {
     expect(replay.id).toBe(inspectionId);
   });
 
-  it('populates as the cross-tenant Platform Admin: presign, register, assign, tag, measure', async () => {
+  it('populates as the cross-tenant Platform Admin: presign, register into a slot, tag, measure', async () => {
     const presign = expect2xx(
       await client.post(`/inspections/${inspectionId}/populate/photos/presign`, {
         token: adminToken,
@@ -120,7 +120,7 @@ describe('Core inspection loop (integration)', () => {
         body: {
           storageKey: presign.storageKey,
           contentHash,
-          inspectionLoopId: loopId,
+          inspectionLoopItemId: loopId, cycleIndex: 0,
           clientRequestId: `photo-${tag}`,
         },
       }),
@@ -129,19 +129,14 @@ describe('Core inspection loop (integration)', () => {
     photoId = photo.id;
     expect(photoId).toBeTruthy();
 
-    expect2xx(
-      await client.patch(`/inspections/${inspectionId}/populate/photos/${photoId}/loop`, {
-        token: adminToken,
-        body: { inspectionLoopId: loopId },
-      }),
-      'populate assign photo to loop',
-    );
+    // INS-081: registration already placed the photo in its slot — the old
+    // assign-to-loop step no longer exists.
 
     const defectBody = {
       ...(ws.minorDefectId
         ? { defectCatalogId: ws.minorDefectId, notes: 'e2e' }
         : { customText: 'Loose thread (e2e)', severity: 'MINOR' }),
-      inspectionLoopId: loopId,
+      inspectionLoopItemId: loopId, cycleIndex: 0,
       photoIds: [photoId],
       clientRequestId: `defect-${tag}`,
     };
@@ -168,7 +163,7 @@ describe('Core inspection loop (integration)', () => {
     const measurement = expect2xx(
       await client.post(`/inspections/${inspectionId}/populate/measurements`, {
         token: adminToken,
-        body: { inspectionLoopId: loopId, label: 'Length', recordedValue: '42.0', unit: 'cm' },
+        body: { cycleIndex: 0, label: 'Length', recordedValue: '42.0', unit: 'cm' },
       }),
       'populate record measurement',
     );
@@ -180,12 +175,15 @@ describe('Core inspection loop (integration)', () => {
       await client.get(`/inspections/${inspectionId}`, { token: org.ownerToken }),
       'GET /inspections/:id (evidence includes)',
     );
-    const loop = detail.loops?.find((l: { id: string }) => l.id === loopId);
+    const loop = detail.items?.find((l: { id: string }) => l.id === loopId);
     expect(loop).toBeTruthy();
     expect(loop.photos?.some((p: { id: string }) => p.id === photoId)).toBe(true);
     // Exactly one: the INS-044 replay above must not have created a duplicate.
     expect(loop.defects?.length).toBe(1);
-    expect(loop.measurements?.some((m: { label: string }) => m.label === 'Length')).toBe(true);
+    // INS-081: measurements are per-CYCLE and hang off the inspection, not the item.
+    expect(
+      detail.measurements?.some((m: { label: string; cycleIndex: number }) => m.label === 'Length' && m.cycleIndex === 0),
+    ).toBe(true);
   });
 
   it('submit runs the AQL evaluation: 1 MINOR on code J -> SUBMITTED with PASS recommendation', async () => {
@@ -203,7 +201,7 @@ describe('Core inspection loop (integration)', () => {
   it('rejects populate writes once the inspection is locked (immutability)', async () => {
     const res = await client.post(`/inspections/${inspectionId}/populate/measurements`, {
       token: adminToken,
-      body: { inspectionLoopId: loopId, label: 'Late', recordedValue: '1', unit: 'cm' },
+      body: { cycleIndex: 0, label: 'Late', recordedValue: '1', unit: 'cm' },
     });
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.status).toBeLessThan(500);

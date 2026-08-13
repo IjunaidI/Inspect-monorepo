@@ -334,7 +334,7 @@ export interface ApiLoopPreset {
   isArchived: boolean;
   updatedAt?: string;
   /** INS-005 list aggregates — present on GET /loop-presets rows. */
-  _count?: { steps: number; inspections: number; defaultForBuyers: number };
+  _count?: { items: number; inspections: number; defaultForBuyers: number };
 }
 
 export interface ApiMeasurementField {
@@ -351,7 +351,8 @@ export interface ApiMeasurementField {
  * `key={undefined}` on every rendered chip.
  */
 export interface ApiAllowedDefect {
-  presetLoopStepId: string;
+  /** INS-081: the junction is loop-global; its PK is (loopPresetId, defectCatalogId) — there is no `id`. */
+  loopPresetId: string;
   defectCatalogId: string;
   defectCatalog: {
     id: string;
@@ -360,21 +361,22 @@ export interface ApiAllowedDefect {
   };
 }
 
-export interface ApiPresetStep {
+/** INS-081: one ordered capture point taking exactly one image. */
+export interface ApiPresetItem {
   id: string;
-  zoneName: string;
+  itemName: string;
   description?: string | null;
-  referenceImageUrls: string[];
-  requiredShotCount: number;
+  referenceImageUrl?: string | null;
   position: number;
-  measurementFields: ApiMeasurementField[];
-  allowedDefects: ApiAllowedDefect[];
-  /** Present on GET /loop-presets/:id — reference image keys decorated with short-lived view URLs (INS-052). */
-  referenceImages?: { key: string; viewUrl: string | null }[];
+  /** Present on GET /loop-presets/:id — the key decorated with a short-lived view URL (INS-052). */
+  referenceImage?: { key: string; viewUrl: string | null } | null;
 }
 
 export interface ApiLoopPresetDetail extends ApiLoopPreset {
-  steps: ApiPresetStep[];
+  items: ApiPresetItem[];
+  /** INS-081: both are LOOP-GLOBAL — defined once, not per item. */
+  measurementFields: ApiMeasurementField[];
+  allowedDefects: ApiAllowedDefect[];
 }
 
 export interface ApiDefectCatalog {
@@ -413,7 +415,20 @@ export interface ApiInspection {
   /** Present on GET /inspections/:id (safe select: id/name/email). */
   assignedInspector?: { id: string; name: string | null; email: string } | null;
   createdAt?: string;
-  loops?: ApiInspectionLoop[];
+  /** INS-081: the loop's ordered single-image items, each carrying its photos. */
+  items?: ApiInspectionLoopItem[];
+  /** Per-unit measurement values (loop-global sheet). */
+  measurements?: ApiMeasurement[];
+  /** Server-computed completeness — the same rule submit() enforces. */
+  cycleState?: ApiCycleState;
+  /** Frozen at creation; carries the loop-global measurement sheet + defect tags. */
+  loopPresetSnapshot?: {
+    presetId: string;
+    version: number;
+    items: { position: number; itemName: string; description?: string; referenceImageUrl?: string }[];
+    measurementFields: { label: string; unit?: string }[];
+    allowedDefects: { defectCatalogId: string; name: string; severity: 'CRITICAL' | 'MAJOR' | 'MINOR' }[];
+  } | null;
   inspectorId?: string | null;
   /** Scalar FK on list rows (INS-057) — assignedInspector object only on GET /:id. */
   assignedInspectorId?: string | null;
@@ -443,7 +458,9 @@ export interface PresignResult {
 export interface RegisterPhotoInput {
   storageKey: string;
   contentHash: string;
-  inspectionLoopId?: string;
+  /** INS-081: every upload targets a slot — (loop item, cycle). Both required. */
+  inspectionLoopItemId: string;
+  cycleIndex: number;
   thumbnailKey?: string;
   capturedAt?: string;
   deviceId?: string;
@@ -452,17 +469,26 @@ export interface RegisterPhotoInput {
   clientRequestId?: string;
 }
 
+/** INS-081: replace the bytes in an occupied slot, keeping the slot itself. */
+export interface RetakePhotoInput {
+  storageKey: string;
+  contentHash: string;
+}
+
 export interface AddDefectInput {
   defectCatalogId?: string;
   customText?: string;
   severity?: 'CRITICAL' | 'MAJOR' | 'MINOR';
-  inspectionLoopId?: string;
+  /** INS-081: the tag list is loop-global, but the instance pins to a slot. */
+  inspectionLoopItemId: string;
+  cycleIndex: number;
   notes?: string;
   photoIds?: string[];
 }
 
 export interface AddMeasurementInput {
-  inspectionLoopId: string;
+  /** INS-081: the sheet is loop-global and filled once per unit. */
+  cycleIndex: number;
   label: string;
   recordedValue?: string;
   unit?: string;
@@ -473,7 +499,8 @@ export interface ApiPhoto {
   id: string;
   storageKey: string;
   contentHash?: string | null;
-  inspectionLoopId?: string | null;
+  inspectionLoopItemId: string;
+  cycleIndex: number;
   capturedAt?: string | null;
   clientRequestId?: string | null;
   /** Short-lived presigned GET URL (INS-049) — present on GET /inspections/:id; null when presign fails. */
@@ -492,7 +519,8 @@ export interface ApiDefectInstance {
   severity: 'CRITICAL' | 'MAJOR' | 'MINOR';
   defectCatalog?: { id: string; name: string } | null;
   customText?: string | null;
-  inspectionLoopId?: string | null;
+  inspectionLoopItemId?: string | null;
+  cycleIndex?: number | null;
   notes?: string | null;
 }
 
@@ -501,18 +529,31 @@ export interface ApiMeasurement {
   label: string;
   recordedValue?: string | null;
   unit?: string | null;
-  inspectionLoopId?: string | null;
+  /** INS-081: a measurement belongs to a unit, not to a loop item. */
+  cycleIndex: number;
 }
 
-export interface ApiInspectionLoop {
+export interface ApiInspectionLoopItem {
   id: string;
   /** Wire names are the Prisma-native columns (INS-064) — do NOT re-alias. */
-  zoneName: string;
+  itemName: string;
   position: number;
-  requiredShotCount: number;
+  description?: string | null;
+  referenceImageUrl?: string | null;
   photos?: ApiPhoto[];
   defects?: ApiDefectInstance[];
-  measurements?: ApiMeasurement[];
+}
+
+/**
+ * INS-081: the server-computed cycle state. The console renders exactly the rule
+ * the submit guard enforces — a divergence is how a half-shot unit would reach a
+ * signed report, so this is never recomputed client-side.
+ */
+export interface ApiCycleState {
+  completedCycles: number;
+  partialCycles: { cycleIndex: number; missingItemIds: string[] }[];
+  nextSlot: { cycleIndex: number; itemId: string } | null;
+  totalPhotos: number;
 }
 
 export interface ApiReport {

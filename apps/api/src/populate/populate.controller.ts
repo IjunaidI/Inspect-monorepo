@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import {
   AddDefectInput,
   AddMeasurementInput,
   PopulateService,
   PresignInput,
   RegisterPhotoInput,
+  RetakePhotoInput,
 } from './populate.service';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -44,14 +45,25 @@ export class PopulateController {
     return this.populate.registerPhoto(inspectionId, user, body);
   }
 
-  @Patch('photos/:photoId/loop')
-  assign(
+  /** INS-081: replace the bytes in an occupied slot. Pre-submit only. */
+  @Post('photos/:photoId/retake')
+  retake(
     @CurrentUser() user: AuthUser,
     @Param('inspectionId') inspectionId: string,
     @Param('photoId') photoId: string,
-    @Body() body: { inspectionLoopId: string },
+    @Body() body: RetakePhotoInput,
   ) {
-    return this.populate.assignPhotoToLoop(inspectionId, user, photoId, body?.inspectionLoopId);
+    return this.populate.retakePhoto(inspectionId, user, photoId, body);
+  }
+
+  /** INS-081: discard a whole unit — the "remove" half of the end-of-loop rule. */
+  @Delete('cycles/:cycleIndex')
+  discardCycle(
+    @CurrentUser() user: AuthUser,
+    @Param('inspectionId') inspectionId: string,
+    @Param('cycleIndex') cycleIndex: string,
+  ) {
+    return this.populate.discardCycle(inspectionId, user, Number(cycleIndex));
   }
 
   @Post('defects')
