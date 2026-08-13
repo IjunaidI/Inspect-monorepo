@@ -46,19 +46,26 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
     re: r?.perClass?.[sev]?.re ?? 0,
   }));
 
-  const photos: BrandedReportData['photos'] = (inspection.loops ?? [])
-    .filter((l) => (l.photos?.length ?? 0) > 0)
-    .map((l) => ({
-      loop: l.zoneName,
-      shots: l.photos ?? [],
-      flaggedCount: (l.defects ?? []).filter((d) => d.severity === 'MAJOR').length,
+  // INS-081: evidence groups by loop ITEM (each holding one shot per unit).
+  const photos: BrandedReportData['photos'] = (inspection.items ?? [])
+    .filter((i) => (i.photos?.length ?? 0) > 0)
+    .map((i) => ({
+      loop: i.itemName,
+      shots: i.photos ?? [],
+      flaggedCount: (i.defects ?? []).filter((d) => d.severity === 'MAJOR').length,
     }));
 
-  const measurements: BrandedReportData['measurements'] = (inspection.loops ?? [])
-    .filter((l) => (l.measurements?.length ?? 0) > 0)
-    .map((l) => ({
-      loop: l.zoneName,
-      items: l.measurements ?? [],
+  // INS-081: the measurement sheet is loop-global and recorded per UNIT, so it
+  // groups by cycle rather than by item.
+  const byCycle = new Map<number, NonNullable<typeof inspection.measurements>>();
+  for (const m of inspection.measurements ?? []) {
+    byCycle.set(m.cycleIndex, [...(byCycle.get(m.cycleIndex) ?? []), m]);
+  }
+  const measurements: BrandedReportData['measurements'] = [...byCycle.keys()]
+    .sort((a, b) => a - b)
+    .map((cycleIndex) => ({
+      loop: `Unit ${cycleIndex + 1}`,
+      items: byCycle.get(cycleIndex) ?? [],
     }));
 
   return {
