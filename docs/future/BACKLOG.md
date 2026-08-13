@@ -54,6 +54,14 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 
 ## High
 
+### INS-081 · Loop model reshaped: one loop of single-image items, populate cycles per unit   [HIGH]
+- status: done            # 2026-08-13: a preset IS one loop holding ordered single-image loop items; populate walks them repeatedly (one cycle per inspected unit) and can only be ended on a cycle boundary — finish the unit or discard it. Defect tags and the measurement sheet moved up to loop level; recorded defects pin to (cycle, item) and measurements to a cycle. Retake replaces a slot's bytes in place with both content hashes in the audit chain. `@@unique([inspectionLoopItemId, cycleIndex])` makes one-image-per-slot a DB guarantee. Destructive clean-break migration (spec §9) applied to the Railway dev DB. 565 unit tests + 129 integration tests + the 24-step smoke loop green.
+- area: Loop presets + populate + reports (schema, API, web)
+- evidence: presets held many loops each demanding `requiredShotCount` photos with their own defect list (`schema.prisma:399`, `builder.tsx:169`); populate was a free-click sidebar with no notion of a unit (`populate-workspace.tsx:70`); submit only checked `photos >= requiredShotCount` per loop (`inspections.service.ts:335`), so a half-photographed garment could be submitted.
+- fix: PresetLoopStep→PresetLoopItem, InspectionLoop→InspectionLoopItem, zoneName→itemName; drop requiredShotCount; hoist allowedDefects + measurementFields to LoopPreset; add cycleIndex to Photo/DefectInstance/InspectionMeasurement with the slot unique constraint; pure `cycleState()` shared by the submit guard and the console; guided populate with grid, retake and the end gate.
+- verify: `pnpm api test` + `pnpm api test:integration` green; submit mid-cycle 400s naming the unit and its missing items; discarding the partial unit lets it through; a second photo into a filled slot 409s pointing at retake.
+- refs: spec `docs/done/specs/2026-08-12-loop-items-and-populate-cycles-design.md` · plan `docs/done/plans/2026-08-12-loop-items-and-populate-cycles.md` · supersedes INS-075 · reverses INS-073 · migration blast radius wider than planned (buyers/POs also truncated — see spec §9)
+
 > **Security review batch (2026-07-11).** INS-036..039 below were surfaced by the multi-agent business-logic
 > review + adversarial-verification pass and fixed in the same session. The AQL engine reviewed clean.
 
@@ -595,7 +603,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - evidence: requiredShotCount already defaults to 1 (`builder.tsx:67`, service fallback `loop-presets.service.ts:131`, `schema.prisma:401` @default(1)) and a +/- stepper exists (`builder.tsx:624-640`) — but the card first renders one decorative, non-interactive "Shot 01/02…" row per shot (`:616-623`) with the actual controls as two small unlabeled 28px icon buttons underneath, so users mistake the rows for editable slots and never find the +.
 - fix: Collapse the card to a single prominent labeled stepper (clamped ≥ 1) with an explicit "+ Add shot" text button; drop the placeholder rows (or replace with a caption "N photos will be required during populate").
 - verify: A newly added loop shows "1 shot" with a visible "+ Add shot" affordance; one click yields 2; the count round-trips through save → GET /loop-presets/:id; no non-interactive faux-editable rows remain.
-- refs: meeting 2026-07-17 · pure builder.tsx change — per-shot labels/instructions would be a schema change (PresetLoopStep stores only a count): separate item, don't smuggle it in
+- refs: meeting 2026-07-17 · pure builder.tsx change — per-shot labels/instructions would be a schema change (PresetLoopStep stores only a count): separate item, don't smuggle it in · SUPERSEDED 2026-08-13 by INS-081: `requiredShotCount` no longer exists — a loop item IS one shot, so the stepper this item polished is gone.
 
 ### INS-080 · Org console shows the hardcoded demo org name instead of the real one   [MEDIUM]
 - status: done            # 2026-08-01: `orgName` (which `GET /auth/me` has returned all along, and which nothing consumed) is now carried through the NextAuth session and passed as `org` by ConsoleLayout for non-admin sessions, mirroring how it already resolved `assumedOrgName` for admins. `DEFAULT_ORG` survives only as a true offline/demo-mode fallback, so an ORG_OWNER/QA_MANAGER/INSPECTOR sees their real organisation instead of "Asha Inspection Services".  # old status: todo            # NEW 2026-07-25 (found during INS-079 manual verification; pre-existing, out of scope for INS-079)
@@ -719,7 +727,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: meeting 2026-07-17 · no migration, no new fields (styleNumber stays the display key; plain text, not markdown — don't touch the report pipeline) · fold a clear-path regression spec into INS-034
 
 ### INS-075 · Rename "Loop" in UI copy (recommend "Angle"; schema/API/signed snapshots untouched)   [LOW]
-- status: todo            # NEW 2026-07-18 (meeting 2026-07-17): users don't understand "loops"; presets are shots/angles.
+- status: superseded      # 2026-08-13: INS-081 answered the vocabulary question — a preset IS one "loop", and its ordered children are "loop items". That change deliberately DID touch the schema, API and snapshot shapes this item was written to avoid touching, under a clean-break migration, so the cautious copy-only sweep proposed here no longer applies.  # old status: todo            # NEW 2026-07-18 (meeting 2026-07-17): users don't understand "loops"; presets are shots/angles.
 - area: Loop presets (web copy)
 - evidence: "Add Loop" `builder.tsx:538`, "Loop name" `:552`, sidebar "Loops · N" `:478`, nav "Loop Presets" `shell.tsx:203`, "Loop preset" label `create-form.tsx:62`, populate "Loops · N"/"LOOP NN" `populate-workspace.tsx:246,290`. CAUTION: "shot" is already a DIFFERENT concept in the same UI (each loop has a requiredShotCount) — renaming loop→shot collides; the schema calls the step's name zoneName, so "Angle" or "Zone" maps cleanly (one angle = N required shots).
 - problem: A deep rename is high-risk/no-user-value: `Inspection.loopPresetSnapshot` and `Report.canonicalSnapshot` embed "loops" keys inside Ed25519-SIGNED artifacts — a key rename breaks hash verification of historical reports — and the REST paths/Prisma models are load-bearing.
