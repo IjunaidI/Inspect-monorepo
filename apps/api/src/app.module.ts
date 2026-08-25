@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, DiscoveryModule } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -131,6 +131,9 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
       errorMessage:
         'Too many requests — please slow down and try again shortly.',
     }),
+    // INS-084: lets the OpenAPI generator read each route's @Roles floor,
+    // which Swagger cannot see (it only knows types, not guards).
+    DiscoveryModule,
     PrismaModule,
     HealthModule,
     AuthModule,

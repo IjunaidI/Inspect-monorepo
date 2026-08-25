@@ -1,0 +1,1780 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "AppController_getServiceInfo",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "App"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Auth"
+        ],
+        "x-required-role": "authenticated"
+      }
+    },
+    "/buyers": {
+      "get": {
+        "operationId": "BuyersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Buyers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "post": {
+        "operationId": "BuyersController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Buyers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/buyers/presign": {
+      "post": {
+        "operationId": "BuyersController_presign",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Buyers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/buyers/{id}": {
+      "get": {
+        "operationId": "BuyersController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Buyers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "patch": {
+        "operationId": "BuyersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Buyers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "delete": {
+        "operationId": "BuyersController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Buyers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/buyers/{id}/restore": {
+      "post": {
+        "operationId": "BuyersController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Buyers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/suppliers": {
+      "get": {
+        "operationId": "SuppliersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Suppliers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "post": {
+        "operationId": "SuppliersController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Suppliers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/suppliers/{id}": {
+      "get": {
+        "operationId": "SuppliersController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Suppliers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "patch": {
+        "operationId": "SuppliersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Suppliers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "delete": {
+        "operationId": "SuppliersController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Suppliers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/suppliers/{id}/restore": {
+      "post": {
+        "operationId": "SuppliersController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Suppliers"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/products": {
+      "get": {
+        "operationId": "ProductsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Products"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "post": {
+        "operationId": "ProductsController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Products"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/products/{id}": {
+      "get": {
+        "operationId": "ProductsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Products"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "patch": {
+        "operationId": "ProductsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Products"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "delete": {
+        "operationId": "ProductsController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Products"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/products/{id}/restore": {
+      "post": {
+        "operationId": "ProductsController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Products"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/purchase-orders": {
+      "get": {
+        "operationId": "PurchaseOrdersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "post": {
+        "operationId": "PurchaseOrdersController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/purchase-orders/{id}": {
+      "get": {
+        "operationId": "PurchaseOrdersController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "patch": {
+        "operationId": "PurchaseOrdersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "delete": {
+        "operationId": "PurchaseOrdersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "PurchaseOrders"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/loop-presets": {
+      "get": {
+        "operationId": "LoopPresetsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "LoopPresets"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "post": {
+        "operationId": "LoopPresetsController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "LoopPresets"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/loop-presets/presign": {
+      "post": {
+        "operationId": "LoopPresetsController_presign",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "LoopPresets"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/loop-presets/{id}": {
+      "get": {
+        "operationId": "LoopPresetsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "LoopPresets"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "delete": {
+        "operationId": "LoopPresetsController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "LoopPresets"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/inspections": {
+      "get": {
+        "operationId": "InspectionsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "INSPECTOR"
+      },
+      "post": {
+        "operationId": "InspectionsController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/inspections/aql-preview": {
+      "get": {
+        "operationId": "InspectionsController_preview",
+        "parameters": [
+          {
+            "name": "lotSize",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "critical",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "major",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minor",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/inspections/{id}": {
+      "get": {
+        "operationId": "InspectionsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "INSPECTOR"
+      },
+      "patch": {
+        "operationId": "InspectionsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/inspections/{id}/start": {
+      "post": {
+        "operationId": "InspectionsController_start",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{id}/reset": {
+      "post": {
+        "operationId": "InspectionsController_reset",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{id}/submit": {
+      "post": {
+        "operationId": "InspectionsController_submit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{id}/decision": {
+      "post": {
+        "operationId": "InspectionsController_decide",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Inspections"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/defect-catalog": {
+      "get": {
+        "operationId": "DefectCatalogController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "DefectCatalog"
+        ],
+        "x-required-role": "INSPECTOR"
+      },
+      "post": {
+        "operationId": "DefectCatalogController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "DefectCatalog"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/defect-catalog/{id}": {
+      "delete": {
+        "operationId": "DefectCatalogController_archive",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "DefectCatalog"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/inspections/{inspectionId}/populate": {
+      "get": {
+        "operationId": "PopulateController_load",
+        "parameters": [
+          {
+            "name": "inspectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Populate"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{inspectionId}/populate/photos/presign": {
+      "post": {
+        "operationId": "PopulateController_presign",
+        "parameters": [
+          {
+            "name": "inspectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Populate"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{inspectionId}/populate/photos": {
+      "post": {
+        "operationId": "PopulateController_register",
+        "parameters": [
+          {
+            "name": "inspectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Populate"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{inspectionId}/populate/photos/{photoId}/retake": {
+      "post": {
+        "operationId": "PopulateController_retake",
+        "parameters": [
+          {
+            "name": "inspectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "photoId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Populate"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{inspectionId}/populate/cycles/{cycleIndex}": {
+      "delete": {
+        "operationId": "PopulateController_discardCycle",
+        "parameters": [
+          {
+            "name": "inspectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cycleIndex",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Populate"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{inspectionId}/populate/defects": {
+      "post": {
+        "operationId": "PopulateController_addDefect",
+        "parameters": [
+          {
+            "name": "inspectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Populate"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{inspectionId}/populate/measurements": {
+      "post": {
+        "operationId": "PopulateController_addMeasurement",
+        "parameters": [
+          {
+            "name": "inspectionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Populate"
+        ],
+        "x-required-role": "INSPECTOR"
+      }
+    },
+    "/inspections/{id}/report": {
+      "post": {
+        "operationId": "ReportsController_generate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reports"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/reports": {
+      "get": {
+        "operationId": "ReportsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reports"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/reports/{id}": {
+      "get": {
+        "operationId": "ReportsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reports"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/reports/{id}/pdf": {
+      "get": {
+        "operationId": "ReportsController_pdf",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reports"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/reports/{id}/deliver": {
+      "post": {
+        "operationId": "ReportsController_deliver",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reports"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/reports/verify/{token}": {
+      "get": {
+        "operationId": "ReportsController_verify",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reports"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/guest/reports": {
+      "get": {
+        "operationId": "GuestController_list",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Guest"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/guest/reports/{id}": {
+      "get": {
+        "operationId": "GuestController_get",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Guest"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/guest/reports/{id}/pdf": {
+      "get": {
+        "operationId": "GuestController_pdf",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Guest"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/admin/orgs": {
+      "get": {
+        "operationId": "OrgsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Orgs"
+        ],
+        "x-required-role": "PLATFORM_ADMIN"
+      },
+      "post": {
+        "operationId": "OrgsController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Orgs"
+        ],
+        "x-required-role": "PLATFORM_ADMIN"
+      }
+    },
+    "/invitations/accept": {
+      "post": {
+        "operationId": "InvitationsController_accept",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Invitations"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/invitations/{token}": {
+      "get": {
+        "operationId": "InvitationsController_get",
+        "parameters": [
+          {
+            "name": "token",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Invitations"
+        ],
+        "x-required-role": "public"
+      }
+    },
+    "/users": {
+      "get": {
+        "operationId": "UsersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "post": {
+        "operationId": "UsersController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "x-required-role": "ORG_OWNER"
+      }
+    },
+    "/users/invite": {
+      "post": {
+        "operationId": "UsersController_invite",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "x-required-role": "ORG_OWNER"
+      }
+    },
+    "/users/{id}/role": {
+      "patch": {
+        "operationId": "UsersController_updateRole",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "x-required-role": "ORG_OWNER"
+      }
+    },
+    "/users/{id}/reactivate": {
+      "patch": {
+        "operationId": "UsersController_reactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "x-required-role": "ORG_OWNER"
+      }
+    },
+    "/users/{id}": {
+      "delete": {
+        "operationId": "UsersController_deactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "x-required-role": "ORG_OWNER"
+      }
+    },
+    "/buyers/{buyerId}/guests": {
+      "get": {
+        "operationId": "BuyerGuestsController_list",
+        "parameters": [
+          {
+            "name": "buyerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "BuyerGuests"
+        ],
+        "x-required-role": "QA_MANAGER"
+      },
+      "post": {
+        "operationId": "BuyerGuestsController_invite",
+        "parameters": [
+          {
+            "name": "buyerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "BuyerGuests"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/buyer-guests/{id}": {
+      "delete": {
+        "operationId": "BuyerGuestsController_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "BuyerGuests"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/dashboard/summary": {
+      "get": {
+        "operationId": "DashboardController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Dashboard"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    },
+    "/search": {
+      "get": {
+        "operationId": "SearchController_find",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Search"
+        ],
+        "x-required-role": "QA_MANAGER"
+      }
+    }
+  },
+  "info": {
+    "title": "Inspect API",
+    "description": "Tamper-proof, AQL-driven pre-shipment QC inspection platform. Every route is guarded by default; `x-required-role` on each operation records the additive-hierarchy floor (INSPECTOR < QA_MANAGER < ORG_OWNER < PLATFORM_ADMIN), or \"public\" for unauthenticated routes.",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {}
+  }
+}

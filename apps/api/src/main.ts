@@ -1,6 +1,8 @@
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
+import { SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { buildOpenApiDocument } from './openapi';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -23,6 +25,13 @@ async function bootstrap() {
     );
     app.enableCors();
   }
+  // INS-084: browsable contract at /docs. Off in production — the document
+  // enumerates every route and its role floor, which is a map of the attack
+  // surface; the committed openapi.json is the artifact tooling should read.
+  if (process.env.NODE_ENV !== 'production') {
+    SwaggerModule.setup('docs', app, buildOpenApiDocument(app));
+  }
+
   const port = process.env.API_PORT ? +process.env.API_PORT : 3000;
   await app.listen(port);
 }
