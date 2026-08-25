@@ -37,6 +37,36 @@ confirmed in writing."
 | **P7** | Does the guest portal ever show a **factory-side** guest anything? | **No.** Guests remain client-side only. | This is the security boundary in §5. A "factory portal" is a separate epic with its own visibility model — never a widened predicate on the existing one. |
 | **P8** | Do we re-render historical report PDFs with the new party labels? | **No.** Reports are immutable artifacts; the stored bytes and the stored snapshot are frozen forever. | Re-rendering would break the immutability doctrine and gains nothing — the signature covers the snapshot, not the labels. |
 
+
+### Sign-off — 2026-08-26
+
+**All eight defaults confirmed as written, by the account owner.** No overrides. In particular **P1 stands**
+(two role FKs, `clientCompanyId` + `factoryCompanyId`), so Phases 4–7 of the plan remain valid as authored —
+the override that would have invalidated them was not taken.
+
+Recorded during the React Native migration design session, where this epic was pulled **into Phase 0** of
+[the RN programme](2026-08-26-inspect-react-native-migration-design.md): Approach A freezes the
+Buyer/Supplier DTOs into `@inspect/shared-types` and `@inspect/api-client`, and a shipped app build cannot be
+force-updated the way a console is redeployed. Landing `Company` before that freeze means the contract the
+mobile client is built against is the final one, instead of needing an API compatibility window later.
+
+**Plan Phase 0 gate — met 2026-08-26:**
+
+- *Step 1 (P1–P8 in writing)* — this note.
+- *Step 2 (INS-008 real, not declared)* — done. Both apps import from `@inspect/shared-types` at 13 sites,
+  and the counterparty DTOs this epic replaces (`ApiBuyer`, `ApiSupplier`, `ApiProduct`, `ApiBuyerGuest`)
+  now live in the package as `BuyerDto` / `SupplierDto` / `ProductDto` / `BuyerGuestDto`, aliased in
+  `apps/web/lib/api.ts` so no call site churned. The enum sweep alone did **not** satisfy this gate — the
+  step explicitly names these interfaces, and skipping them would have meant writing the `Company` DTO twice
+  on day one, which is the failure §8 exists to prevent.
+- *Step 3 (real baseline, not copied)* — measured on 2026-08-26, not taken from any document:
+  **unit 597 passing / 41 suites**, **integration 139 passing / 15 suites (exit 0)** against the live
+  Postgres + Redis + S3, `pnpm type-check` 4/4 clean, `pnpm lint` 0 errors, `pnpm web build` clean.
+
+**Phases 1–9 remain unstarted.** They are a multi-session effort containing two irreversible steps
+(Phase 2's destructive merges, Phase 8's table drops) and one security phase (Phase 6, guest visibility)
+whose gate is that a pre-migration magic link lists *exactly* the same reports. Those are not steps to take
+at the tail of a long session against a live database.
 ---
 
 ## 1. Problem
