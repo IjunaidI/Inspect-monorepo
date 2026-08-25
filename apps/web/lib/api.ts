@@ -3,6 +3,17 @@ import { redirect } from 'next/navigation';
 import { getToken } from 'next-auth/jwt';
 import { refreshApiAccessToken } from './auth';
 import { getAssumedOrgId } from './admin-org';
+import type {
+  AqlClassOutcome,
+  DefectClass,
+  DefectScope,
+  DefectSeverity,
+  InvitableRole,
+  OrgType,
+  QaDecision,
+  UserRole,
+  UserStatus,
+} from '@inspect/shared-types';
 
 const API_URL = process.env.INSPECT_API_URL ?? 'http://localhost:3000';
 
@@ -357,7 +368,7 @@ export interface ApiAllowedDefect {
   defectCatalog: {
     id: string;
     name: string;
-    defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+    defaultSeverity: DefectSeverity;
   };
 }
 
@@ -382,22 +393,22 @@ export interface ApiLoopPresetDetail extends ApiLoopPreset {
 export interface ApiDefectCatalog {
   id: string;
   name: string;
-  defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR';
-  scope: 'GLOBAL' | 'ORG';
+  defaultSeverity: DefectSeverity;
+  scope: DefectScope;
   isArchived: boolean;
 }
 export interface ApiUser {
   id: string;
   email: string;
   name: string;
-  role: 'INSPECTOR' | 'QA_MANAGER' | 'ORG_OWNER' | 'PLATFORM_ADMIN';
-  status: 'ACTIVE' | 'INVITED' | 'SUSPENDED' | 'DEACTIVATED';
+  role: UserRole;
+  status: UserStatus;
   lastLoginAt?: string | null;
 }
 export interface ApiAqlResult {
-  systemRecommendation: 'PASS' | 'FAIL';
-  perClass: Record<'critical' | 'major' | 'minor', { found: number; ac: number; re: number; outcome: 'PASS' | 'FAIL' }>;
-  qaDecision?: 'PASS' | 'FAIL' | 'HOLD' | null;
+  systemRecommendation: AqlClassOutcome;
+  perClass: Record<DefectClass, { found: number; ac: number; re: number; outcome: AqlClassOutcome }>;
+  qaDecision?: QaDecision | null;
   qaRemarks?: string | null;
 }
 export interface ApiInspection {
@@ -427,7 +438,7 @@ export interface ApiInspection {
     version: number;
     items: { position: number; itemName: string; description?: string; referenceImageUrl?: string }[];
     measurementFields: { label: string; unit?: string }[];
-    allowedDefects: { defectCatalogId: string; name: string; severity: 'CRITICAL' | 'MAJOR' | 'MINOR' }[];
+    allowedDefects: { defectCatalogId: string; name: string; severity: DefectSeverity }[];
   } | null;
   inspectorId?: string | null;
   /** Scalar FK on list rows (INS-057) — assignedInspector object only on GET /:id. */
@@ -478,7 +489,7 @@ export interface RetakePhotoInput {
 export interface AddDefectInput {
   defectCatalogId?: string;
   customText?: string;
-  severity?: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  severity?: DefectSeverity;
   /** INS-081: the tag list is loop-global, but the instance pins to a slot. */
   inspectionLoopItemId: string;
   cycleIndex: number;
@@ -510,13 +521,13 @@ export interface ApiPhoto {
 export interface ApiDefectCatalogItem {
   id: string;
   name: string;
-  severity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  severity: DefectSeverity;
   category?: string | null;
 }
 
 export interface ApiDefectInstance {
   id: string;
-  severity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  severity: DefectSeverity;
   defectCatalog?: { id: string; name: string } | null;
   customText?: string | null;
   inspectionLoopItemId?: string | null;
@@ -617,7 +628,7 @@ export interface ApiInvitation {
   id: string;
   token: string;
   email: string;
-  role: 'INSPECTOR' | 'QA_MANAGER' | 'ORG_OWNER';
+  role: InvitableRole;
   expiresAt?: string;
   orgId: string;
   /** Whether the invitation email was actually delivered (MailService result). */
@@ -636,7 +647,7 @@ export interface ApiInvitationLookup {
 export interface ApiOrganization {
   id: string;
   name: string;
-  type: 'INSPECTION_COMPANY' | 'MANUFACTURER';
+  type: OrgType;
   createdAt: string;
 }
 

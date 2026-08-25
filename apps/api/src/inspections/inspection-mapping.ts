@@ -2,10 +2,11 @@
  * Pure mapping helpers for the inspection aggregate (no Prisma, no Nest) so the
  * snapshot/counting/decision logic is unit-testable without a database.
  */
+import type { BillableEventKind, DefectSeverity, QaDecision } from '@inspect/shared-types';
 import { DefectClass, DefectCounts } from '../aql/aql.types';
 
 export interface SeverityRow {
-  severity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  severity: DefectSeverity;
   count: number;
 }
 
@@ -33,7 +34,7 @@ export interface PresetLike {
   measurementFields: Array<{ label: string; unit?: string | null }>;
   allowedDefects: Array<{
     defectCatalogId: string;
-    defectCatalog: { name: string; defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR' };
+    defectCatalog: { name: string; defaultSeverity: DefectSeverity };
   }>;
 }
 
@@ -67,7 +68,7 @@ export function buildPresetSnapshot(preset: PresetLike) {
   };
 }
 
-export type BillableKind = 'INSPECTION' | 'RE_INSPECTION';
+export type BillableKind = BillableEventKind;
 
 /**
  * INS-018 — the billable kind is a FUNCTION of the re-inspection linkage, never
@@ -80,7 +81,7 @@ export function billableKindFor(supersedesInspectionId?: string | null): Billabl
   return supersedesInspectionId ? 'RE_INSPECTION' : 'INSPECTION';
 }
 
-export type QaDecisionValue = 'PASS' | 'FAIL' | 'HOLD';
+export type QaDecisionValue = QaDecision;
 export type InspectionDecisionStatus = 'APPROVED' | 'REJECTED' | 'HOLD';
 
 /** Map the QA Manager's binding decision to the resulting inspection status (spec §8). */

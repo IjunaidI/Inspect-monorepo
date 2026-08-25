@@ -9,10 +9,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { MailService } from '../mail/mail.service';
 import { inviteTtlMs } from '../common/config';
+import { ORG_TYPES, type OrgType } from '@inspect/shared-types';
 
 export interface CreateOrgInput {
   name: string;
-  type: 'INSPECTION_COMPANY' | 'MANUFACTURER';
+  type: OrgType;
   ownerEmail: string;
 }
 
@@ -31,8 +32,10 @@ export class OrgsService {
 
   async create(actorUserId: string, input: CreateOrgInput) {
     if (!input?.name?.trim()) throw new BadRequestException('name is required');
-    if (!['INSPECTION_COMPANY', 'MANUFACTURER'].includes(input.type)) {
-      throw new BadRequestException('type must be INSPECTION_COMPANY or MANUFACTURER');
+    // Cast widens the readonly tuple so the runtime check still guards untrusted
+    // input, which TypeScript would otherwise consider redundant given the type.
+    if (!(ORG_TYPES as readonly string[]).includes(input.type)) {
+      throw new BadRequestException(`type must be ${ORG_TYPES.join(' or ')}`);
     }
     if (!input?.ownerEmail?.trim()) throw new BadRequestException('ownerEmail is required');
     const ownerEmail = input.ownerEmail.trim().toLowerCase();

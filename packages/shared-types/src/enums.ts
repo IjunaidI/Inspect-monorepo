@@ -20,6 +20,15 @@ export const USER_ROLES = [
 ] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+/**
+ * Roles a person can be invited or directly added as. `PLATFORM_ADMIN` is
+ * excluded deliberately — the API refuses to mint one through the invite and
+ * direct-add paths, so no client should offer it. Derived from `UserRole`
+ * rather than re-listed, so adding a role to the domain cannot silently bypass
+ * this gate.
+ */
+export type InvitableRole = Exclude<UserRole, 'PLATFORM_ADMIN'>;
+
 export const USER_STATUSES = [
   'ACTIVE',
   'INVITED',

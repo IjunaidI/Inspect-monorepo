@@ -11,8 +11,9 @@ import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
 import { cycleState } from '../inspections/cycle-state';
+import type { DefectSeverity } from '@inspect/shared-types';
 
-type Severity = 'CRITICAL' | 'MAJOR' | 'MINOR';
+type Severity = DefectSeverity;
 
 export interface PresignInput {
   ext?: string;

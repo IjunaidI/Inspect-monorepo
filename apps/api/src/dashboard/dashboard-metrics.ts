@@ -16,11 +16,13 @@
  *     was hit. (Denormalize found/sampleSize onto AqlResult if this ever gets
  *     slow — see INS-068 refs.)
  */
+import type { QaDecision } from '@inspect/shared-types';
 
 /** How many decided AqlResult rows the Json scan is allowed to load per org. */
 export const QUALITY_SCAN_LIMIT = 500;
 
-export type QaDecisionKey = 'PASS' | 'FAIL' | 'HOLD' | 'PENDING';
+/** The QA decision union plus PENDING — submitted, awaiting the binding call. */
+export type QaDecisionKey = QaDecision | 'PENDING';
 
 /** Every key is always present (0 by default) so the console never reads `undefined`. */
 export type QaDecisionCounts = Record<QaDecisionKey, number>;

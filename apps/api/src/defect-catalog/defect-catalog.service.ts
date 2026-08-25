@@ -8,8 +8,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
+import type { DefectSeverity } from '@inspect/shared-types';
 
-type Severity = 'CRITICAL' | 'MAJOR' | 'MINOR';
+type Severity = DefectSeverity;
 
 export interface CreateDefectInput {
   name: string;

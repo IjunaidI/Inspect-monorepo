@@ -1,12 +1,17 @@
+import type { UserRole } from '@inspect/shared-types';
+
 /**
  * Additive role hierarchy (spec §4): each higher role inherits everything below.
  *
  * INSPECTOR < QA_MANAGER < ORG_OWNER < PLATFORM_ADMIN.
  *
- * Pure logic — used by RolesGuard. `Role` is defined locally for now; it aligns
- * with the Prisma `UserRole` enum and `@inspect/shared-types` (link in Task 5).
+ * Pure logic — used by RolesGuard. `Role` is an alias of `UserRole` from
+ * `@inspect/shared-types` (INS-008), which is the single source of truth for the
+ * union and mirrors the Prisma `UserRole` enum. The local name is kept because
+ * ~40 call sites across the API read `Role`, and renaming them would be churn
+ * without benefit — what matters is that the members are declared exactly once.
  */
-export type Role = 'INSPECTOR' | 'QA_MANAGER' | 'ORG_OWNER' | 'PLATFORM_ADMIN';
+export type Role = UserRole;
 
 export const ROLE_RANK: Readonly<Record<Role, number>> = {
   INSPECTOR: 1,

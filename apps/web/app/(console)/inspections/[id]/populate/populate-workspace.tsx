@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
+import type { DefectSeverity } from '@inspect/shared-types';
 import { useRouter } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import {
@@ -206,7 +207,7 @@ export function PopulateWorkspace({
     startTransition(async () => {
       const r = await addDefect(inspection.id, {
         customText: text,
-        severity: sev.toUpperCase() as 'CRITICAL' | 'MAJOR' | 'MINOR',
+        severity: sev.toUpperCase() as DefectSeverity,
         inspectionLoopItemId: cursor.itemId,
         cycleIndex: cursor.cycleIndex,
       });

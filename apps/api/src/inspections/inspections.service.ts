@@ -1,3 +1,4 @@
+import type { DefectSeverity } from '@inspect/shared-types';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -383,7 +384,7 @@ export class InspectionsService {
     });
     const counts = toDefectCounts(
       groups.map((g) => ({
-        severity: g.severity as 'CRITICAL' | 'MAJOR' | 'MINOR',
+        severity: g.severity as DefectSeverity,
         count: g._count._all,
       })),
     );

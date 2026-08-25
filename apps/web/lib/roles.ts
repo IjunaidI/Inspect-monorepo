@@ -1,4 +1,5 @@
 import type { RoleKey } from '@/components/inspect/tokens';
+import type { InvitableRole } from '@inspect/shared-types';
 
 export function apiRoleToRoleKey(role?: string): RoleKey {
   switch (role) {
@@ -30,6 +31,6 @@ const API_ROLE_RANK: Record<string, number> = {
 };
 
 /** Additive-hierarchy check on API role strings; unknown/missing role fails closed. */
-export function apiRoleAtLeast(role: string | undefined, min: 'INSPECTOR' | 'QA_MANAGER' | 'ORG_OWNER'): boolean {
+export function apiRoleAtLeast(role: string | undefined, min: InvitableRole): boolean {
   return (API_ROLE_RANK[role ?? ''] ?? 0) >= API_ROLE_RANK[min];
 }

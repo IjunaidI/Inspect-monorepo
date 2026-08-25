@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
+import type { DefectSeverity } from '@inspect/shared-types';
 import { useRouter } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import {
@@ -58,7 +59,7 @@ interface BuilderState {
   allowedDefectCatalogIds: Set<string>;
   selection: Selection;
   customDefectName: string;
-  customDefectSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR';
+  customDefectSeverity: DefectSeverity;
   saving: boolean;
   saveError: string | null;
 }
@@ -347,7 +348,7 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
       const newEntry: ApiDefectCatalog = {
         id: result.data.id,
         name: result.data.name,
-        defaultSeverity: result.data.defaultSeverity as 'CRITICAL' | 'MAJOR' | 'MINOR',
+        defaultSeverity: result.data.defaultSeverity as DefectSeverity,
         scope: 'ORG',
         isArchived: false,
       };
@@ -384,13 +385,13 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
   const activeItem =
     state.selection.kind === 'item' ? state.items[state.selection.index] : undefined;
 
-  const defectsBySev: Record<'CRITICAL' | 'MAJOR' | 'MINOR', ApiDefectCatalog[]> = {
+  const defectsBySev: Record<DefectSeverity, ApiDefectCatalog[]> = {
     CRITICAL: allCatalog.filter((d) => d.defaultSeverity === 'CRITICAL'),
     MAJOR: allCatalog.filter((d) => d.defaultSeverity === 'MAJOR'),
     MINOR: allCatalog.filter((d) => d.defaultSeverity === 'MINOR'),
   };
 
-  const sevMap: Record<'CRITICAL' | 'MAJOR' | 'MINOR', SeverityKey> = {
+  const sevMap: Record<DefectSeverity, SeverityKey> = {
     CRITICAL: 'critical',
     MAJOR: 'major',
     MINOR: 'minor',
@@ -729,7 +730,7 @@ export default function PresetBuilder({ catalog, seed }: PresetBuilderProps) {
                   />
                   <select
                     value={state.customDefectSeverity}
-                    onChange={(e) => set({ customDefectSeverity: e.target.value as 'CRITICAL' | 'MAJOR' | 'MINOR' })}
+                    onChange={(e) => set({ customDefectSeverity: e.target.value as DefectSeverity })}
                     style={{ height: 34, border: `1px solid ${ui.line}`, borderRadius: 8, padding: '0 8px', fontSize: 12, color: ui.sub, background: ui.fill, fontFamily: 'inherit' }}
                   >
                     <option value="CRITICAL">Critical</option>

@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import type { QaDecision } from '@inspect/shared-types';
 import { revalidatePath } from 'next/cache';
 import { apiGet, apiPost, apiPatch, ApiError, type AqlPreview, type ApiInspection } from '@/lib/api';
 
@@ -80,7 +81,7 @@ export async function submitInspection(id: string): Promise<{ error?: string }> 
 
 export async function decideInspection(_prev: unknown, formData: FormData): Promise<{ error?: string }> {
   const id = String(formData.get('id') ?? '');
-  const decision = String(formData.get('decision') ?? '') as 'PASS' | 'FAIL' | 'HOLD';
+  const decision = String(formData.get('decision') ?? '') as QaDecision;
   const remarks = String(formData.get('remarks') ?? '');
   if (!decision) return { error: 'Select a decision' };
   if (!remarks.trim()) return { error: 'A decision note is required' };

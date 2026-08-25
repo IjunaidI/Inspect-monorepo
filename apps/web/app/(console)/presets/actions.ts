@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import type { DefectSeverity } from '@inspect/shared-types';
 import { revalidatePath } from 'next/cache';
 import { apiPost, apiDelete, ApiError } from '@/lib/api';
 
@@ -71,7 +72,7 @@ export async function presignPresetImage(
 
 export async function createDefect(
   name: string,
-  defaultSeverity: 'CRITICAL' | 'MAJOR' | 'MINOR',
+  defaultSeverity: DefectSeverity,
 ): Promise<{ data?: { id: string; name: string; defaultSeverity: string }; error?: string }> {
   if (!name.trim()) return { error: 'Defect name is required' };
   try {
