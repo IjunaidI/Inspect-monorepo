@@ -24,6 +24,21 @@ single `pnpm install` at the root installs everything):
 
 Node ≥ 20, pnpm 9.12.0 (declared in root `package.json`).
 
+**Planned (React Native migration, [INS-086](docs/future/BACKLOG.md)) — do not assume these exist yet:**
+`apps/mobile/` (Expo, iOS + Android, arrives in Phase 2) and `packages/{api-client,domain,design-tokens}/`
+(extracted from `apps/web` in Phase 1). Design:
+[docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md).
+Per-screen state lives in [docs/reference/screen-migration-map.md](docs/reference/screen-migration-map.md);
+the procedure is the `migrate-screen` skill.
+
+### Per-directory instructions
+
+Stack-specific conventions live next to the code and load on demand — [apps/api/CLAUDE.md](apps/api/CLAUDE.md),
+[apps/web/CLAUDE.md](apps/web/CLAUDE.md) — plus path-scoped rules in `.claude/rules/` (`wire-contract.md`,
+`migration-discipline.md`). **The domain invariants below deliberately stay in this file**: only the
+project-root `CLAUDE.md` is re-injected after context compaction, and they are too important to silently
+drop out of a long session.
+
 > **Maturity reality (2026-07-11):** the pure domain core (AQL, tamper-proof crypto, audit-chain, auth
 > primitives) is unit-tested and solid (204 unit tests, verified 2026-08-01). The DB-bound surface — auth round-trip
 > incl. refresh, CRUD create paths, the full inspection lifecycle, populate (incl. the S3 byte path), signed reports +
