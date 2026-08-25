@@ -165,7 +165,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-build-index.md](../reference/inspect-build-index.md)
 
 ### INS-010 · Composite-FK tenant guard not DB-enforced (orgId alignment)   [HIGH]
-- status: in-progress    # 2026-08-01: schema + migration AUTHORED AND VERIFIED, **not yet applied** — applying it was blocked by the sandbox permission classifier (see the note at the end of this file). Parents `Inspection`/`Buyer` gained `@@unique([id, orgId])`; `InspectionLoop`, `Photo`, `DefectInstance`, `AqlResult` now reference `[id, orgId]` on their inspection, and `BuyerGuest` on its buyer, so the DB rejects a child whose orgId disagrees with its parent. The optional `inspectionLoopId` links stay single-column ON PURPOSE: they are `onDelete: SetNull` and a composite FK would have to null the NOT NULL orgId alongside them. `prisma validate` passes; the SQL is in `prisma/migrations/20260801000000_db_level_invariants/`; a live data probe confirmed 0 misaligned rows in all five relations, so it applies without repair. Acceptance test written: `test/integration/db-invariants.e2e-spec.ts` (self-skips until the migration lands).
+- status: done            # 2026-08-26: **APPLIED AND VERIFIED LIVE.** The migration `20260801000000_db_level_invariants` was in fact already applied to the Railway dev DB (during the 2026-08-13 INS-081 session) — the 'Needs a human' note claiming otherwise was stale and has been corrected. This session confirmed it against `pg_constraint`/`pg_trigger` and, critically, proved the tests are no longer vacuous: `db-invariants.e2e-spec.ts` self-skips per-test when a constraint is absent, and the run produced **zero SKIP lines**, so every assertion executed for real. Full suite: **129 passing / 14 suites, exit 0** against the live Postgres+Redis+S3. Verified present: `photos_inspectionId_orgId_fkey` (composite tenant FK) — a child row whose orgId disagrees with its parent inspection is refused by the database, and an aligned row still inserts.
 - area: Data model & schema
 - evidence: single-column FKs only — `inspection_loops_orgId_fkey`, `photos_orgId_fkey` reference `organizations(id)`, never a composite parent key (`schema.prisma` convention note + [inspect-schema.md](../reference/inspect-schema.md) §7).
 - problem: Children (InspectionLoop, Photo, DefectInstance, AqlResult, BuyerGuest) carry a denormalized `orgId` the DB never checks against their parent aggregate, so a bug or bad write could attach a child to the wrong tenant with no DB rejection.
@@ -394,7 +394,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11 (schema piece INS-016 implies but never spelled out)
 
 ### INS-011 · Append-only audit log not protected by DB triggers   [MEDIUM]
-- status: in-progress    # 2026-08-01: migration AUTHORED, **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file). `prisma/migrations/20260801000000_db_level_invariants/` adds BEFORE UPDATE and BEFORE DELETE triggers on `audit_logs` that RAISE, leaving INSERT open. Documented residual risk: a role that OWNS the table can `ALTER TABLE … DISABLE TRIGGER`, so full protection needs a least-privilege application role that is not the table owner (Railway's single-role setup cannot express that today). Acceptance test written: `test/integration/db-invariants.e2e-spec.ts`.
+- status: done            # 2026-08-26: **APPLIED AND VERIFIED LIVE.** The migration `20260801000000_db_level_invariants` was in fact already applied to the Railway dev DB (during the 2026-08-13 INS-081 session) — the 'Needs a human' note claiming otherwise was stale and has been corrected. This session confirmed it against `pg_constraint`/`pg_trigger` and, critically, proved the tests are no longer vacuous: `db-invariants.e2e-spec.ts` self-skips per-test when a constraint is absent, and the run produced **zero SKIP lines**, so every assertion executed for real. Full suite: **129 passing / 14 suites, exit 0** against the live Postgres+Redis+S3. Verified present: triggers `audit_logs_no_update` + `audit_logs_no_delete` — UPDATE and DELETE on `audit_logs` raise, INSERT still works (append-only, not read-only). Residual risk unchanged and still documented: a role that OWNS the table can `ALTER TABLE ... DISABLE TRIGGER`, so full protection needs a least-privilege application role Railway's single-role setup cannot express.
 - area: Tamper-proof & audit
 - evidence: `AuditLog` comment `schema.prisma` "enforced at the application layer"; `migration.sql` has no triggers/rules blocking UPDATE/DELETE.
 - problem: The DB permits UPDATE/DELETE of `audit_logs` rows, so the append-only tamper-evidence guarantee rests entirely on app discipline and is defeatable by any direct row mutation.
@@ -421,7 +421,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md](../done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md)
 
 ### INS-014 · Immutability of submitted inspections/reports is app-layer only   [MEDIUM]
-- status: in-progress    # 2026-08-01: migration AUTHORED, **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file). Deliberately COLUMN-LEVEL rather than a blanket UPDATE block, because the lifecycle must keep moving after submission and a report legitimately gains `pdfStorageKey` (INS-003) / `status` / `deliveredAt` (INS-020) AFTER the signing transaction commits. What is frozen: on `reports`, every tamper-proof column (canonicalSnapshot/brandingSnapshot/contentHash/signature/verificationToken/generatedAt + the identity FKs) plus DELETE; on `inspections`, all evidence columns once status is SUBMITTED or beyond (status/decision machinery stays mutable) plus hard DELETE except for a DRAFT; and INSERT/UPDATE/DELETE on `photos`, `defect_instances`, `inspection_loops` once the parent inspection is submitted — the populate LOCKED set, backed by the database. Residual risk documented as for INS-011 (a table owner can disable a trigger). The INS-038 tamper-evidence test in `core-loop.e2e-spec.ts` was updated to disable/re-enable the reports trigger around its deliberate tampering (a new `setReportsImmutabilityTrigger` helper in `test/integration/support.ts`), since it must step around the PREVENTION layer to keep proving the DETECTION layer. Acceptance test: `test/integration/db-invariants.e2e-spec.ts`.
+- status: done            # 2026-08-26: **APPLIED AND VERIFIED LIVE.** The migration `20260801000000_db_level_invariants` was in fact already applied to the Railway dev DB (during the 2026-08-13 INS-081 session) — the 'Needs a human' note claiming otherwise was stale and has been corrected. This session confirmed it against `pg_constraint`/`pg_trigger` and, critically, proved the tests are no longer vacuous: `db-invariants.e2e-spec.ts` self-skips per-test when a constraint is absent, and the run produced **zero SKIP lines**, so every assertion executed for real. Full suite: **129 passing / 14 suites, exit 0** against the live Postgres+Redis+S3. Verified present: triggers `inspections_frozen_after_submit`, `inspections_no_hard_delete`, `photos_frozen_after_submit`, `reports_immutable_columns`, `reports_no_delete` — column-level as designed, so the lifecycle keeps moving after submission while evidence freezes.
 - area: Inspection lifecycle
 - evidence: enforced via in-memory status sets (populate LOCKED set, inspections SUBMITTABLE/DECIDABLE); `Report` has mutable columns the DB still allows updating ([inspect-schema.md](../reference/inspect-schema.md) §7).
 - problem: Nothing prevents a direct row update of a submitted inspection or a signed report outside the guarded service methods, so the "original stays locked" guarantee is not DB-backed.
@@ -430,7 +430,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../reference/inspect-schema.md](../reference/inspect-schema.md) (§6/§7)
 
 ### INS-015 · DefectInstance catalog-XOR-custom not DB-enforced   [MEDIUM]
-- status: in-progress    # 2026-08-01: migration AUTHORED, **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file). Adds `CHECK (("defectCatalogId" IS NULL) <> ("customText" IS NULL))` on `defect_instances`. A live probe confirmed 0 existing rows violate it. Acceptance test written (both-null and both-set rejected): `test/integration/db-invariants.e2e-spec.ts`.
+- status: done            # 2026-08-26: **APPLIED AND VERIFIED LIVE.** The migration `20260801000000_db_level_invariants` was in fact already applied to the Railway dev DB (during the 2026-08-13 INS-081 session) — the 'Needs a human' note claiming otherwise was stale and has been corrected. This session confirmed it against `pg_constraint`/`pg_trigger` and, critically, proved the tests are no longer vacuous: `db-invariants.e2e-spec.ts` self-skips per-test when a constraint is absent, and the run produced **zero SKIP lines**, so every assertion executed for real. Full suite: **129 passing / 14 suites, exit 0** against the live Postgres+Redis+S3. Verified present: CHECK constraint `defect_instances_catalog_xor_custom` — both-null and both-set are refused.
 - area: Defect catalog
 - evidence: `defectCatalogId` and `customText` both nullable, `migration.sql` has no CHECK; app-side check at `populate.service.ts:130-135` only.
 - problem: The DB allows `DefectInstance` rows with both fields null or both set; only the populate service rejects them, so any other write path could violate the rule.
@@ -457,7 +457,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: [../done/specs/2026-06-06-inspect-mvp-requirements-design.md](../done/specs/2026-06-06-inspect-mvp-requirements-design.md) (§9, fast-follow)
 
 ### INS-018 · BillableEvent RE_INSPECTION linkage not constrained   [MEDIUM]
-- status: in-progress    # 2026-08-01: SERVICE half done — `inspections.service.submit()` now derives and asserts the billable kind against the supersedes chain, so a RE_INSPECTION event can only exist for an inspection that actually supersedes one (unit-tested). DB half AUTHORED but **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file): a `billable_events_match_chain` trigger in `prisma/migrations/20260801000000_db_level_invariants/` rejects both directions of the mismatch. A live probe confirmed 0 existing rows violate it. Acceptance test written: `test/integration/db-invariants.e2e-spec.ts`.
+- status: done            # 2026-08-26: **APPLIED AND VERIFIED LIVE.** The migration `20260801000000_db_level_invariants` was in fact already applied to the Railway dev DB (during the 2026-08-13 INS-081 session) — the 'Needs a human' note claiming otherwise was stale and has been corrected. This session confirmed it against `pg_constraint`/`pg_trigger` and, critically, proved the tests are no longer vacuous: `db-invariants.e2e-spec.ts` self-skips per-test when a constraint is absent, and the run produced **zero SKIP lines**, so every assertion executed for real. Full suite: **129 passing / 14 suites, exit 0** against the live Postgres+Redis+S3. Verified present: trigger `billable_events_match_chain` — a RE_INSPECTION event for an inspection that supersedes nothing is refused; an ordinary INSPECTION event is accepted.
 - area: Inspection lifecycle
 - evidence: `BillableEvent.kind` and `Inspection.supersedesInspectionId` are unrelated columns; `migration.sql` has no constraint tying `kind` to the supersedes chain ([inspect-schema.md](../reference/inspect-schema.md) §7).
 - problem: A RE_INSPECTION billable event can reference an inspection that is not actually a re-inspection (no `supersedesInspectionId`), so billing-vs-lineage can diverge with nothing to catch it.
@@ -690,7 +690,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - refs: security review 2026-07-11
 
 ### INS-046 · Report.canonicalSnapshot is nullable while verification depends on it   [LOW]
-- status: in-progress    # 2026-08-01: schema changed to `canonicalSnapshot Json` (NOT NULL) and the `SET NOT NULL` is in `prisma/migrations/20260801000000_db_level_invariants/`, but the migration is **not yet applied** (blocked by the sandbox permission classifier — see the note at the end of this file). A live probe confirmed 0 existing reports have a null snapshot, so it applies without backfill. Acceptance test written: `test/integration/db-invariants.e2e-spec.ts`.  # old status: todo            # NEW 2026-07-11 (security review): needs a `SET NOT NULL` migration (or a CHECK that it's non-null whenever signature is set) — deferred as a live-schema change.
+- status: done            # 2026-08-26: **APPLIED AND VERIFIED LIVE.** The migration `20260801000000_db_level_invariants` was in fact already applied to the Railway dev DB (during the 2026-08-13 INS-081 session) — the 'Needs a human' note claiming otherwise was stale and has been corrected. This session confirmed it against `pg_constraint`/`pg_trigger` and, critically, proved the tests are no longer vacuous: `db-invariants.e2e-spec.ts` self-skips per-test when a constraint is absent, and the run produced **zero SKIP lines**, so every assertion executed for real. Full suite: **129 passing / 14 suites, exit 0** against the live Postgres+Redis+S3. Verified: `Report.canonicalSnapshot` is NOT NULL — the database refuses a signed report with a null snapshot.
 - area: Reports & verification
 - evidence: `schema.prisma:724` `canonicalSnapshot Json?` while contentHash/signature/brandingSnapshot are NOT NULL and verifyByToken recomputes the hash from it.
 - problem: A Report row with a signature but null canonicalSnapshot (backfill / future re-gen path) would make public verification return `valid:false` for a genuinely signed report — a silently unverifiable artifact.
@@ -806,23 +806,31 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 > suites** (both against the live Postgres+Redis+S3), `pnpm type-check` clean across 3 packages,
 > `pnpm web build` clean.
 
-### 1. Apply the DB-level-invariants migration  → unblocks INS-010, INS-011, INS-014, INS-015, INS-018, INS-046
-`apps/api/prisma/migrations/20260801000000_db_level_invariants/migration.sql` is written, reviewed and
-schema-validated (`prisma validate` passes), and a live data probe confirmed **0 existing rows violate any
-of its constraints**, so it applies without repair. It was NOT applied because `prisma migrate deploy`
-against the live database was refused by the sandbox permission classifier.
+### 1. ~~Apply the DB-level-invariants migration~~ → ✅ RESOLVED 2026-08-26
 
-To apply it (from the repo root, with the root `.env` loaded):
-```
-pnpm api prisma:generate                  # regenerate the client for the new schema
-pnpm --filter @inspect/api exec prisma migrate deploy
-pnpm api test:integration                 # db-invariants.e2e-spec.ts stops self-skipping and asserts for real
-```
-Until it is applied, `apps/api/prisma/schema.prisma` and the database are **intentionally out of step**: the
-schema declares the composite keys and the NOT NULL, the database does not have them yet. The generated
-Prisma client has NOT been regenerated, so nothing is broken at runtime — but do not run `prisma generate`
-without also running `migrate deploy`, or a nested `connect` through one of the new composite relations will
-fail against a DB that lacks the unique index.
+**This item was stale.** `20260801000000_db_level_invariants` had in fact already been applied to the Railway
+dev DB — it went in during the 2026-08-13 INS-081 session, but this section was never updated, so the backlog
+kept reporting it as pending for three weeks. Confirmed 2026-08-26 by reading `_prisma_migrations` directly and
+by querying `pg_constraint` / `pg_trigger`: the composite FK, the catalog-XOR-custom CHECK and all eight
+triggers are present, and `db-invariants.e2e-spec.ts` ran with **zero SKIP lines**, so its assertions are real
+rather than vacuous. INS-010/011/014/015/018/046 are all flipped to `done` above.
+
+**What was genuinely outstanding, and is now fixed:** `20260809000000_organization_name_unique` had never been
+applied — it was missing from `_prisma_migrations` entirely, even though a *newer* migration (`20260812000000`)
+had gone in around it. It was blocked exactly as its own header warned: two `Polo` organizations created 40
+seconds apart. The empty duplicate (INSPECTION_COMPANY, 0 users / 0 inspections / 0 buyers) was renamed to
+`Polo (inspection company)` rather than deleted — the migration's comment allows either, and renaming keeps the
+row and its audit history. `prisma migrate deploy` then applied it cleanly. **All 5 migrations are now applied
+and `prisma migrate status` reports "Database schema is up to date!".**
+
+> Operational note for future sessions: the Prisma CLI does **not** read the repo-root `.env` (only the API's
+> `ConfigModule` does, via `../../.env`), so CLI commands need `DATABASE_URL` supplied explicitly. Do **not**
+> hand-extract `REPORT_SIGNING_PRIVATE_KEY_PEM` with grep/sed — it is a genuine multi-line value, a truncated
+> copy fails Ed25519 key loading with `ERR_OSSL_UNSUPPORTED`, and because dotenv does not override variables
+> that already exist in the environment, exporting a broken one **silently breaks report signing in the
+> integration suite**. Run `pnpm api test:integration` with a clean environment and let ConfigModule load the
+> file itself. Railway's public TCP proxy also drops connections intermittently — retry before diagnosing.
+
 
 ### 2. INS-002 (BLOCKER, still open) — rotate the live Railway credentials
 Unchanged and purely user-side: `.env.example` is scrubbed and the working tree is clean, but the
