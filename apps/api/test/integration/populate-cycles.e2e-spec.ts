@@ -70,7 +70,10 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
     await app.close();
   });
 
-  async function newInspection(): Promise<{ id: string; items: Array<{ id: string }> }> {
+  async function newInspection(): Promise<{
+    id: string;
+    items: Array<{ id: string }>;
+  }> {
     const created = expect2xx(
       await client.post('/inspections', {
         token: org.ownerToken,
@@ -83,12 +86,19 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
   }
 
   /** Register a photo into the (item, cycle) slot. Returns the raw response. */
-  function upload(inspectionId: string, itemId: string, cycleIndex: number, seed: string) {
+  function upload(
+    inspectionId: string,
+    itemId: string,
+    cycleIndex: number,
+    seed: string,
+  ) {
     return client.post(`/inspections/${inspectionId}/populate/photos`, {
       token: adminToken,
       body: {
         storageKey: `e2e/${tag}/${seed}.jpg`,
-        contentHash: createHash('sha256').update(`${tag}-${seed}`).digest('hex'),
+        contentHash: createHash('sha256')
+          .update(`${tag}-${seed}`)
+          .digest('hex'),
         inspectionLoopItemId: itemId,
         cycleIndex,
       },
@@ -98,10 +108,19 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
   it('blocks submit mid-cycle, naming the unit and the missing item', async () => {
     const insp = await newInspection();
     // Unit 1: both items — a complete cycle.
-    expect2xx(await upload(insp.id, insp.items[0].id, 0, 'u1-front'), 'unit 1 front');
-    expect2xx(await upload(insp.id, insp.items[1].id, 0, 'u1-back'), 'unit 1 back');
+    expect2xx(
+      await upload(insp.id, insp.items[0].id, 0, 'u1-front'),
+      'unit 1 front',
+    );
+    expect2xx(
+      await upload(insp.id, insp.items[1].id, 0, 'u1-back'),
+      'unit 1 back',
+    );
     // Unit 2: only the first item — partial.
-    expect2xx(await upload(insp.id, insp.items[0].id, 1, 'u2-front'), 'unit 2 front');
+    expect2xx(
+      await upload(insp.id, insp.items[0].id, 1, 'u2-front'),
+      'unit 2 front',
+    );
 
     const blocked = await client.post(`/inspections/${insp.id}/submit`, {
       token: org.ownerToken,
@@ -113,18 +132,32 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
 
   it('accepts the submit once the partial unit is discarded', async () => {
     const insp = await newInspection();
-    expect2xx(await upload(insp.id, insp.items[0].id, 0, 'd-u1-front'), 'unit 1 front');
-    expect2xx(await upload(insp.id, insp.items[1].id, 0, 'd-u1-back'), 'unit 1 back');
-    expect2xx(await upload(insp.id, insp.items[0].id, 1, 'd-u2-front'), 'unit 2 front');
+    expect2xx(
+      await upload(insp.id, insp.items[0].id, 0, 'd-u1-front'),
+      'unit 1 front',
+    );
+    expect2xx(
+      await upload(insp.id, insp.items[1].id, 0, 'd-u1-back'),
+      'unit 1 back',
+    );
+    expect2xx(
+      await upload(insp.id, insp.items[0].id, 1, 'd-u2-front'),
+      'unit 2 front',
+    );
 
     const discarded = expect2xx(
-      await client.delete(`/inspections/${insp.id}/populate/cycles/1`, { token: adminToken }),
+      await client.delete(`/inspections/${insp.id}/populate/cycles/1`, {
+        token: adminToken,
+      }),
       'DELETE populate/cycles/1',
     );
     expect(discarded.deleted.photos).toBe(1);
 
     const submitted = expect2xx(
-      await client.post(`/inspections/${insp.id}/submit`, { token: org.ownerToken, body: {} }),
+      await client.post(`/inspections/${insp.id}/submit`, {
+        token: org.ownerToken,
+        body: {},
+      }),
       'POST /inspections/:id/submit',
     );
     expect(submitted.status).toBe('SUBMITTED');
@@ -132,14 +165,29 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
 
   it('accepts the submit once the partial unit is finished instead', async () => {
     const insp = await newInspection();
-    expect2xx(await upload(insp.id, insp.items[0].id, 0, 'f-u1-front'), 'unit 1 front');
-    expect2xx(await upload(insp.id, insp.items[1].id, 0, 'f-u1-back'), 'unit 1 back');
-    expect2xx(await upload(insp.id, insp.items[0].id, 1, 'f-u2-front'), 'unit 2 front');
+    expect2xx(
+      await upload(insp.id, insp.items[0].id, 0, 'f-u1-front'),
+      'unit 1 front',
+    );
+    expect2xx(
+      await upload(insp.id, insp.items[1].id, 0, 'f-u1-back'),
+      'unit 1 back',
+    );
+    expect2xx(
+      await upload(insp.id, insp.items[0].id, 1, 'f-u2-front'),
+      'unit 2 front',
+    );
     // Finish the unit rather than discarding it — the other half of the rule.
-    expect2xx(await upload(insp.id, insp.items[1].id, 1, 'f-u2-back'), 'unit 2 back');
+    expect2xx(
+      await upload(insp.id, insp.items[1].id, 1, 'f-u2-back'),
+      'unit 2 back',
+    );
 
     const submitted = expect2xx(
-      await client.post(`/inspections/${insp.id}/submit`, { token: org.ownerToken, body: {} }),
+      await client.post(`/inspections/${insp.id}/submit`, {
+        token: org.ownerToken,
+        body: {},
+      }),
       'POST /inspections/:id/submit',
     );
     expect(submitted.status).toBe('SUBMITTED');
@@ -152,12 +200,17 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
       body: {},
     });
     expect(res.status).toBe(400);
-    expect(String(res.body.message)).toMatch(/no complete unit has been photographed/i);
+    expect(String(res.body.message)).toMatch(
+      /no complete unit has been photographed/i,
+    );
   });
 
   it('409s a second photo aimed at a filled slot and points at retake', async () => {
     const insp = await newInspection();
-    expect2xx(await upload(insp.id, insp.items[0].id, 0, 'dup-first'), 'first photo');
+    expect2xx(
+      await upload(insp.id, insp.items[0].id, 0, 'dup-first'),
+      'first photo',
+    );
     const dup = await upload(insp.id, insp.items[0].id, 0, 'dup-second');
     expect(dup.status).toBe(409);
     expect(String(dup.body.message)).toMatch(/unit 1 already has a photo/i);
@@ -166,14 +219,23 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
 
   it('retake replaces the bytes in place, keeping the photo id and its slot', async () => {
     const insp = await newInspection();
-    const photo = expect2xx(await upload(insp.id, insp.items[0].id, 0, 'rt-orig'), 'original');
+    const photo = expect2xx(
+      await upload(insp.id, insp.items[0].id, 0, 'rt-orig'),
+      'original',
+    );
     const newHash = 'b'.repeat(64);
 
     const retaken = expect2xx(
-      await client.post(`/inspections/${insp.id}/populate/photos/${photo.id}/retake`, {
-        token: adminToken,
-        body: { storageKey: `e2e/${tag}/rt-replacement.jpg`, contentHash: newHash },
-      }),
+      await client.post(
+        `/inspections/${insp.id}/populate/photos/${photo.id}/retake`,
+        {
+          token: adminToken,
+          body: {
+            storageKey: `e2e/${tag}/rt-replacement.jpg`,
+            contentHash: newHash,
+          },
+        },
+      ),
       'POST populate/photos/:id/retake',
     );
     expect(retaken.id).toBe(photo.id);
@@ -189,14 +251,24 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
     const first = expect2xx(
       await client.post(`/inspections/${insp.id}/populate/measurements`, {
         token: adminToken,
-        body: { cycleIndex: 0, label: 'Chest', recordedValue: '52.0', unit: 'cm' },
+        body: {
+          cycleIndex: 0,
+          label: 'Chest',
+          recordedValue: '52.0',
+          unit: 'cm',
+        },
       }),
       'measurement unit 1',
     );
     const corrected = expect2xx(
       await client.post(`/inspections/${insp.id}/populate/measurements`, {
         token: adminToken,
-        body: { cycleIndex: 0, label: 'Chest', recordedValue: '52.4', unit: 'cm' },
+        body: {
+          cycleIndex: 0,
+          label: 'Chest',
+          recordedValue: '52.4',
+          unit: 'cm',
+        },
       }),
       'measurement unit 1 (corrected)',
     );
@@ -217,15 +289,23 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
       },
     });
     expect(res.status).toBe(400);
-    expect(String(res.body.message)).toMatch(/no photo has been uploaded for unit 4/i);
+    expect(String(res.body.message)).toMatch(
+      /no photo has been uploaded for unit 4/i,
+    );
   });
 
   it('refuses retake and cycle-discard once the inspection is submitted', async () => {
     const insp = await newInspection();
-    const photo = expect2xx(await upload(insp.id, insp.items[0].id, 0, 'lock-front'), 'front');
+    const photo = expect2xx(
+      await upload(insp.id, insp.items[0].id, 0, 'lock-front'),
+      'front',
+    );
     expect2xx(await upload(insp.id, insp.items[1].id, 0, 'lock-back'), 'back');
     expect2xx(
-      await client.post(`/inspections/${insp.id}/submit`, { token: org.ownerToken, body: {} }),
+      await client.post(`/inspections/${insp.id}/submit`, {
+        token: org.ownerToken,
+        body: {},
+      }),
       'submit',
     );
 
@@ -233,15 +313,21 @@ describe('populate cycles: the end-of-loop rule (INS-081)', () => {
       `/inspections/${insp.id}/populate/photos/${photo.id}/retake`,
       {
         token: adminToken,
-        body: { storageKey: `e2e/${tag}/nope.jpg`, contentHash: 'c'.repeat(64) },
+        body: {
+          storageKey: `e2e/${tag}/nope.jpg`,
+          contentHash: 'c'.repeat(64),
+        },
       },
     );
     expect(retake.status).toBe(400);
     expect(String(retake.body.message)).toMatch(/locked/i);
 
-    const discard = await client.delete(`/inspections/${insp.id}/populate/cycles/0`, {
-      token: adminToken,
-    });
+    const discard = await client.delete(
+      `/inspections/${insp.id}/populate/cycles/0`,
+      {
+        token: adminToken,
+      },
+    );
     expect(discard.status).toBe(400);
     expect(String(discard.body.message)).toMatch(/locked/i);
   });

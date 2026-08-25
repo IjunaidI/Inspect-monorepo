@@ -3,15 +3,29 @@ import { BuyersService } from './buyers.service';
 import { AuthUser } from '../auth/auth-user';
 
 /** A plain org user acting in their own org. */
-const ACTOR = { userId: 'u1', orgId: 'orgA', role: 'ORG_OWNER' } as unknown as AuthUser;
+const ACTOR = {
+  userId: 'u1',
+  orgId: 'orgA',
+  role: 'ORG_OWNER',
+} as unknown as AuthUser;
 
 /**
  * Regression coverage for the tenant-isolation fix (security review, 2026-07-11):
  * a buyer's defaultLoopPresetId must reference a preset in the caller's own org.
  */
 function makeService(presetInOrg: boolean) {
-  const buyerCreate = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'b1', ...data }));
-  const buyerUpdate = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'b1', ...data }));
+  const buyerCreate = jest.fn(
+    async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'b1',
+      ...data,
+    }),
+  );
+  const buyerUpdate = jest.fn(
+    async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'b1',
+      ...data,
+    }),
+  );
   const prisma: Record<string, unknown> = {
     buyer: {
       findFirst: jest.fn(async () => ({ id: 'b1', orgId: 'orgA' })),
@@ -25,19 +39,26 @@ function makeService(presetInOrg: boolean) {
   // INS-006: every write now runs inside a transaction that also appends the
   // audit row. Handing the same object back as `tx` keeps the delegate mocks
   // (buyerCreate/buyerUpdate) observable exactly as before.
-  prisma.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma));
+  prisma.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) =>
+    fn(prisma),
+  );
   const audit = { append: jest.fn(async () => ({})) };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const service = new BuyersService(prisma as any, audit as any);
   return { service, buyerCreate, buyerUpdate, prisma: prisma as any, audit };
 }
 
 describe('BuyersService.list aggregates (INS-005)', () => {
   function makeListService() {
-    const findMany = jest.fn(async (_args: { where: Record<string, unknown> }) => []);
+    const findMany = jest.fn(
+      async (_args: { where: Record<string, unknown> }) => [],
+    );
     const audit = { append: jest.fn(async () => ({})) };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const service = new BuyersService({ buyer: { findMany } } as any, audit as any);
+
+    const service = new BuyersService(
+      { buyer: { findMany } } as any,
+      audit as any,
+    );
     return { service, findMany };
   }
 
@@ -68,14 +89,20 @@ describe('BuyersService preset tenant scoping', () => {
   it('create rejects a defaultLoopPresetId from another org', async () => {
     const { service, buyerCreate } = makeService(false);
     await expect(
-      service.create('orgA', ACTOR, { name: 'ACME', defaultLoopPresetId: 'p-orgB' }),
+      service.create('orgA', ACTOR, {
+        name: 'ACME',
+        defaultLoopPresetId: 'p-orgB',
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(buyerCreate).not.toHaveBeenCalled();
   });
 
   it('create accepts a same-org preset', async () => {
     const { service, buyerCreate } = makeService(true);
-    await service.create('orgA', ACTOR, { name: 'ACME', defaultLoopPresetId: 'p1' });
+    await service.create('orgA', ACTOR, {
+      name: 'ACME',
+      defaultLoopPresetId: 'p1',
+    });
     expect(buyerCreate).toHaveBeenCalledTimes(1);
   });
 
@@ -107,23 +134,28 @@ describe('BuyersService preset tenant scoping', () => {
  * unvalidated value becomes permanent garbage in a tamper-proof artifact.
  */
 describe('BuyersService primaryColor validation (INS-077)', () => {
-  const dataOf = (mock: jest.Mock) => mock.mock.calls[0][0].data as Record<string, unknown>;
+  const dataOf = (mock: jest.Mock) =>
+    mock.mock.calls[0][0].data as Record<string, unknown>;
 
-  it.each(['red', '#12345', '#GGGGGG', '#1457A3 ; drop', 'rgb(1,2,3)', '1457A3', '#1457A3AA'])(
-    'create rejects %p with a 400 and writes nothing',
-    async (bad) => {
-      const { service, buyerCreate } = makeService(true);
-      await expect(service.create('orgA', ACTOR, { name: 'ACME', primaryColor: bad })).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-      expect(buyerCreate).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    'red',
+    '#12345',
+    '#GGGGGG',
+    '#1457A3 ; drop',
+    'rgb(1,2,3)',
+    '1457A3',
+    '#1457A3AA',
+  ])('create rejects %p with a 400 and writes nothing', async (bad) => {
+    const { service, buyerCreate } = makeService(true);
+    await expect(
+      service.create('orgA', ACTOR, { name: 'ACME', primaryColor: bad }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(buyerCreate).not.toHaveBeenCalled();
+  });
 
   it('create rejects a non-string primaryColor', async () => {
     const { service, buyerCreate } = makeService(true);
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       service.create('orgA', ACTOR, { name: 'ACME', primaryColor: 123 as any }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(buyerCreate).not.toHaveBeenCalled();
@@ -131,7 +163,10 @@ describe('BuyersService primaryColor validation (INS-077)', () => {
 
   it('create accepts #RRGGBB and normalises the case', async () => {
     const { service, buyerCreate } = makeService(true);
-    await service.create('orgA', ACTOR, { name: 'ACME', primaryColor: '#1457A3' });
+    await service.create('orgA', ACTOR, {
+      name: 'ACME',
+      primaryColor: '#1457A3',
+    });
     expect(dataOf(buyerCreate).primaryColor).toBe('#1457a3');
   });
 
@@ -143,9 +178,9 @@ describe('BuyersService primaryColor validation (INS-077)', () => {
 
   it('update rejects a bad hex before it reaches the DB', async () => {
     const { service, buyerUpdate } = makeService(true);
-    await expect(service.update('orgA', ACTOR, 'b1', { primaryColor: 'red' })).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.update('orgA', ACTOR, 'b1', { primaryColor: 'red' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(buyerUpdate).not.toHaveBeenCalled();
   });
 
@@ -186,7 +221,10 @@ describe('BuyersService create/update audit (INS-006)', () => {
     expect(buyerCreate).toHaveBeenCalledTimes(1);
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(audit.append).toHaveBeenCalledTimes(1);
-    const [entry, tx] = audit.append.mock.calls[0] as unknown as [Record<string, unknown>, unknown];
+    const [entry, tx] = audit.append.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+      unknown,
+    ];
     expect(entry).toMatchObject({
       orgId: 'orgA',
       actorType: 'USER',
@@ -202,10 +240,15 @@ describe('BuyersService create/update audit (INS-006)', () => {
 
   it('update appends one audit row naming the supplied fields', async () => {
     const { service, audit } = makeService(true);
-    await service.update('orgA', ACTOR, 'b1', { name: 'ACME Ltd', primaryColor: '#1457A3' });
+    await service.update('orgA', ACTOR, 'b1', {
+      name: 'ACME Ltd',
+      primaryColor: '#1457A3',
+    });
 
     expect(audit.append).toHaveBeenCalledTimes(1);
-    const [entry] = audit.append.mock.calls[0] as unknown as [Record<string, unknown>];
+    const [entry] = audit.append.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+    ];
     expect(entry).toMatchObject({
       action: 'buyer.updated',
       entityType: 'Buyer',
@@ -217,14 +260,22 @@ describe('BuyersService create/update audit (INS-006)', () => {
   it('a rejected write appends nothing', async () => {
     const { service, audit } = makeService(false);
     await expect(
-      service.create('orgA', ACTOR, { name: 'ACME', defaultLoopPresetId: 'p-orgB' }),
+      service.create('orgA', ACTOR, {
+        name: 'ACME',
+        defaultLoopPresetId: 'p-orgB',
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(audit.append).not.toHaveBeenCalled();
   });
 });
 
 describe('BuyersService archive/restore (INS-061)', () => {
-  const ACTOR = { userId: 'u1', orgId: 'org1', role: 'ORG_OWNER' as const, actingAsOrgId: null };
+  const ACTOR = {
+    userId: 'u1',
+    orgId: 'org1',
+    role: 'ORG_OWNER' as const,
+    actingAsOrgId: null,
+  };
   // INS-079: a Platform Admin operating inside an assumed org must be attributed
   // as PLATFORM_ADMIN in the audit chain, not as an ordinary org member.
   const PLATFORM_ADMIN_ACTOR = {
@@ -234,24 +285,42 @@ describe('BuyersService archive/restore (INS-061)', () => {
     actingAsOrgId: 'org1',
   };
 
-  function makeArchiveService(row: { id: string; orgId: string; archivedAt: Date | null }) {
-    const update = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ ...row, ...data }));
+  function makeArchiveService(row: {
+    id: string;
+    orgId: string;
+    archivedAt: Date | null;
+  }) {
+    const update = jest.fn(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        ...row,
+        ...data,
+      }),
+    );
     const tx = { buyer: { update } };
     const prisma = {
       buyer: { findFirst: jest.fn(async () => row), update },
-      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
+        fn(tx),
+      ),
     };
     const audit = { append: jest.fn(async () => ({})) };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const service = new BuyersService(prisma as any, audit as any);
     return { service, prisma, audit, update };
   }
 
   it('restore clears archivedAt and appends an audit row', async () => {
-    const { service, audit, update } = makeArchiveService({ id: 'b1', orgId: 'org1', archivedAt: new Date() });
+    const { service, audit, update } = makeArchiveService({
+      id: 'b1',
+      orgId: 'org1',
+      archivedAt: new Date(),
+    });
     const out = await service.restore('org1', ACTOR, 'b1');
     expect(out.archivedAt).toBeNull();
-    expect(update).toHaveBeenCalledWith({ where: { id: 'b1' }, data: { archivedAt: null } });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'b1' },
+      data: { archivedAt: null },
+    });
     expect(audit.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'buyer.restored',
@@ -266,7 +335,11 @@ describe('BuyersService archive/restore (INS-061)', () => {
   // INS-079: without actorTypeFor wired into the call site, this regresses
   // silently — the literal 'USER' still satisfies every other assertion above.
   it('restore attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
-    const { service, audit } = makeArchiveService({ id: 'b1', orgId: 'org1', archivedAt: new Date() });
+    const { service, audit } = makeArchiveService({
+      id: 'b1',
+      orgId: 'org1',
+      archivedAt: new Date(),
+    });
     await service.restore('org1', PLATFORM_ADMIN_ACTOR, 'b1');
     expect(audit.append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -280,7 +353,11 @@ describe('BuyersService archive/restore (INS-061)', () => {
 
   it('re-archiving an archived buyer is a no-op that preserves the original timestamp', async () => {
     const when = new Date('2026-07-01T00:00:00Z');
-    const { service, update } = makeArchiveService({ id: 'b1', orgId: 'org1', archivedAt: when });
+    const { service, update } = makeArchiveService({
+      id: 'b1',
+      orgId: 'org1',
+      archivedAt: when,
+    });
     const out = await service.archive('org1', ACTOR, 'b1');
     expect(out.archivedAt).toEqual(when);
     expect(update).not.toHaveBeenCalled();

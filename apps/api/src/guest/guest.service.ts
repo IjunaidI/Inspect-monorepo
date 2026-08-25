@@ -74,7 +74,12 @@ export class GuestService {
     });
   }
 
-  async getReport(token: string, reportId: string, ipAddress?: string, userAgent?: string) {
+  async getReport(
+    token: string,
+    reportId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
     const guest = await this.guestByToken(token);
     const report = await this.prisma.report.findFirst({
       where: { id: reportId, buyerId: guest.buyerId, orgId: guest.orgId },
@@ -89,7 +94,10 @@ export class GuestService {
     // same sequence the signed snapshot's photoHashes use.
     const photoRows = await this.prisma.photo.findMany({
       where: { inspectionId: report.inspectionId },
-      orderBy: [{ cycleIndex: 'asc' }, { inspectionLoopItem: { position: 'asc' } }],
+      orderBy: [
+        { cycleIndex: 'asc' },
+        { inspectionLoopItem: { position: 'asc' } },
+      ],
       select: {
         id: true,
         contentHash: true,
@@ -131,7 +139,13 @@ export class GuestService {
       throw new NotFoundException('Report not found');
     }
     const presigned = presignReportPdf(this.storage, report.pdfStorageKey);
-    await this.recordAccess(report.id, guest.id, 'DOWNLOAD', ipAddress, userAgent);
+    await this.recordAccess(
+      report.id,
+      guest.id,
+      'DOWNLOAD',
+      ipAddress,
+      userAgent,
+    );
     return { reportId: report.id, ...presigned };
   }
 }

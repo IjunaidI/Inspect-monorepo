@@ -7,7 +7,11 @@ async function bootstrap() {
   // CORS (INS-053): explicit origins from ALLOWED_ORIGINS (comma-separated),
   // falling back to WEB_BASE_URL. Only a fully unconfigured dev setup stays
   // open — and says so at boot.
-  const origins = (process.env.ALLOWED_ORIGINS ?? process.env.WEB_BASE_URL ?? '')
+  const origins = (
+    process.env.ALLOWED_ORIGINS ??
+    process.env.WEB_BASE_URL ??
+    ''
+  )
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);

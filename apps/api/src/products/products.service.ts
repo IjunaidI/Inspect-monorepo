@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
@@ -37,7 +41,15 @@ export class ProductsService {
     private readonly audit: AuditService,
   ) {}
 
-  list(orgId: string, opts: { includeArchived?: boolean; q?: string; take?: number; skip?: number } = {}) {
+  list(
+    orgId: string,
+    opts: {
+      includeArchived?: boolean;
+      q?: string;
+      take?: number;
+      skip?: number;
+    } = {},
+  ) {
     return this.prisma.product.findMany({
       where: {
         orgId,
@@ -45,8 +57,18 @@ export class ProductsService {
         ...(opts.q
           ? {
               OR: [
-                { styleNumber: { contains: opts.q, mode: 'insensitive' as const } },
-                { description: { contains: opts.q, mode: 'insensitive' as const } },
+                {
+                  styleNumber: {
+                    contains: opts.q,
+                    mode: 'insensitive' as const,
+                  },
+                },
+                {
+                  description: {
+                    contains: opts.q,
+                    mode: 'insensitive' as const,
+                  },
+                },
               ],
             }
           : {}),
@@ -99,7 +121,12 @@ export class ProductsService {
     });
   }
 
-  async update(orgId: string, actor: AuthUser, id: string, input: UpdateProductInput) {
+  async update(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    input: UpdateProductInput,
+  ) {
     await this.get(orgId, id);
     return this.prisma.$transaction(async (tx) => {
       const product = await tx.product.update({
@@ -136,9 +163,19 @@ export class ProductsService {
     // Idempotent: re-archiving must not overwrite the original timestamp (INS-061).
     if (product.archivedAt) return product;
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.product.update({ where: { id }, data: { archivedAt: new Date() } });
+      const updated = await tx.product.update({
+        where: { id },
+        data: { archivedAt: new Date() },
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'product.archived', entityType: 'Product', entityId: id },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'product.archived',
+          entityType: 'Product',
+          entityId: id,
+        },
         tx,
       );
       return updated;
@@ -150,9 +187,19 @@ export class ProductsService {
     const product = await this.get(orgId, id);
     if (!product.archivedAt) return product;
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.product.update({ where: { id }, data: { archivedAt: null } });
+      const updated = await tx.product.update({
+        where: { id },
+        data: { archivedAt: null },
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'product.restored', entityType: 'Product', entityId: id },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'product.restored',
+          entityType: 'Product',
+          entityId: id,
+        },
         tx,
       );
       return updated;

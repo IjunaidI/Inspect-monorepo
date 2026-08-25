@@ -13,17 +13,20 @@ function makeService(user: Record<string, unknown> | null) {
   const userUpdate = jest.fn(async () => user);
   const prisma = {
     user: {
-      findUnique: jest.fn(async ({ where }: { where: { email?: string; id?: string } }) => {
-        if (!user) return null;
-        if (where.email !== undefined) return user.email === where.email ? user : null;
-        if (where.id !== undefined) return user.id === where.id ? user : null;
-        return null;
-      }),
+      findUnique: jest.fn(
+        async ({ where }: { where: { email?: string; id?: string } }) => {
+          if (!user) return null;
+          if (where.email !== undefined)
+            return user.email === where.email ? user : null;
+          if (where.id !== undefined) return user.id === where.id ? user : null;
+          return null;
+        },
+      ),
       update: userUpdate,
     },
   };
   const config = { get: (k: string) => SECRETS[k] };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const service = new AuthService(prisma as any, config as any);
   return Object.assign(service, { __userUpdate: userUpdate });
 }
@@ -48,7 +51,9 @@ describe('AuthService', () => {
     });
 
     it('returns null for a wrong password', async () => {
-      expect(await makeService(activeUser).validateUser('qa@org.com', 'wrong')).toBeNull();
+      expect(
+        await makeService(activeUser).validateUser('qa@org.com', 'wrong'),
+      ).toBeNull();
     });
 
     it('returns null for a non-active user', async () => {
@@ -57,7 +62,10 @@ describe('AuthService', () => {
     });
 
     it('returns the principal for valid credentials', async () => {
-      const principal = await makeService(activeUser).validateUser('qa@org.com', 'correct-pw');
+      const principal = await makeService(activeUser).validateUser(
+        'qa@org.com',
+        'correct-pw',
+      );
       expect(principal).toEqual({
         userId: 'u1',
         orgId: 'org1',
@@ -100,11 +108,16 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('throws on bad credentials', async () => {
-      await expect(makeService(activeUser).login('qa@org.com', 'nope')).rejects.toThrow();
+      await expect(
+        makeService(activeUser).login('qa@org.com', 'nope'),
+      ).rejects.toThrow();
     });
 
     it('returns a token pair on success', async () => {
-      const pair = await makeService(activeUser).login('qa@org.com', 'correct-pw');
+      const pair = await makeService(activeUser).login(
+        'qa@org.com',
+        'correct-pw',
+      );
       expect(pair.accessToken).toBeTruthy();
       expect(pair.refreshToken).toBeTruthy();
     });

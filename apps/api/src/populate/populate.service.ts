@@ -96,14 +96,19 @@ export class PopulateService {
    * (INS-057): a 403 would confirm the row exists and turn the endpoint into an
    * existence oracle for other people's work.
    */
-  private scopeFor(actor: AuthUser): { orgId?: string; assignedInspectorId?: string } {
+  private scopeFor(actor: AuthUser): {
+    orgId?: string;
+    assignedInspectorId?: string;
+  } {
     if (actor?.role === 'PLATFORM_ADMIN') return {};
     if (!actor?.orgId) {
       throw new ForbiddenException('No organization context');
     }
     return {
       orgId: actor.orgId,
-      ...(actor.role === 'INSPECTOR' ? { assignedInspectorId: actor.userId } : {}),
+      ...(actor.role === 'INSPECTOR'
+        ? { assignedInspectorId: actor.userId }
+        : {}),
     };
   }
 
@@ -162,7 +167,9 @@ export class PopulateService {
 
   private assertCycleIndex(cycleIndex: number) {
     if (!Number.isInteger(cycleIndex) || cycleIndex < 0) {
-      throw new BadRequestException('cycleIndex must be a non-negative integer');
+      throw new BadRequestException(
+        'cycleIndex must be a non-negative integer',
+      );
     }
   }
 
@@ -172,7 +179,9 @@ export class PopulateService {
       select: { id: true },
     });
     if (!item) {
-      throw new BadRequestException('inspectionLoopItemId not found on this inspection');
+      throw new BadRequestException(
+        'inspectionLoopItemId not found on this inspection',
+      );
     }
   }
 
@@ -197,16 +206,34 @@ export class PopulateService {
     }
   }
 
-  async presignPhotoUpload(inspectionId: string, actor: AuthUser, input: PresignInput) {
+  async presignPhotoUpload(
+    inspectionId: string,
+    actor: AuthUser,
+    input: PresignInput,
+  ) {
     const insp = await this.loadOpenInspection(inspectionId, actor);
-    const storageKey = this.storage.keyForPhoto(insp.orgId, insp.id, input?.ext ?? 'jpg');
-    return { storageKey, uploadUrl: this.storage.presignUpload(storageKey), method: 'PUT' };
+    const storageKey = this.storage.keyForPhoto(
+      insp.orgId,
+      insp.id,
+      input?.ext ?? 'jpg',
+    );
+    return {
+      storageKey,
+      uploadUrl: this.storage.presignUpload(storageKey),
+      method: 'PUT',
+    };
   }
 
-  async registerPhoto(inspectionId: string, actor: AuthUser, input: RegisterPhotoInput) {
+  async registerPhoto(
+    inspectionId: string,
+    actor: AuthUser,
+    input: RegisterPhotoInput,
+  ) {
     const insp = await this.loadOpenInspection(inspectionId, actor);
-    if (!input?.storageKey) throw new BadRequestException('storageKey is required');
-    if (!input?.contentHash) throw new BadRequestException('contentHash is required');
+    if (!input?.storageKey)
+      throw new BadRequestException('storageKey is required');
+    if (!input?.contentHash)
+      throw new BadRequestException('contentHash is required');
     if (!input?.inspectionLoopItemId) {
       throw new BadRequestException('inspectionLoopItemId is required');
     }
@@ -215,7 +242,11 @@ export class PopulateService {
     // Idempotency (INS-016): replay returns the original row; a token reused
     // against a different inspection is a 409 — see replayOrConflict().
     if (input.clientRequestId) {
-      const replay = await this.findPhotoReplay(insp.orgId, insp.id, input.clientRequestId);
+      const replay = await this.findPhotoReplay(
+        insp.orgId,
+        insp.id,
+        input.clientRequestId,
+      );
       if (replay) return replay;
     }
     try {
@@ -233,7 +264,9 @@ export class PopulateService {
             thumbnailKey: input.thumbnailKey,
             source: 'MANUAL_UPLOAD', // Admin manual upload — badged unverified (spec §9)
             uploaderUserId: actor.userId,
-            capturedAt: input.capturedAt ? new Date(input.capturedAt) : undefined,
+            capturedAt: input.capturedAt
+              ? new Date(input.capturedAt)
+              : undefined,
             deviceId: input.deviceId,
             gps: input.gps as Prisma.InputJsonValue,
             exif: input.exif as Prisma.InputJsonValue,
@@ -263,8 +296,13 @@ export class PopulateService {
         return photo;
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        const target = Array.isArray(e.meta?.target) ? (e.meta.target as string[]) : [];
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        const target = Array.isArray(e.meta?.target)
+          ? (e.meta.target as string[])
+          : [];
         // INS-081: the SLOT constraint is a different failure from the
         // idempotency one. This is not a retry — it is a second photo aimed at a
         // filled slot, and silently replaying would hide the operator's mistake.
@@ -278,7 +316,11 @@ export class PopulateService {
         // @@unique([orgId, clientRequestId]). Converge to the winner's row rather
         // than surfacing an opaque 500 (INS-016, mirrors addDefect/INS-044).
         if (input.clientRequestId) {
-          const replay = await this.findPhotoReplay(insp.orgId, insp.id, input.clientRequestId);
+          const replay = await this.findPhotoReplay(
+            insp.orgId,
+            insp.id,
+            input.clientRequestId,
+          );
           if (replay) return replay;
         }
       }
@@ -286,11 +328,20 @@ export class PopulateService {
     }
   }
 
-  private async findPhotoReplay(orgId: string, inspectionId: string, clientRequestId: string) {
+  private async findPhotoReplay(
+    orgId: string,
+    inspectionId: string,
+    clientRequestId: string,
+  ) {
     const existing = await this.prisma.photo.findFirst({
       where: { orgId, clientRequestId },
     });
-    return this.replayOrConflict(existing, 'photo', inspectionId, clientRequestId);
+    return this.replayOrConflict(
+      existing,
+      'photo',
+      inspectionId,
+      clientRequestId,
+    );
   }
 
   /**
@@ -310,10 +361,15 @@ export class PopulateService {
     input: RetakePhotoInput,
   ) {
     const insp = await this.loadOpenInspection(inspectionId, actor);
-    if (!input?.storageKey) throw new BadRequestException('storageKey is required');
-    if (!input?.contentHash) throw new BadRequestException('contentHash is required');
-    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, inspectionId } });
-    if (!photo) throw new NotFoundException('Photo not found on this inspection');
+    if (!input?.storageKey)
+      throw new BadRequestException('storageKey is required');
+    if (!input?.contentHash)
+      throw new BadRequestException('contentHash is required');
+    const photo = await this.prisma.photo.findFirst({
+      where: { id: photoId, inspectionId },
+    });
+    if (!photo)
+      throw new NotFoundException('Photo not found on this inspection');
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.photo.update({
@@ -357,14 +413,22 @@ export class PopulateService {
    * finished or discarded whole. Deleting one photo out of a unit is deliberately
    * NOT offered; that is what would create an unfinishable hole in history.
    */
-  async discardCycle(inspectionId: string, actor: AuthUser, cycleIndex: number) {
+  async discardCycle(
+    inspectionId: string,
+    actor: AuthUser,
+    cycleIndex: number,
+  ) {
     const insp = await this.loadOpenInspection(inspectionId, actor);
     this.assertCycleIndex(cycleIndex);
     return this.prisma.$transaction(async (tx) => {
       // Defects first: their DefectInstancePhoto junction rows must go with
       // their parent defect rather than block the photo delete.
-      const defects = await tx.defectInstance.deleteMany({ where: { inspectionId, cycleIndex } });
-      const photos = await tx.photo.deleteMany({ where: { inspectionId, cycleIndex } });
+      const defects = await tx.defectInstance.deleteMany({
+        where: { inspectionId, cycleIndex },
+      });
+      const photos = await tx.photo.deleteMany({
+        where: { inspectionId, cycleIndex },
+      });
       const measurements = await tx.inspectionMeasurement.deleteMany({
         where: { inspectionId, cycleIndex },
       });
@@ -396,26 +460,41 @@ export class PopulateService {
     });
   }
 
-  async addDefect(inspectionId: string, actor: AuthUser, input: AddDefectInput) {
+  async addDefect(
+    inspectionId: string,
+    actor: AuthUser,
+    input: AddDefectInput,
+  ) {
     const insp = await this.loadOpenInspection(inspectionId, actor);
     // Idempotency (INS-044/INS-016): a replayed add-defect (double-click /
     // offline sync) returns the original row — a phantom duplicate could flip
     // the per-class AQL verdict on submit. Reusing the token against a
     // different inspection is a 409 — see replayOrConflict().
     if (input?.clientRequestId) {
-      const replay = await this.findDefectReplay(insp.orgId, insp.id, input.clientRequestId);
+      const replay = await this.findDefectReplay(
+        insp.orgId,
+        insp.id,
+        input.clientRequestId,
+      );
       if (replay) return replay;
     }
     if (!input?.defectCatalogId && !input?.customText?.trim()) {
-      throw new BadRequestException('either defectCatalogId or customText is required');
+      throw new BadRequestException(
+        'either defectCatalogId or customText is required',
+      );
     }
     if (input.defectCatalogId && input.customText) {
-      throw new BadRequestException('provide either defectCatalogId or customText, not both');
+      throw new BadRequestException(
+        'provide either defectCatalogId or customText, not both',
+      );
     }
     let severity = input.severity;
     if (input.defectCatalogId) {
       const cat = await this.prisma.defectCatalog.findFirst({
-        where: { id: input.defectCatalogId, OR: [{ orgId: insp.orgId }, { orgId: null }] },
+        where: {
+          id: input.defectCatalogId,
+          OR: [{ orgId: insp.orgId }, { orgId: null }],
+        },
       });
       if (!cat) throw new BadRequestException('defectCatalogId not accessible');
       severity = severity ?? (cat.defaultSeverity as Severity);
@@ -430,13 +509,19 @@ export class PopulateService {
     }
     this.assertCycleIndex(input.cycleIndex);
     await this.assertItem(inspectionId, input.inspectionLoopItemId);
-    await this.assertSlotHasPhoto(inspectionId, input.inspectionLoopItemId, input.cycleIndex);
+    await this.assertSlotHasPhoto(
+      inspectionId,
+      input.inspectionLoopItemId,
+      input.cycleIndex,
+    );
     if (input.photoIds?.length) {
       const count = await this.prisma.photo.count({
         where: { id: { in: input.photoIds }, inspectionId },
       });
       if (count !== input.photoIds.length) {
-        throw new BadRequestException('one or more photoIds are not on this inspection');
+        throw new BadRequestException(
+          'one or more photoIds are not on this inspection',
+        );
       }
     }
     try {
@@ -491,18 +576,31 @@ export class PopulateService {
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        const replay = await this.findDefectReplay(insp.orgId, insp.id, input.clientRequestId);
+        const replay = await this.findDefectReplay(
+          insp.orgId,
+          insp.id,
+          input.clientRequestId,
+        );
         if (replay) return replay;
       }
       throw e;
     }
   }
 
-  private async findDefectReplay(orgId: string, inspectionId: string, clientRequestId: string) {
+  private async findDefectReplay(
+    orgId: string,
+    inspectionId: string,
+    clientRequestId: string,
+  ) {
     const existing = await this.prisma.defectInstance.findFirst({
       where: { orgId, clientRequestId },
     });
-    return this.replayOrConflict(existing, 'defect', inspectionId, clientRequestId);
+    return this.replayOrConflict(
+      existing,
+      'defect',
+      inspectionId,
+      clientRequestId,
+    );
   }
 
   /**
@@ -567,9 +665,14 @@ export class PopulateService {
    * InspectionsController.withViewUrl). Must never fail the read — a presign
    * problem degrades to viewUrl:null rather than 500ing the whole workspace.
    */
-  private withViewUrl<T extends { storageKey: string }>(photo: T): T & { viewUrl: string | null } {
+  private withViewUrl<T extends { storageKey: string }>(
+    photo: T,
+  ): T & { viewUrl: string | null } {
     try {
-      return { ...photo, viewUrl: this.storage.presignDownload(photo.storageKey) };
+      return {
+        ...photo,
+        viewUrl: this.storage.presignDownload(photo.storageKey),
+      };
     } catch {
       return { ...photo, viewUrl: null };
     }
@@ -581,17 +684,26 @@ export class PopulateService {
    * FK. That natural key is also the idempotency token: re-entering a value
    * updates the row instead of duplicating the point.
    */
-  async addMeasurement(inspectionId: string, actor: AuthUser, input: AddMeasurementInput) {
+  async addMeasurement(
+    inspectionId: string,
+    actor: AuthUser,
+    input: AddMeasurementInput,
+  ) {
     const insp = await this.loadOpenInspection(inspectionId, actor);
     this.assertCycleIndex(input?.cycleIndex);
-    if (!input?.label?.trim()) throw new BadRequestException('label is required');
+    if (!input?.label?.trim())
+      throw new BadRequestException('label is required');
     const label = input.label.trim();
     // INS-006: audit inside the business transaction. Measurements are rendered
     // into the signed report, so the recorded value is evidence.
     return this.prisma.$transaction(async (tx) => {
       const measurement = await tx.inspectionMeasurement.upsert({
         where: {
-          inspectionId_cycleIndex_label: { inspectionId, cycleIndex: input.cycleIndex, label },
+          inspectionId_cycleIndex_label: {
+            inspectionId,
+            cycleIndex: input.cycleIndex,
+            label,
+          },
         },
         create: {
           inspectionId,

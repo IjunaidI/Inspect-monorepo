@@ -82,11 +82,11 @@ export class MailService {
     @Optional() @Inject(MAIL_TRANSPORT) transporter?: Transporter,
   ) {
     this.from = config.get<string>('MAIL_FROM') || DEFAULT_MAIL_FROM;
-    this.webBaseUrl = (config.get<string>('WEB_BASE_URL') || DEFAULT_WEB_BASE_URL).replace(
-      /\/+$/,
-      '',
-    );
-    this.transporter = transporter ?? this.buildTransport(config.get<string>('SMTP_URL'));
+    this.webBaseUrl = (
+      config.get<string>('WEB_BASE_URL') || DEFAULT_WEB_BASE_URL
+    ).replace(/\/+$/, '');
+    this.transporter =
+      transporter ?? this.buildTransport(config.get<string>('SMTP_URL'));
   }
 
   /**
@@ -103,7 +103,9 @@ export class MailService {
       try {
         const url = new URL(smtpUrl);
         if (!/^smtps?:$/.test(url.protocol)) {
-          throw new Error(`unsupported scheme "${url.protocol}//" (use smtp:// or smtps://)`);
+          throw new Error(
+            `unsupported scheme "${url.protocol}//" (use smtp:// or smtps://)`,
+          );
         }
         const secure = url.protocol === 'smtps:';
         return nodemailer.createTransport({
@@ -111,7 +113,10 @@ export class MailService {
           port: url.port ? Number(url.port) : secure ? 465 : 587,
           secure,
           auth: url.username
-            ? { user: decodeURIComponent(url.username), pass: decodeURIComponent(url.password) }
+            ? {
+                user: decodeURIComponent(url.username),
+                pass: decodeURIComponent(url.password),
+              }
             : undefined,
           connectionTimeout: 5_000,
           greetingTimeout: 5_000,
@@ -150,11 +155,17 @@ export class MailService {
       'If you were not expecting this invitation, you can ignore this email.',
     ].join('\n');
 
-    return this.send({ to: input.to, subject: "You're invited to Inspect", text });
+    return this.send({
+      to: input.to,
+      subject: "You're invited to Inspect",
+      text,
+    });
   }
 
   /** Magic-link email for read-only buyer guests (opens the /portal). */
-  async sendBuyerGuestMagicLink(input: BuyerGuestMagicLinkMail): Promise<SendResult> {
+  async sendBuyerGuestMagicLink(
+    input: BuyerGuestMagicLinkMail,
+  ): Promise<SendResult> {
     const link = `${this.webBaseUrl}/portal?token=${encodeURIComponent(input.token)}`;
     const buyerSuffix = input.buyerName ? ` for ${input.buyerName}` : '';
     const text = [
@@ -167,11 +178,17 @@ export class MailService {
       'If you were not expecting this email, you can ignore it.',
     ].join('\n');
 
-    return this.send({ to: input.to, subject: 'Your Inspect report portal access', text });
+    return this.send({
+      to: input.to,
+      subject: 'Your Inspect report portal access',
+      text,
+    });
   }
 
   /** Internal notification: an inspection awaits QA review (INS-069). */
-  async sendInspectionSubmitted(input: InspectionSubmittedMail): Promise<SendResult> {
+  async sendInspectionSubmitted(
+    input: InspectionSubmittedMail,
+  ): Promise<SendResult> {
     const link = `${this.webBaseUrl}/inspections/${encodeURIComponent(input.inspectionId)}/review`;
     const po = input.poNumber ?? input.inspectionId.slice(0, 8);
     const text = [
@@ -180,11 +197,17 @@ export class MailService {
       'Review it here:',
       link,
     ].join('\n');
-    return this.send({ to: input.to, subject: `Inspection ${po} awaits QA review`, text });
+    return this.send({
+      to: input.to,
+      subject: `Inspection ${po} awaits QA review`,
+      text,
+    });
   }
 
   /** Internal notification: the binding QA decision was recorded (INS-069). */
-  async sendInspectionDecided(input: InspectionDecidedMail): Promise<SendResult> {
+  async sendInspectionDecided(
+    input: InspectionDecidedMail,
+  ): Promise<SendResult> {
     const link = `${this.webBaseUrl}/inspections/${encodeURIComponent(input.inspectionId)}/review`;
     const po = input.poNumber ?? input.inspectionId.slice(0, 8);
     const text = [
@@ -194,7 +217,11 @@ export class MailService {
       'View the inspection:',
       link,
     ].join('\n');
-    return this.send({ to: input.to, subject: `Inspection ${po} decision: ${input.decision}`, text });
+    return this.send({
+      to: input.to,
+      subject: `Inspection ${po} decision: ${input.decision}`,
+      text,
+    });
   }
 
   /**
@@ -228,13 +255,24 @@ export class MailService {
       'If you were not expecting this email, you can ignore it.',
     ].join('\n');
 
-    return this.send({ to: input.to, subject: `Inspection report ${ref} is ready`, text });
+    return this.send({
+      to: input.to,
+      subject: `Inspection report ${ref} is ready`,
+      text,
+    });
   }
 
   /** Shared send path — logs failures and resolves {sent:false}; never throws. */
-  private async send(message: { to: string; subject: string; text: string }): Promise<SendResult> {
+  private async send(message: {
+    to: string;
+    subject: string;
+    text: string;
+  }): Promise<SendResult> {
     try {
-      const info = await this.transporter.sendMail({ from: this.from, ...message });
+      const info = await this.transporter.sendMail({
+        from: this.from,
+        ...message,
+      });
       // In dev/json mode the "delivery" is the serialized message itself — log it
       // (link + token included) so the documented dev workflow actually works.
       const serialized = (info as { message?: string })?.message;

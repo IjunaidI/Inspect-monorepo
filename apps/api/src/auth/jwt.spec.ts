@@ -16,7 +16,9 @@ describe('HS256 JWT', () => {
   it('rejects a tampered payload', () => {
     const token = signJwt({ sub: 'u1' }, SECRET, 3600, T0);
     const [h, , s] = token.split('.');
-    const forged = Buffer.from(JSON.stringify({ sub: 'admin', exp: T0 + 3600 })).toString('base64url');
+    const forged = Buffer.from(
+      JSON.stringify({ sub: 'admin', exp: T0 + 3600 }),
+    ).toString('base64url');
     expect(() => verifyJwt(`${h}.${forged}.${s}`, SECRET, T0)).toThrow();
   });
 

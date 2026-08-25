@@ -16,7 +16,10 @@ describe('AppController', () => {
 
   describe('root', () => {
     it('identifies the service instead of the scaffold greeting', () => {
-      expect(appController.getServiceInfo()).toEqual({ service: 'inspect-api', status: 'ok' });
+      expect(appController.getServiceInfo()).toEqual({
+        service: 'inspect-api',
+        status: 'ok',
+      });
     });
   });
 });

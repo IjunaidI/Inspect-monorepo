@@ -58,7 +58,8 @@ export class JwtAuthGuard implements CanActivate {
     const role = claims.role as Role;
     const rawAssumed = req.headers?.['x-org-id'];
     const assumed = typeof rawAssumed === 'string' ? rawAssumed.trim() : '';
-    const actingAsOrgId = role === 'PLATFORM_ADMIN' && assumed !== '' ? assumed : null;
+    const actingAsOrgId =
+      role === 'PLATFORM_ADMIN' && assumed !== '' ? assumed : null;
 
     req.user = {
       userId: String(claims.sub),

@@ -107,10 +107,13 @@ describe('Populate RBAC re-grade (INS-083)', () => {
 
     it('drives the full capture path: presign then register a photo', async () => {
       const presigned = expect2xx(
-        await client.post(`/inspections/${inspectionId}/populate/photos/presign`, {
-          token: assignedInspectorToken,
-          body: { ext: 'jpg' },
-        }),
+        await client.post(
+          `/inspections/${inspectionId}/populate/photos/presign`,
+          {
+            token: assignedInspectorToken,
+            body: { ext: 'jpg' },
+          },
+        ),
         'POST populate/photos/presign (assigned inspector)',
       );
       expect(presigned.storageKey).toEqual(expect.any(String));
@@ -120,7 +123,9 @@ describe('Populate RBAC re-grade (INS-083)', () => {
           token: assignedInspectorToken,
           body: {
             storageKey: presigned.storageKey,
-            contentHash: createHash('sha256').update(`${tag}-assigned`).digest('hex'),
+            contentHash: createHash('sha256')
+              .update(`${tag}-assigned`)
+              .digest('hex'),
             inspectionLoopItemId: firstItemId,
             cycleIndex: 0,
           },
@@ -132,7 +137,9 @@ describe('Populate RBAC re-grade (INS-083)', () => {
     });
 
     it('reads the defect catalog it has to tag from', async () => {
-      const res = await client.get('/defect-catalog', { token: assignedInspectorToken });
+      const res = await client.get('/defect-catalog', {
+        token: assignedInspectorToken,
+      });
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
     });
@@ -156,10 +163,13 @@ describe('Populate RBAC re-grade (INS-083)', () => {
     });
 
     it('refuses that inspector the write path too, not just the read', async () => {
-      const res = await client.post(`/inspections/${inspectionId}/populate/photos/presign`, {
-        token: otherInspectorToken,
-        body: { ext: 'jpg' },
-      });
+      const res = await client.post(
+        `/inspections/${inspectionId}/populate/photos/presign`,
+        {
+          token: otherInspectorToken,
+          body: { ext: 'jpg' },
+        },
+      );
       expect(res.status).toBe(404);
     });
 
@@ -178,15 +188,20 @@ describe('Populate RBAC re-grade (INS-083)', () => {
     });
 
     it("refuses another org's owner on the write path", async () => {
-      const res = await client.post(`/inspections/${inspectionId}/populate/photos/presign`, {
-        token: orgB.ownerToken,
-        body: { ext: 'jpg' },
-      });
+      const res = await client.post(
+        `/inspections/${inspectionId}/populate/photos/presign`,
+        {
+          token: orgB.ownerToken,
+          body: { ext: 'jpg' },
+        },
+      );
       expect(res.status).toBe(404);
     });
 
     it('keeps the Platform Admin cross-tenant, exactly as before', async () => {
-      const res = await client.get(`/inspections/${inspectionId}/populate`, { token: adminToken });
+      const res = await client.get(`/inspections/${inspectionId}/populate`, {
+        token: adminToken,
+      });
       expect(res.status).toBe(200);
       expect(res.body.id).toBe(inspectionId);
     });

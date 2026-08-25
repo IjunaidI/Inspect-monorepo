@@ -7,7 +7,12 @@ const OWNER: AuthUser = {
   role: 'ORG_OWNER',
   actingAsOrgId: null,
 };
-const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER', actingAsOrgId: null };
+const QA: AuthUser = {
+  userId: 'u-qa',
+  orgId: 'org1',
+  role: 'QA_MANAGER',
+  actingAsOrgId: null,
+};
 // INS-079: a Platform Admin operating inside an assumed org must be attributed
 // as PLATFORM_ADMIN in the audit chain, not as an ordinary org member.
 const PLATFORM_ADMIN_ACTOR: AuthUser = {
@@ -24,8 +29,14 @@ function makeService(
   otherActiveOwners = 1,
 ) {
   const txUser = {
-    update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'u-target', ...data })),
-    create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'u-new', ...data })),
+    update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'u-target',
+      ...data,
+    })),
+    create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'u-new',
+      ...data,
+    })),
   };
   const tx = { user: txUser };
   const prisma = {
@@ -43,11 +54,13 @@ function makeService(
         ...data,
       })),
     },
-    $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
+      fn(tx),
+    ),
   };
   const mail = { sendUserInvitation: jest.fn(async () => mailResult) };
   const audit = { append: jest.fn(async () => ({})) };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const service = new UsersService(prisma as any, mail as any, audit as any);
   return { service, prisma, mail, audit, txUser };
 }
@@ -92,17 +105,20 @@ describe('UsersService.invite', () => {
 
   it('rejects a missing email and sends nothing', async () => {
     const { service, mail } = makeService();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await expect(service.invite('org1', OWNER, { email: '  ' } as any)).rejects.toThrow(
-      'email is required',
-    );
+
+    await expect(
+      service.invite('org1', OWNER, { email: '  ' } as any),
+    ).rejects.toThrow('email is required');
     expect(mail.sendUserInvitation).not.toHaveBeenCalled();
   });
 
   it('rejects inviting a platform admin and sends nothing', async () => {
     const { service, mail } = makeService();
     await expect(
-      service.invite('org1', OWNER, { email: 'x@y.com', role: 'PLATFORM_ADMIN' }),
+      service.invite('org1', OWNER, {
+        email: 'x@y.com',
+        role: 'PLATFORM_ADMIN',
+      }),
     ).rejects.toThrow('Cannot invite a platform admin');
     expect(mail.sendUserInvitation).not.toHaveBeenCalled();
   });
@@ -116,9 +132,15 @@ describe('UsersService.invite', () => {
   });
 
   it('rejects an email already registered in another org (INS-035) and sends nothing', async () => {
-    const { service, mail, prisma } = makeService({ sent: true }, { orgId: 'other-org' });
+    const { service, mail, prisma } = makeService(
+      { sent: true },
+      { orgId: 'other-org' },
+    );
     await expect(
-      service.invite('org1', OWNER, { email: 'taken@y.com', role: 'INSPECTOR' }),
+      service.invite('org1', OWNER, {
+        email: 'taken@y.com',
+        role: 'INSPECTOR',
+      }),
     ).rejects.toThrow('An account already exists for this email');
     expect(prisma.invitation.create).not.toHaveBeenCalled();
     expect(mail.sendUserInvitation).not.toHaveBeenCalled();
@@ -139,16 +161,16 @@ describe('UsersService.invite', () => {
 describe('UsersService guards (INS-058)', () => {
   it('rejects changing your own role', async () => {
     const { service } = makeService();
-    await expect(service.updateRole('org1', OWNER, OWNER.userId, 'QA_MANAGER')).rejects.toThrow(
-      'You cannot change your own role',
-    );
+    await expect(
+      service.updateRole('org1', OWNER, OWNER.userId, 'QA_MANAGER'),
+    ).rejects.toThrow('You cannot change your own role');
   });
 
   it('rejects deactivating your own account', async () => {
     const { service } = makeService();
-    await expect(service.deactivate('org1', OWNER, OWNER.userId)).rejects.toThrow(
-      'You cannot deactivate your own account',
-    );
+    await expect(
+      service.deactivate('org1', OWNER, OWNER.userId),
+    ).rejects.toThrow('You cannot deactivate your own account');
   });
 
   it("refuses to demote the organization's only active owner", async () => {
@@ -158,9 +180,9 @@ describe('UsersService guards (INS-058)', () => {
       { id: 'u-target', orgId: 'org1', role: 'ORG_OWNER', status: 'ACTIVE' },
       0,
     );
-    await expect(service.updateRole('org1', OWNER, 'u-target', 'QA_MANAGER')).rejects.toThrow(
-      /only active owner/,
-    );
+    await expect(
+      service.updateRole('org1', OWNER, 'u-target', 'QA_MANAGER'),
+    ).rejects.toThrow(/only active owner/);
   });
 
   it('deactivates a non-last owner inside a transaction with an audit row', async () => {
@@ -203,32 +225,57 @@ describe('UsersService guards (INS-058)', () => {
     );
   });
 
-  it('changes another user\'s role inside a transaction with an audit row', async () => {
-    const { service, prisma, audit } = makeService(
-      { sent: true },
-      null,
-      { id: 'u-target', orgId: 'org1', role: 'INSPECTOR', status: 'ACTIVE' },
+  it("changes another user's role inside a transaction with an audit row", async () => {
+    const { service, prisma, audit } = makeService({ sent: true }, null, {
+      id: 'u-target',
+      orgId: 'org1',
+      role: 'INSPECTOR',
+      status: 'ACTIVE',
+    });
+    const out = await service.updateRole(
+      'org1',
+      OWNER,
+      'u-target',
+      'QA_MANAGER',
     );
-    const out = await service.updateRole('org1', OWNER, 'u-target', 'QA_MANAGER');
     expect(out.role).toBe('QA_MANAGER');
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'user.role_changed', entityId: 'u-target', metadata: { role: 'QA_MANAGER' } }),
+      expect.objectContaining({
+        action: 'user.role_changed',
+        entityId: 'u-target',
+        metadata: { role: 'QA_MANAGER' },
+      }),
       expect.anything(),
     );
   });
 
   it('reactivate flips DEACTIVATED back to ACTIVE; INVITED is refused', async () => {
-    const deact = makeService({ sent: true }, null, { id: 'u-target', orgId: 'org1', role: 'INSPECTOR', status: 'DEACTIVATED' });
+    const deact = makeService({ sent: true }, null, {
+      id: 'u-target',
+      orgId: 'org1',
+      role: 'INSPECTOR',
+      status: 'DEACTIVATED',
+    });
     const out = await deact.service.reactivate('org1', OWNER, 'u-target');
     expect(out.status).toBe('ACTIVE');
     expect(deact.audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'user.reactivated', entityId: 'u-target' }),
+      expect.objectContaining({
+        action: 'user.reactivated',
+        entityId: 'u-target',
+      }),
       expect.anything(),
     );
 
-    const invited = makeService({ sent: true }, null, { id: 'u-target', orgId: 'org1', role: 'INSPECTOR', status: 'INVITED' });
-    await expect(invited.service.reactivate('org1', OWNER, 'u-target')).rejects.toThrow(/pending invitation/);
+    const invited = makeService({ sent: true }, null, {
+      id: 'u-target',
+      orgId: 'org1',
+      role: 'INSPECTOR',
+      status: 'INVITED',
+    });
+    await expect(
+      invited.service.reactivate('org1', OWNER, 'u-target'),
+    ).rejects.toThrow(/pending invitation/);
   });
 });
 
@@ -241,8 +288,15 @@ describe('UsersService.createMember (INS-059)', () => {
       password: 'longenough1',
       role: 'QA_MANAGER',
     });
-    expect(out).toMatchObject({ email: 'direct@example.com', role: 'QA_MANAGER', status: 'ACTIVE' });
-    const created = txUser.create.mock.calls[0][0].data as Record<string, string>;
+    expect(out).toMatchObject({
+      email: 'direct@example.com',
+      role: 'QA_MANAGER',
+      status: 'ACTIVE',
+    });
+    const created = txUser.create.mock.calls[0][0].data as Record<
+      string,
+      string
+    >;
     expect(created.passwordHash).toMatch(/^scrypt\$/);
     expect(audit.append).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'user.member_added' }),
@@ -253,18 +307,32 @@ describe('UsersService.createMember (INS-059)', () => {
   it('rejects short passwords, platform-admin role, above-own-role, and existing emails', async () => {
     const { service } = makeService();
     await expect(
-      service.createMember('org1', OWNER, { email: 'a@b.com', password: 'short' }),
+      service.createMember('org1', OWNER, {
+        email: 'a@b.com',
+        password: 'short',
+      }),
     ).rejects.toThrow(/min 8 characters/);
     await expect(
-      service.createMember('org1', OWNER, { email: 'a@b.com', password: 'longenough1', role: 'PLATFORM_ADMIN' }),
+      service.createMember('org1', OWNER, {
+        email: 'a@b.com',
+        password: 'longenough1',
+        role: 'PLATFORM_ADMIN',
+      }),
     ).rejects.toThrow('Cannot create a platform admin');
     await expect(
-      service.createMember('org1', QA, { email: 'a@b.com', password: 'longenough1', role: 'ORG_OWNER' }),
+      service.createMember('org1', QA, {
+        email: 'a@b.com',
+        password: 'longenough1',
+        role: 'ORG_OWNER',
+      }),
     ).rejects.toThrow('Cannot create a role above your own');
 
     const dup = makeService({ sent: true }, { orgId: 'org2' });
     await expect(
-      dup.service.createMember('org1', OWNER, { email: 'a@b.com', password: 'longenough1' }),
+      dup.service.createMember('org1', OWNER, {
+        email: 'a@b.com',
+        password: 'longenough1',
+      }),
     ).rejects.toThrow('An account already exists for this email');
   });
 });

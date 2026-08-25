@@ -43,7 +43,10 @@ export interface CycleState {
   totalPhotos: number;
 }
 
-export function cycleState(items: CycleItem[], photos: CyclePhotoRef[]): CycleState {
+export function cycleState(
+  items: CycleItem[],
+  photos: CyclePhotoRef[],
+): CycleState {
   const ordered = [...items].sort((a, b) => a.position - b.position);
   const itemIds = new Set(ordered.map((i) => i.id));
 
@@ -64,7 +67,9 @@ export function cycleState(items: CycleItem[], photos: CyclePhotoRef[]): CycleSt
 
   for (const cycleIndex of cycleIndexes) {
     const shot = shotByCycle.get(cycleIndex)!;
-    const missingItemIds = ordered.filter((i) => !shot.has(i.id)).map((i) => i.id);
+    const missingItemIds = ordered
+      .filter((i) => !shot.has(i.id))
+      .map((i) => i.id);
     if (missingItemIds.length === 0) completedCycles += 1;
     else partialCycles.push({ cycleIndex, missingItemIds });
   }
@@ -73,12 +78,21 @@ export function cycleState(items: CycleItem[], photos: CyclePhotoRef[]): CycleSt
   if (ordered.length > 0) {
     if (partialCycles.length > 0) {
       const first = partialCycles[0];
-      nextSlot = { cycleIndex: first.cycleIndex, itemId: first.missingItemIds[0] };
+      nextSlot = {
+        cycleIndex: first.cycleIndex,
+        itemId: first.missingItemIds[0],
+      };
     } else {
-      const nextIndex = cycleIndexes.length === 0 ? 0 : Math.max(...cycleIndexes) + 1;
+      const nextIndex =
+        cycleIndexes.length === 0 ? 0 : Math.max(...cycleIndexes) + 1;
       nextSlot = { cycleIndex: nextIndex, itemId: ordered[0].id };
     }
   }
 
-  return { completedCycles, partialCycles, nextSlot, totalPhotos: relevant.length };
+  return {
+    completedCycles,
+    partialCycles,
+    nextSlot,
+    totalPhotos: relevant.length,
+  };
 }

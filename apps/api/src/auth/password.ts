@@ -3,7 +3,12 @@
  * dependency. Stored envelope: `scrypt$N$r$p$saltB64$hashB64`. Verification is
  * constant-time. A later phase may swap in argon2id behind this same interface.
  */
-import { randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from 'node:crypto';
+import {
+  randomBytes,
+  scrypt,
+  timingSafeEqual,
+  type ScryptOptions,
+} from 'node:crypto';
 
 /** Promise wrapper that preserves the options overload (promisify drops it). */
 function scryptAsync(
@@ -29,7 +34,11 @@ const SALT_BYTES = 16;
 
 export async function hashPassword(plain: string): Promise<string> {
   const salt = randomBytes(SALT_BYTES);
-  const derived = (await scryptAsync(plain, salt, KEYLEN, { N, r: R, p: P })) as Buffer;
+  const derived = (await scryptAsync(plain, salt, KEYLEN, {
+    N,
+    r: R,
+    p: P,
+  })) as Buffer;
   return [
     'scrypt',
     N,
@@ -40,7 +49,10 @@ export async function hashPassword(plain: string): Promise<string> {
   ].join('$');
 }
 
-export async function verifyPassword(plain: string, stored: string): Promise<boolean> {
+export async function verifyPassword(
+  plain: string,
+  stored: string,
+): Promise<boolean> {
   const parts = stored.split('$');
   if (parts.length !== 6 || parts[0] !== 'scrypt') {
     return false;
@@ -56,7 +68,11 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   const salt = Buffer.from(saltB64, 'base64');
   let derived: Buffer;
   try {
-    derived = (await scryptAsync(plain, salt, expected.length, { N: n, r, p })) as Buffer;
+    derived = (await scryptAsync(plain, salt, expected.length, {
+      N: n,
+      r,
+      p,
+    })) as Buffer;
   } catch {
     return false;
   }

@@ -8,15 +8,29 @@ import {
   type QualityScanRow,
 } from './dashboard-metrics';
 
-const sampling = (sampleSize: unknown) => ({ sampleSizeCodeLetter: 'J', sampleSize, perClass: {} });
-const perClass = (found: Partial<Record<'critical' | 'major' | 'minor', number>>) =>
+const sampling = (sampleSize: unknown) => ({
+  sampleSizeCodeLetter: 'J',
+  sampleSize,
+  perClass: {},
+});
+const perClass = (
+  found: Partial<Record<'critical' | 'major' | 'minor', number>>,
+) =>
   Object.fromEntries(
-    Object.entries(found).map(([cls, n]) => [cls, { found: n, ac: 0, re: 1, outcome: 'PASS' }]),
+    Object.entries(found).map(([cls, n]) => [
+      cls,
+      { found: n, ac: 0, re: 1, outcome: 'PASS' },
+    ]),
   );
 
 describe('toQaDecisionCounts (INS-068)', () => {
   it('always returns a dense rollup, even with no rows', () => {
-    expect(toQaDecisionCounts([])).toEqual({ PASS: 0, FAIL: 0, HOLD: 0, PENDING: 0 });
+    expect(toQaDecisionCounts([])).toEqual({
+      PASS: 0,
+      FAIL: 0,
+      HOLD: 0,
+      PENDING: 0,
+    });
   });
 
   it('maps a null qaDecision to PENDING (submitted, awaiting the binding call)', () => {
@@ -36,7 +50,12 @@ describe('toQaDecisionCounts (INS-068)', () => {
       { qaDecision: 'BOGUS', count: 99 },
     ]);
     expect(counts).toEqual({ PASS: 3, FAIL: 0, HOLD: 0, PENDING: 0 });
-    expect(Object.keys(counts).sort()).toEqual(['FAIL', 'HOLD', 'PASS', 'PENDING']);
+    expect(Object.keys(counts).sort()).toEqual([
+      'FAIL',
+      'HOLD',
+      'PASS',
+      'PENDING',
+    ]);
   });
 
   it('folds non-finite/negative counts to 0 rather than producing NaN', () => {
@@ -51,7 +70,9 @@ describe('toQaDecisionCounts (INS-068)', () => {
 
 describe('defectsFoundIn (AqlResult.perClass Json)', () => {
   it('sums `found` across every class present', () => {
-    expect(defectsFoundIn(perClass({ critical: 0, major: 3, minor: 5 }))).toBe(8);
+    expect(defectsFoundIn(perClass({ critical: 0, major: 3, minor: 5 }))).toBe(
+      8,
+    );
   });
 
   it('tolerates a partial plan (classes the org did not configure)', () => {
@@ -100,10 +121,19 @@ describe('computeQualityMetrics (INS-068)', () => {
 
   it('hand-computed fixture: 1 defect over 160 sampled units -> DPHU 0.63, 1 of 2 verdicts -> 50%', () => {
     const rows: QualityScanRow[] = [
-      { perClass: perClass({ critical: 0, major: 0, minor: 1 }), computedSampling: sampling(80) },
-      { perClass: perClass({ critical: 0, major: 0, minor: 0 }), computedSampling: sampling(80) },
+      {
+        perClass: perClass({ critical: 0, major: 0, minor: 1 }),
+        computedSampling: sampling(80),
+      },
+      {
+        perClass: perClass({ critical: 0, major: 0, minor: 0 }),
+        computedSampling: sampling(80),
+      },
     ];
-    const metrics = computeQualityMetrics({ PASS: 1, FAIL: 1, HOLD: 0, PENDING: 0 }, rows);
+    const metrics = computeQualityMetrics(
+      { PASS: 1, FAIL: 1, HOLD: 0, PENDING: 0 },
+      rows,
+    );
     expect(metrics.sampledUnits).toBe(160);
     expect(metrics.defectsFound).toBe(1);
     expect(metrics.decidedInspections).toBe(2);
@@ -114,31 +144,41 @@ describe('computeQualityMetrics (INS-068)', () => {
   });
 
   it('a clean lot yields DPHU 0 — distinguishable from the "nothing decided" null', () => {
-    const metrics = computeQualityMetrics({ PASS: 0, FAIL: 1, HOLD: 0, PENDING: 0 }, [
-      { perClass: perClass({ minor: 0 }), computedSampling: sampling(80) },
-    ]);
+    const metrics = computeQualityMetrics(
+      { PASS: 0, FAIL: 1, HOLD: 0, PENDING: 0 },
+      [{ perClass: perClass({ minor: 0 }), computedSampling: sampling(80) }],
+    );
     expect(metrics.dphu).toBe(0);
     expect(metrics.passRate).toBe(0);
   });
 
   it('excludes HOLD from the passRate denominator (unresolved, not a failure)', () => {
-    const metrics = computeQualityMetrics({ PASS: 3, FAIL: 1, HOLD: 6, PENDING: 9 }, []);
+    const metrics = computeQualityMetrics(
+      { PASS: 3, FAIL: 1, HOLD: 6, PENDING: 9 },
+      [],
+    );
     expect(metrics.verdicts).toBe(4);
     expect(metrics.passRate).toBe(75);
   });
 
   it('passRate is null while every decision is a HOLD (no binding verdict yet)', () => {
-    const metrics = computeQualityMetrics({ PASS: 0, FAIL: 0, HOLD: 4, PENDING: 2 }, []);
+    const metrics = computeQualityMetrics(
+      { PASS: 0, FAIL: 0, HOLD: 4, PENDING: 2 },
+      [],
+    );
     expect(metrics.passRate).toBeNull();
     expect(metrics.verdicts).toBe(0);
   });
 
   it('drops rows with no usable sampleSize from BOTH sides of DPHU', () => {
-    const metrics = computeQualityMetrics({ PASS: 2, FAIL: 0, HOLD: 0, PENDING: 0 }, [
-      { perClass: perClass({ major: 4 }), computedSampling: sampling(80) },
-      // legacy/garbage row: counting its defects with no denominator would inflate DPHU
-      { perClass: perClass({ major: 40 }), computedSampling: null },
-    ]);
+    const metrics = computeQualityMetrics(
+      { PASS: 2, FAIL: 0, HOLD: 0, PENDING: 0 },
+      [
+        { perClass: perClass({ major: 4 }), computedSampling: sampling(80) },
+        // legacy/garbage row: counting its defects with no denominator would inflate DPHU
+        { perClass: perClass({ major: 40 }), computedSampling: null },
+      ],
+    );
     expect(metrics.decidedInspections).toBe(1);
     expect(metrics.sampledUnits).toBe(80);
     expect(metrics.defectsFound).toBe(4);
@@ -146,18 +186,27 @@ describe('computeQualityMetrics (INS-068)', () => {
   });
 
   it('rounds DPHU to 2dp and passRate to 1dp', () => {
-    const metrics = computeQualityMetrics({ PASS: 2, FAIL: 1, HOLD: 0, PENDING: 0 }, [
-      { perClass: perClass({ minor: 1 }), computedSampling: sampling(3) },
-    ]);
+    const metrics = computeQualityMetrics(
+      { PASS: 2, FAIL: 1, HOLD: 0, PENDING: 0 },
+      [{ perClass: perClass({ minor: 1 }), computedSampling: sampling(3) }],
+    );
     // 100 × 1 / 3 = 33.333… → 33.33 ; 100 × 2 / 3 = 66.666… → 66.7
     expect(metrics.dphu).toBe(33.33);
     expect(metrics.passRate).toBe(66.7);
   });
 
   it('flags truncation when the bounded scan hits its cap', () => {
-    const row: QualityScanRow = { perClass: perClass({ minor: 1 }), computedSampling: sampling(10) };
-    expect(computeQualityMetrics(emptyQaDecisionCounts(), [row, row], 3).truncated).toBe(false);
-    expect(computeQualityMetrics(emptyQaDecisionCounts(), [row, row, row], 3).truncated).toBe(true);
+    const row: QualityScanRow = {
+      perClass: perClass({ minor: 1 }),
+      computedSampling: sampling(10),
+    };
+    expect(
+      computeQualityMetrics(emptyQaDecisionCounts(), [row, row], 3).truncated,
+    ).toBe(false);
+    expect(
+      computeQualityMetrics(emptyQaDecisionCounts(), [row, row, row], 3)
+        .truncated,
+    ).toBe(true);
     expect(QUALITY_SCAN_LIMIT).toBe(500);
   });
 });

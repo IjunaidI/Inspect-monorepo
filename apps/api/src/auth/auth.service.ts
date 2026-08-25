@@ -33,7 +33,10 @@ export class AuthService {
   }
 
   /** Returns the principal for valid credentials, or null. */
-  async validateUser(email: string, password: string): Promise<AuthUser | null> {
+  async validateUser(
+    email: string,
+    password: string,
+  ): Promise<AuthUser | null> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.passwordHash || user.status !== 'ACTIVE') {
       // Constant-work path (security review): run an equivalent scrypt so the
@@ -51,14 +54,27 @@ export class AuthService {
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
-    return { userId: user.id, orgId: user.orgId, role: user.role as Role, actingAsOrgId: null };
+    return {
+      userId: user.id,
+      orgId: user.orgId,
+      role: user.role as Role,
+      actingAsOrgId: null,
+    };
   }
 
   issueTokens(user: AuthUser): TokenPair {
     const base = { sub: user.userId, orgId: user.orgId, role: user.role };
     return {
-      accessToken: signJwt({ ...base, type: 'access' }, this.accessSecret, this.accessTtl),
-      refreshToken: signJwt({ ...base, type: 'refresh' }, this.refreshSecret, this.refreshTtl),
+      accessToken: signJwt(
+        { ...base, type: 'access' },
+        this.accessSecret,
+        this.accessTtl,
+      ),
+      refreshToken: signJwt(
+        { ...base, type: 'refresh' },
+        this.refreshSecret,
+        this.refreshTtl,
+      ),
     };
   }
 

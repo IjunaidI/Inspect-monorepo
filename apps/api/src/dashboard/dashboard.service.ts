@@ -63,13 +63,19 @@ export class DashboardService {
     // truncated` tells the console when that window clipped the history.
     const decided = await this.prisma.aqlResult.findMany({
       where: { orgId, qaDecision: { not: null }, inspection: { orgId } },
-      select: { perClass: true, inspection: { select: { computedSampling: true } } },
+      select: {
+        perClass: true,
+        inspection: { select: { computedSampling: true } },
+      },
       orderBy: { createdAt: 'desc' },
       take: QUALITY_SCAN_LIMIT,
     });
 
     const qaDecisionCounts = toQaDecisionCounts(
-      byDecision.map((row) => ({ qaDecision: row.qaDecision, count: row._count._all })),
+      byDecision.map((row) => ({
+        qaDecision: row.qaDecision,
+        count: row._count._all,
+      })),
     );
     const quality = computeQualityMetrics(
       qaDecisionCounts,

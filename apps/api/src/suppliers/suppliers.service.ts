@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
@@ -43,7 +47,9 @@ function finiteNumber(value: unknown): number | null {
  *
  * `undefined` = field absent (no change); `null` = explicit clear.
  */
-export function normalizeGps(value: unknown): GpsCoordinates | null | undefined {
+export function normalizeGps(
+  value: unknown,
+): GpsCoordinates | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value !== 'object' || Array.isArray(value)) {
@@ -56,10 +62,14 @@ export function normalizeGps(value: unknown): GpsCoordinates | null | undefined 
     throw new BadRequestException(GPS_SHAPE_MESSAGE);
   }
   if (lat < -90 || lat > 90) {
-    throw new BadRequestException(`gps.lat must be between -90 and 90 (got ${lat})`);
+    throw new BadRequestException(
+      `gps.lat must be between -90 and 90 (got ${lat})`,
+    );
   }
   if (lng < -180 || lng > 180) {
-    throw new BadRequestException(`gps.lng must be between -180 and 180 (got ${lng})`);
+    throw new BadRequestException(
+      `gps.lng must be between -180 and 180 (got ${lng})`,
+    );
   }
   return { lat, lng };
 }
@@ -80,12 +90,22 @@ export class SuppliersService {
     private readonly audit: AuditService,
   ) {}
 
-  list(orgId: string, opts: { includeArchived?: boolean; q?: string; take?: number; skip?: number } = {}) {
+  list(
+    orgId: string,
+    opts: {
+      includeArchived?: boolean;
+      q?: string;
+      take?: number;
+      skip?: number;
+    } = {},
+  ) {
     return this.prisma.supplier.findMany({
       where: {
         orgId,
         ...(opts.includeArchived ? {} : { archivedAt: null }),
-        ...(opts.q ? { name: { contains: opts.q, mode: 'insensitive' as const } } : {}),
+        ...(opts.q
+          ? { name: { contains: opts.q, mode: 'insensitive' as const } }
+          : {}),
       },
       orderBy: { name: 'asc' },
       take: opts.take,
@@ -139,7 +159,12 @@ export class SuppliersService {
     });
   }
 
-  async update(orgId: string, actor: AuthUser, id: string, input: UpdateSupplierInput) {
+  async update(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    input: UpdateSupplierInput,
+  ) {
     // Validate before touching the DB (INS-071).
     const gps = normalizeGps(input.gps);
     await this.get(orgId, id);
@@ -173,9 +198,19 @@ export class SuppliersService {
     // Idempotent: re-archiving must not overwrite the original timestamp (INS-061).
     if (supplier.archivedAt) return supplier;
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.supplier.update({ where: { id }, data: { archivedAt: new Date() } });
+      const updated = await tx.supplier.update({
+        where: { id },
+        data: { archivedAt: new Date() },
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'supplier.archived', entityType: 'Supplier', entityId: id },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'supplier.archived',
+          entityType: 'Supplier',
+          entityId: id,
+        },
         tx,
       );
       return updated;
@@ -187,9 +222,19 @@ export class SuppliersService {
     const supplier = await this.get(orgId, id);
     if (!supplier.archivedAt) return supplier;
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.supplier.update({ where: { id }, data: { archivedAt: null } });
+      const updated = await tx.supplier.update({
+        where: { id },
+        data: { archivedAt: null },
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'supplier.restored', entityType: 'Supplier', entityId: id },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'supplier.restored',
+          entityType: 'Supplier',
+          entityId: id,
+        },
         tx,
       );
       return updated;

@@ -74,7 +74,9 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
     await app.close();
   });
 
-  async function createInspection(suffix: string): Promise<{ id: string; loopId: string }> {
+  async function createInspection(
+    suffix: string,
+  ): Promise<{ id: string; loopId: string }> {
     const created = expect2xx(
       await client.post('/inspections', {
         token: org.ownerToken,
@@ -100,7 +102,11 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
     };
   }
 
-  function defectBody(inspectionLoopItemId: string, clientRequestId: string, cycleIndex = 0) {
+  function defectBody(
+    inspectionLoopItemId: string,
+    clientRequestId: string,
+    cycleIndex = 0,
+  ) {
     return {
       ...(ws.minorDefectId
         ? { defectCatalogId: ws.minorDefectId }
@@ -115,7 +121,10 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
   it('registers a photo on inspection A and replays it idempotently (same id, no duplicate row)', async () => {
     const body = photoBody(loopA, PHOTO_CRID, 'a1');
     const first = expect2xx(
-      await client.post(`/inspections/${inspA}/populate/photos`, { token: adminToken, body }),
+      await client.post(`/inspections/${inspA}/populate/photos`, {
+        token: adminToken,
+        body,
+      }),
       'register photo A',
     );
     photoAId = first.id;
@@ -149,9 +158,13 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
     expect(res.body.id).not.toBe(photoAId);
     expect(String(res.body.message)).toMatch(/different inspection/i);
 
-    expect(await prisma.photo.count({ where: { inspectionId: inspB } })).toBe(before);
+    expect(await prisma.photo.count({ where: { inspectionId: inspB } })).toBe(
+      before,
+    );
     expect(
-      await prisma.photo.count({ where: { orgId: org.orgId, clientRequestId: PHOTO_CRID } }),
+      await prisma.photo.count({
+        where: { orgId: org.orgId, clientRequestId: PHOTO_CRID },
+      }),
     ).toBe(1);
   });
 
@@ -171,7 +184,10 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
   it('tags a defect on inspection A and replays it idempotently (same id, no duplicate row)', async () => {
     const body = defectBody(loopA, DEFECT_CRID);
     const first = expect2xx(
-      await client.post(`/inspections/${inspA}/populate/defects`, { token: adminToken, body }),
+      await client.post(`/inspections/${inspA}/populate/defects`, {
+        token: adminToken,
+        body,
+      }),
       'tag defect A',
     );
     defectAId = first.id;
@@ -186,7 +202,9 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
     expect(replay.body.id).toBe(defectAId);
 
     // A phantom duplicate here would change the per-class AQL count on submit.
-    expect(await prisma.defectInstance.count({ where: { inspectionId: inspA } })).toBe(1);
+    expect(
+      await prisma.defectInstance.count({ where: { inspectionId: inspA } }),
+    ).toBe(1);
   });
 
   it('409s when the SAME defect clientRequestId is reused on inspection B', async () => {
@@ -196,7 +214,9 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
     });
     expect(res.status).toBe(409);
     expect(res.body.id).not.toBe(defectAId);
-    expect(await prisma.defectInstance.count({ where: { inspectionId: inspB } })).toBe(0);
+    expect(
+      await prisma.defectInstance.count({ where: { inspectionId: inspB } }),
+    ).toBe(0);
   });
 
   it('refuses every populate write once inspection A is submitted (immutability)', async () => {
@@ -209,8 +229,12 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
     );
     expect(submitted.status).toBe('SUBMITTED');
 
-    const photosBefore = await prisma.photo.count({ where: { inspectionId: inspA } });
-    const defectsBefore = await prisma.defectInstance.count({ where: { inspectionId: inspA } });
+    const photosBefore = await prisma.photo.count({
+      where: { inspectionId: inspA },
+    });
+    const defectsBefore = await prisma.defectInstance.count({
+      where: { inspectionId: inspA },
+    });
 
     const attempts = await Promise.all([
       client.post(`/inspections/${inspA}/populate/photos/presign`, {
@@ -224,7 +248,10 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
       // INS-081: retake replaces assign-to-loop as the post-registration write.
       client.post(`/inspections/${inspA}/populate/photos/${photoAId}/retake`, {
         token: adminToken,
-        body: { storageKey: `e2e/${tag}/late-retake.jpg`, contentHash: 'f'.repeat(64) },
+        body: {
+          storageKey: `e2e/${tag}/late-retake.jpg`,
+          contentHash: 'f'.repeat(64),
+        },
       }),
       client.post(`/inspections/${inspA}/populate/defects`, {
         token: adminToken,
@@ -240,18 +267,23 @@ describe('populate invariants: immutability + clientRequestId idempotency (INS-0
       expect(res.status).toBeLessThan(500);
     }
 
-    expect(await prisma.photo.count({ where: { inspectionId: inspA } })).toBe(photosBefore);
-    expect(await prisma.defectInstance.count({ where: { inspectionId: inspA } })).toBe(
-      defectsBefore,
+    expect(await prisma.photo.count({ where: { inspectionId: inspA } })).toBe(
+      photosBefore,
     );
+    expect(
+      await prisma.defectInstance.count({ where: { inspectionId: inspA } }),
+    ).toBe(defectsBefore);
 
     // An idempotent replay of an ALREADY-STORED write is refused too: the lock
     // is checked before the dedupe lookup, so a late retry cannot resurrect the
     // populate step on a frozen inspection.
-    const lateReplay = await client.post(`/inspections/${inspA}/populate/defects`, {
-      token: adminToken,
-      body: defectBody(loopA, DEFECT_CRID),
-    });
+    const lateReplay = await client.post(
+      `/inspections/${inspA}/populate/defects`,
+      {
+        token: adminToken,
+        body: defectBody(loopA, DEFECT_CRID),
+      },
+    );
     expect(lateReplay.status).toBeGreaterThanOrEqual(400);
     expect(lateReplay.status).toBeLessThan(500);
   });

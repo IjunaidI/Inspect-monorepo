@@ -8,7 +8,9 @@ import { AuthUser } from '../auth/auth-user';
  */
 export function requireOrgId(user: AuthUser): string {
   if (!user || !user.orgId) {
-    throw new ForbiddenException('This action requires an organization context');
+    throw new ForbiddenException(
+      'This action requires an organization context',
+    );
   }
   return user.orgId;
 }

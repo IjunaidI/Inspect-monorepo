@@ -18,7 +18,6 @@ function makeService(
   values: Record<string, string | undefined> = {},
   transport?: FakeTransport,
 ): { service: MailService; transport?: FakeTransport } {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const service = new MailService(makeConfig(values) as any, transport as any);
   return { service, transport };
 }
@@ -79,7 +78,11 @@ describe('MailService', () => {
       const { service } = makeService({}, transport);
 
       await expect(
-        service.sendUserInvitation({ to: 'x@y.com', token: 't', role: 'INSPECTOR' }),
+        service.sendUserInvitation({
+          to: 'x@y.com',
+          token: 't',
+          role: 'INSPECTOR',
+        }),
       ).resolves.toEqual({ sent: false });
     });
   });
@@ -87,7 +90,10 @@ describe('MailService', () => {
   describe('sendBuyerGuestMagicLink', () => {
     it('sends the exact URL-encoded portal magic link', async () => {
       const transport = makeTransport();
-      const { service } = makeService({ WEB_BASE_URL: 'https://console.inspect.example' }, transport);
+      const { service } = makeService(
+        { WEB_BASE_URL: 'https://console.inspect.example' },
+        transport,
+      );
 
       const result = await service.sendBuyerGuestMagicLink({
         to: 'guest@buyer.com',
@@ -119,7 +125,7 @@ describe('MailService', () => {
   describe('transport selection', () => {
     it('falls back to the JSON transport when SMTP_URL is unset', async () => {
       const { service } = makeService({});
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const transporter = (service as any).transporter;
       expect(transporter.transporter.name).toBe('JSONTransport');
 
@@ -137,7 +143,7 @@ describe('MailService', () => {
       const { service } = makeService({
         SMTP_URL: 'smtp://user:pass@smtp.example.com:587',
       });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const smtp = (service as any).transporter.transporter;
       expect(smtp.name).toBe('SMTP');
       // Review finding: nodemailer's defaults (30–120s) would stall the invite
@@ -151,16 +157,22 @@ describe('MailService', () => {
     });
 
     it('degrades a malformed/scheme-less SMTP_URL to json mode instead of crashing boot', () => {
-      for (const bad of ['smtp.example.com:587', 'not a url', 'http://smtp.example.com']) {
+      for (const bad of [
+        'smtp.example.com:587',
+        'not a url',
+        'http://smtp.example.com',
+      ]) {
         const { service } = makeService({ SMTP_URL: bad });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((service as any).transporter.transporter.name).toBe('JSONTransport');
+
+        expect((service as any).transporter.transporter.name).toBe(
+          'JSONTransport',
+        );
       }
     });
 
     it('logs the full serialized message (link included) in dev/json mode', async () => {
       const { service } = makeService({});
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const logSpy = jest.spyOn((service as any).logger, 'log');
 
       await service.sendUserInvitation({

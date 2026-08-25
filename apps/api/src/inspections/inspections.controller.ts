@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   CreateInspectionInput,
   InspectionsService,
@@ -35,9 +43,14 @@ export class InspectionsController {
    * is viewable. Must never fail the read — a presign problem degrades to
    * viewUrl:null and the UI falls back to its placeholder tile.
    */
-  private withViewUrl<T extends PhotoLike>(photo: T): T & { viewUrl: string | null } {
+  private withViewUrl<T extends PhotoLike>(
+    photo: T,
+  ): T & { viewUrl: string | null } {
     try {
-      return { ...photo, viewUrl: this.storage.presignDownload(photo.storageKey) };
+      return {
+        ...photo,
+        viewUrl: this.storage.presignDownload(photo.storageKey),
+      };
     } catch {
       return { ...photo, viewUrl: null };
     }
@@ -45,8 +58,16 @@ export class InspectionsController {
 
   @Get()
   @Roles('INSPECTOR')
-  list(@CurrentUser() user: AuthUser, @Query() query: RawListQuery & { status?: string }) {
-    return this.inspections.list(requireOrgId(user), user, query.status, parseListQuery(query));
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: RawListQuery & { status?: string },
+  ) {
+    return this.inspections.list(
+      requireOrgId(user),
+      user,
+      query.status,
+      parseListQuery(query),
+    );
   }
 
   @Get('aql-preview')
@@ -56,7 +77,8 @@ export class InspectionsController {
     @Query('major') major?: string,
     @Query('minor') minor?: string,
   ) {
-    const num = (v?: string) => (v === undefined || v === '' ? undefined : Number(v));
+    const num = (v?: string) =>
+      v === undefined || v === '' ? undefined : Number(v);
     return this.inspections.aqlPreview(Number(lotSize), {
       critical: num(critical),
       major: num(major),

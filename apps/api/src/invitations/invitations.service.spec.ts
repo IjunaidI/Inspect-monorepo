@@ -15,11 +15,13 @@ function makeService(opts: {
   invitation: Record<string, unknown> | null;
   existingUser?: Record<string, unknown> | null;
 }) {
-  const upsert = jest.fn(async ({ create }: { create: Record<string, unknown> }) => ({
-    id: 'u-new',
-    passwordHash: 'x',
-    ...create,
-  }));
+  const upsert = jest.fn(
+    async ({ create }: { create: Record<string, unknown> }) => ({
+      id: 'u-new',
+      passwordHash: 'x',
+      ...create,
+    }),
+  );
   const invitationUpdate = jest.fn(async () => ({}));
   const prisma = {
     invitation: {
@@ -33,7 +35,7 @@ function makeService(opts: {
     ),
   };
   const audit = { append: jest.fn(async () => ({})) };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const service = new InvitationsService(prisma as any, audit as any);
   return { service, upsert, invitationUpdate, prisma, audit };
 }
@@ -64,14 +66,22 @@ describe('InvitationsService.getByToken (INS-054)', () => {
 
   it('404s an unknown token', async () => {
     const { service } = makeService({ invitation: null });
-    await expect(service.getByToken('nope')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.getByToken('nope')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('410s a consumed invitation', async () => {
     const { service } = makeService({
-      invitation: { ...validInvite, acceptedAt: new Date(), organization: { name: 'A' } },
+      invitation: {
+        ...validInvite,
+        acceptedAt: new Date(),
+        organization: { name: 'A' },
+      },
     });
-    await expect(service.getByToken('tok')).rejects.toBeInstanceOf(GoneException);
+    await expect(service.getByToken('tok')).rejects.toBeInstanceOf(
+      GoneException,
+    );
   });
 
   it('410s an expired invitation', async () => {
@@ -82,7 +92,9 @@ describe('InvitationsService.getByToken (INS-054)', () => {
         organization: { name: 'A' },
       },
     });
-    await expect(service.getByToken('tok')).rejects.toBeInstanceOf(GoneException);
+    await expect(service.getByToken('tok')).rejects.toBeInstanceOf(
+      GoneException,
+    );
   });
 });
 
@@ -103,7 +115,10 @@ describe('InvitationsService.accept', () => {
       invitation: validInvite,
       existingUser: null,
     });
-    const user = await service.accept({ token: 'tok', password: 'password123' });
+    const user = await service.accept({
+      token: 'tok',
+      password: 'password123',
+    });
     expect(upsert).toHaveBeenCalledTimes(1);
     expect(invitationUpdate).toHaveBeenCalledTimes(1);
     expect((user as { orgId: string }).orgId).toBe('orgA');

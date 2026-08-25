@@ -1,5 +1,10 @@
 import type { DefectSeverity } from '@inspect/shared-types';
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { computeSampling, evaluateInspection } from '../aql/aql.engine';
@@ -61,7 +66,9 @@ export class InspectionsService {
    * a foreign id resolves to 404 — no existence oracle.
    */
   private inspectorScope(actor: AuthUser): { assignedInspectorId?: string } {
-    return actor.role === 'INSPECTOR' ? { assignedInspectorId: actor.userId } : {};
+    return actor.role === 'INSPECTOR'
+      ? { assignedInspectorId: actor.userId }
+      : {};
   }
 
   list(
@@ -78,9 +85,27 @@ export class InspectionsService {
         ...(opts.q
           ? {
               OR: [
-                { purchaseOrder: { poNumber: { contains: opts.q, mode: 'insensitive' as const } } },
-                { buyer: { name: { contains: opts.q, mode: 'insensitive' as const } } },
-                { product: { styleNumber: { contains: opts.q, mode: 'insensitive' as const } } },
+                {
+                  purchaseOrder: {
+                    poNumber: {
+                      contains: opts.q,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                },
+                {
+                  buyer: {
+                    name: { contains: opts.q, mode: 'insensitive' as const },
+                  },
+                },
+                {
+                  product: {
+                    styleNumber: {
+                      contains: opts.q,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                },
               ],
             }
           : {}),
@@ -88,7 +113,13 @@ export class InspectionsService {
       orderBy: { createdAt: 'desc' },
       take: opts.take,
       skip: opts.skip,
-      include: { buyer: true, supplier: true, product: true, purchaseOrder: true, aqlResult: true },
+      include: {
+        buyer: true,
+        supplier: true,
+        product: true,
+        purchaseOrder: true,
+        aqlResult: true,
+      },
     });
   }
 
@@ -126,7 +157,8 @@ export class InspectionsService {
 
   async create(orgId: string, userId: string, input: CreateInspectionInput) {
     if (!input?.poId) throw new BadRequestException('poId is required');
-    if (!input?.loopPresetId) throw new BadRequestException('loopPresetId is required');
+    if (!input?.loopPresetId)
+      throw new BadRequestException('loopPresetId is required');
 
     // Idempotency (offline-sync readiness): dedupe on (orgId, clientRequestId).
     if (input.clientRequestId) {
@@ -136,8 +168,11 @@ export class InspectionsService {
       if (existing) return existing;
     }
 
-    const po = await this.prisma.purchaseOrder.findFirst({ where: { id: input.poId, orgId } });
-    if (!po) throw new BadRequestException('purchase order not found in organization');
+    const po = await this.prisma.purchaseOrder.findFirst({
+      where: { id: input.poId, orgId },
+    });
+    if (!po)
+      throw new BadRequestException('purchase order not found in organization');
 
     const preset = await this.prisma.loopPreset.findFirst({
       where: { id: input.loopPresetId, orgId },
@@ -147,13 +182,17 @@ export class InspectionsService {
         allowedDefects: { include: { defectCatalog: true } },
       },
     });
-    if (!preset) throw new BadRequestException('loop preset not found in organization');
+    if (!preset)
+      throw new BadRequestException('loop preset not found in organization');
 
     if (input.assignedInspectorId) {
       const inspector = await this.prisma.user.findFirst({
         where: { id: input.assignedInspectorId, orgId, status: 'ACTIVE' },
       });
-      if (!inspector) throw new BadRequestException('assigned inspector not found in organization');
+      if (!inspector)
+        throw new BadRequestException(
+          'assigned inspector not found in organization',
+        );
     }
 
     // Tenant-isolation + billing-integrity guard (security review): a re-inspection
@@ -166,7 +205,9 @@ export class InspectionsService {
         select: { id: true },
       });
       if (!prior) {
-        throw new BadRequestException('superseded inspection not found in organization');
+        throw new BadRequestException(
+          'superseded inspection not found in organization',
+        );
       }
     }
 
@@ -180,9 +221,13 @@ export class InspectionsService {
     let computedSampling;
     try {
       aqlPlan = resolveAqlPlan(input.aqlPlan);
-      computedSampling = input.lotSize ? computeSampling(input.lotSize, aqlPlan) : undefined;
+      computedSampling = input.lotSize
+        ? computeSampling(input.lotSize, aqlPlan)
+        : undefined;
     } catch (e) {
-      throw new BadRequestException(e instanceof Error ? e.message : 'invalid AQL plan');
+      throw new BadRequestException(
+        e instanceof Error ? e.message : 'invalid AQL plan',
+      );
     }
 
     // INS-010 gave the inspection's children a composite FK to Inspection(id, orgId)
@@ -232,8 +277,15 @@ export class InspectionsService {
    * The aqlPlan itself stays fixed at creation (INS-063) — only the lot size may
    * move, and the sampling is recomputed from the frozen plan.
    */
-  async update(orgId: string, actor: AuthUser, id: string, input: UpdateInspectionInput) {
-    const inspection = await this.prisma.inspection.findFirst({ where: { id, orgId } });
+  async update(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    input: UpdateInspectionInput,
+  ) {
+    const inspection = await this.prisma.inspection.findFirst({
+      where: { id, orgId },
+    });
     if (!inspection) throw new NotFoundException('Inspection not found');
     if (!SUBMITTABLE.has(inspection.status)) {
       throw new BadRequestException(
@@ -247,12 +299,16 @@ export class InspectionsService {
       // empty-string payload skips the existence check (falsy) and writes ''
       // straight into the FK column, producing a raw 500. `undefined` (field
       // absent) still means "no change" and never reaches this branch.
-      const assignedInspectorId = input.assignedInspectorId === '' ? null : input.assignedInspectorId;
+      const assignedInspectorId =
+        input.assignedInspectorId === '' ? null : input.assignedInspectorId;
       if (assignedInspectorId) {
         const inspector = await this.prisma.user.findFirst({
           where: { id: assignedInspectorId, orgId, status: 'ACTIVE' },
         });
-        if (!inspector) throw new BadRequestException('assigned inspector not found in organization');
+        if (!inspector)
+          throw new BadRequestException(
+            'assigned inspector not found in organization',
+          );
       }
       // An IN_PROGRESS inspection has no DRAFT/ASSIGNED fallback: clearing the
       // assignee here would strand it in a status that claims work is underway
@@ -263,8 +319,10 @@ export class InspectionsService {
         );
       }
       changes.assignedInspectorId = assignedInspectorId;
-      if (inspection.status === 'DRAFT' && assignedInspectorId) changes.status = 'ASSIGNED';
-      if (inspection.status === 'ASSIGNED' && assignedInspectorId === null) changes.status = 'DRAFT';
+      if (inspection.status === 'DRAFT' && assignedInspectorId)
+        changes.status = 'ASSIGNED';
+      if (inspection.status === 'ASSIGNED' && assignedInspectorId === null)
+        changes.status = 'DRAFT';
     }
     if (input.lotSize !== undefined) {
       if (!Number.isInteger(input.lotSize) || input.lotSize < 2) {
@@ -276,7 +334,11 @@ export class InspectionsService {
           resolveAqlPlan(inspection.aqlPlan as RawAqlPlanInput | null),
         ) as unknown as Prisma.InputJsonValue;
       } catch (e) {
-        throw new BadRequestException(e instanceof Error ? e.message : 'AQL plan not available for this lot size');
+        throw new BadRequestException(
+          e instanceof Error
+            ? e.message
+            : 'AQL plan not available for this lot size',
+        );
       }
       changes.lotSize = input.lotSize;
     }
@@ -313,22 +375,33 @@ export class InspectionsService {
       // sees can never differ from the plan the API would actually accept.
       return computeSampling(lotSize, resolveAqlPlan(plan));
     } catch (e) {
-      throw new BadRequestException(e instanceof Error ? e.message : 'AQL plan not available');
+      throw new BadRequestException(
+        e instanceof Error ? e.message : 'AQL plan not available',
+      );
     }
   }
 
   /** Lock the inspection, compute the AQL result, record the billable event (spec §8/§9/§14#16). */
-  async submit(orgId: string, actor: AuthUser, id: string, tamper: TamperProofInput) {
+  async submit(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    tamper: TamperProofInput,
+  ) {
     const inspection = await this.prisma.inspection.findFirst({
       where: { id, orgId, ...this.inspectorScope(actor) },
       include: { purchaseOrder: { select: { poNumber: true } } },
     });
     if (!inspection) throw new NotFoundException('Inspection not found');
     if (!SUBMITTABLE.has(inspection.status)) {
-      throw new BadRequestException(`Cannot submit an inspection in status ${inspection.status}`);
+      throw new BadRequestException(
+        `Cannot submit an inspection in status ${inspection.status}`,
+      );
     }
     if (inspection.lotSize == null) {
-      throw new BadRequestException('lotSize must be set before submitting (required for AQL sampling)');
+      throw new BadRequestException(
+        'lotSize must be set before submitting (required for AQL sampling)',
+      );
     }
 
     // INS-056 + INS-081: a verdict must never be computed from missing evidence.
@@ -374,7 +447,9 @@ export class InspectionsService {
         resolveAqlPlan(inspection.aqlPlan as RawAqlPlanInput | null),
       );
     } catch (e) {
-      throw new BadRequestException(e instanceof Error ? e.message : 'AQL plan not available for this lot');
+      throw new BadRequestException(
+        e instanceof Error ? e.message : 'AQL plan not available for this lot',
+      );
     }
 
     const groups = await this.prisma.defectInstance.groupBy({
@@ -430,9 +505,13 @@ export class InspectionsService {
       // inspection that actually supersedes another (and vice versa). Until the
       // DB carries a CHECK constraint, this service path is the enforcement point.
       const billableKind = billableKindFor(inspection.supersedesInspectionId);
-      const existing = await tx.billableEvent.findUnique({ where: { inspectionId: id } });
+      const existing = await tx.billableEvent.findUnique({
+        where: { inspectionId: id },
+      });
       if (!existing) {
-        await tx.billableEvent.create({ data: { orgId, inspectionId: id, kind: billableKind } });
+        await tx.billableEvent.create({
+          data: { orgId, inspectionId: id, kind: billableKind },
+        });
       } else if (existing.kind !== billableKind) {
         // A pre-existing event that contradicts the linkage is a billing-integrity
         // fault: fail the submit rather than silently bill the wrong kind.
@@ -455,14 +534,22 @@ export class InspectionsService {
         },
         tx,
       );
-      return tx.inspection.findUnique({ where: { id }, include: { aqlResult: true } });
+      return tx.inspection.findUnique({
+        where: { id },
+        include: { aqlResult: true },
+      });
     });
 
     // INS-069: notify reviewers AFTER the commit — never inside the tx, never
     // throwing (MailService resolves {sent:false} on failure). The submitter is excluded.
     try {
       const reviewers = await this.prisma.user.findMany({
-        where: { orgId, status: 'ACTIVE', id: { not: actor.userId }, role: { in: ['QA_MANAGER', 'ORG_OWNER'] } },
+        where: {
+          orgId,
+          status: 'ACTIVE',
+          id: { not: actor.userId },
+          role: { in: ['QA_MANAGER', 'ORG_OWNER'] },
+        },
         select: { email: true },
       });
       const poNumber = inspection.purchaseOrder?.poNumber ?? null;
@@ -490,12 +577,24 @@ export class InspectionsService {
     });
     if (!inspection) throw new NotFoundException('Inspection not found');
     if (inspection.status !== 'ASSIGNED') {
-      throw new BadRequestException(`Cannot start an inspection in status ${inspection.status} (only ASSIGNED)`);
+      throw new BadRequestException(
+        `Cannot start an inspection in status ${inspection.status} (only ASSIGNED)`,
+      );
     }
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.inspection.update({ where: { id }, data: { status: 'IN_PROGRESS' } });
+      const updated = await tx.inspection.update({
+        where: { id },
+        data: { status: 'IN_PROGRESS' },
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'inspection.started', entityType: 'Inspection', entityId: id },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'inspection.started',
+          entityType: 'Inspection',
+          entityId: id,
+        },
         tx,
       );
       return updated;
@@ -509,12 +608,24 @@ export class InspectionsService {
     });
     if (!inspection) throw new NotFoundException('Inspection not found');
     if (inspection.status !== 'IN_PROGRESS') {
-      throw new BadRequestException(`Cannot reset an inspection in status ${inspection.status} (only IN_PROGRESS)`);
+      throw new BadRequestException(
+        `Cannot reset an inspection in status ${inspection.status} (only IN_PROGRESS)`,
+      );
     }
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.inspection.update({ where: { id }, data: { status: 'ASSIGNED' } });
+      const updated = await tx.inspection.update({
+        where: { id },
+        data: { status: 'ASSIGNED' },
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'inspection.reset', entityType: 'Inspection', entityId: id },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'inspection.reset',
+          entityType: 'Inspection',
+          entityId: id,
+        },
         tx,
       );
       return updated;
@@ -522,18 +633,30 @@ export class InspectionsService {
   }
 
   /** QA Manager's binding decision (spec §8). */
-  async decide(orgId: string, actor: AuthUser, id: string, input: QaDecisionInput) {
+  async decide(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    input: QaDecisionInput,
+  ) {
     if (!input?.decision) throw new BadRequestException('decision is required');
     const inspection = await this.prisma.inspection.findFirst({
       where: { id, orgId },
-      include: { aqlResult: true, purchaseOrder: { select: { poNumber: true } } },
+      include: {
+        aqlResult: true,
+        purchaseOrder: { select: { poNumber: true } },
+      },
     });
     if (!inspection) throw new NotFoundException('Inspection not found');
     if (!inspection.aqlResult) {
-      throw new BadRequestException('Inspection has no AQL result (submit first)');
+      throw new BadRequestException(
+        'Inspection has no AQL result (submit first)',
+      );
     }
     if (!DECIDABLE.has(inspection.status)) {
-      throw new BadRequestException(`Cannot decide an inspection in status ${inspection.status}`);
+      throw new BadRequestException(
+        `Cannot decide an inspection in status ${inspection.status}`,
+      );
     }
 
     const status = qaDecisionToStatus(input.decision);
@@ -581,7 +704,9 @@ export class InspectionsService {
           id: { not: actor.userId },
           OR: [
             { role: 'ORG_OWNER' },
-            ...(inspection.assignedInspectorId ? [{ id: inspection.assignedInspectorId }] : []),
+            ...(inspection.assignedInspectorId
+              ? [{ id: inspection.assignedInspectorId }]
+              : []),
           ],
         },
         select: { email: true },
@@ -589,7 +714,13 @@ export class InspectionsService {
       const poNumber = inspection.purchaseOrder?.poNumber ?? null;
       await Promise.all(
         [...new Set(recipients.map((r) => r.email))].map((to) =>
-          this.mail.sendInspectionDecided({ to, poNumber, inspectionId: id, decision: input.decision, remarks: input.remarks }),
+          this.mail.sendInspectionDecided({
+            to,
+            poNumber,
+            inspectionId: id,
+            decision: input.decision,
+            remarks: input.remarks,
+          }),
         ),
       );
     } catch (err) {

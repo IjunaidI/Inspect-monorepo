@@ -2,7 +2,11 @@ import { BadRequestException } from '@nestjs/common';
 import { LoopPresetsService } from './loop-presets.service';
 import { AuthUser } from '../auth/auth-user';
 
-const ACTOR = { userId: 'u1', orgId: 'orgA', role: 'ORG_OWNER' } as unknown as AuthUser;
+const ACTOR = {
+  userId: 'u1',
+  orgId: 'orgA',
+  role: 'ORG_OWNER',
+} as unknown as AuthUser;
 
 /**
  * INS-052 honesty guard: the AQL engine implements ISO 2859-1 General Level II
@@ -11,23 +15,30 @@ const ACTOR = { userId: 'u1', orgId: 'orgA', role: 'ORG_OWNER' } as unknown as A
  * fields are loop-global, not per item.
  */
 function makeService(catalog: Array<{ id: string }> = []) {
-  const create = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-    id: 'p1',
-    items: [],
-    ...data,
-  }));
+  const create = jest.fn(
+    async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'p1',
+      items: [],
+      ...data,
+    }),
+  );
   const prisma: Record<string, unknown> = {
     defectCatalog: { findMany: jest.fn(async () => catalog) },
     loopPreset: {
       findFirst: jest.fn(async () => null),
       create,
-      update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'p1', ...data })),
+      update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'p1',
+        ...data,
+      })),
     },
   };
   // INS-006: create/archive append their audit row in the same transaction.
-  prisma.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma));
+  prisma.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) =>
+    fn(prisma),
+  );
   const audit = { append: jest.fn(async () => ({})) };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const service = new LoopPresetsService(prisma as any, audit as any);
   return { service, create, audit };
 }
@@ -40,7 +51,11 @@ describe('LoopPresetsService.create AQL level guard', () => {
     async (level) => {
       const { service, create } = makeService();
       await expect(
-        service.create('orgA', ACTOR, { name: 'P', aqlLevel: level, items: [ITEM] }),
+        service.create('orgA', ACTOR, {
+          name: 'P',
+          aqlLevel: level,
+          items: [ITEM],
+        }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(create).not.toHaveBeenCalled();
     },
@@ -72,7 +87,9 @@ describe('LoopPresetsService.create reference-image tenant scoping (security rev
         name: 'P',
         items: [{ ...ITEM, referenceImageUrl: 'orgs/orgB/presets/leaked.jpg' }],
       }),
-    ).rejects.toThrow('item 1: referenceImageUrl must be a key under orgs/orgA/presets/');
+    ).rejects.toThrow(
+      'item 1: referenceImageUrl must be a key under orgs/orgA/presets/',
+    );
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -89,15 +106,18 @@ describe('LoopPresetsService.create reference-image tenant scoping (security rev
 describe('create — INS-081 loop-item shape', () => {
   it('rejects a preset with no items', async () => {
     const { service } = makeService();
-    await expect(service.create('orgA', ACTOR, { name: 'Tee', items: [] })).rejects.toThrow(
-      'at least one loop item is required',
-    );
+    await expect(
+      service.create('orgA', ACTOR, { name: 'Tee', items: [] }),
+    ).rejects.toThrow('at least one loop item is required');
   });
 
   it('rejects an item with a blank name', async () => {
     const { service } = makeService();
     await expect(
-      service.create('orgA', ACTOR, { name: 'Tee', items: [{ itemName: '  ' }] }),
+      service.create('orgA', ACTOR, {
+        name: 'Tee',
+        items: [{ itemName: '  ' }],
+      }),
     ).rejects.toThrow('item 1: itemName is required');
   });
 

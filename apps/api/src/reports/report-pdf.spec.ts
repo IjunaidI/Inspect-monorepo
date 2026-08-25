@@ -22,7 +22,11 @@ const SNAPSHOT: ReportCanonicalSnapshot = {
   poNumber: 'PO-88421',
   buyer: { id: 'buy_1', name: 'Northwind Apparel' },
   supplier: { id: 'sup_1', name: 'Dhaka Knitwear Ltd' },
-  product: { id: 'prod_1', styleNumber: 'NW-7781', description: 'Mens crew tee' },
+  product: {
+    id: 'prod_1',
+    styleNumber: 'NW-7781',
+    description: 'Mens crew tee',
+  },
   lotSize: 3200,
   aqlLevel: 'II',
   computedSampling: {
@@ -110,7 +114,9 @@ describe('renderReportPdf (INS-003)', () => {
     expect(bytes.length).toBeGreaterThan(1000);
     expect(Buffer.from(bytes.slice(0, 5)).toString('latin1')).toBe('%PDF-');
     // Every PDF must terminate with the EOF marker or viewers reject it.
-    expect(Buffer.from(bytes).toString('latin1').trimEnd().endsWith('%%EOF')).toBe(true);
+    expect(
+      Buffer.from(bytes).toString('latin1').trimEnd().endsWith('%%EOF'),
+    ).toBe(true);
   });
 
   it('renders the buyer-branded header and the synthetic report number', () => {
@@ -192,7 +198,11 @@ describe('renderReportPdf (INS-003)', () => {
       ...BASE_INPUT,
       canonicalSnapshot: {
         ...SNAPSHOT,
-        aqlResult: { ...SNAPSHOT.aqlResult, qaDecision: 'FAIL', qaRemarks: null },
+        aqlResult: {
+          ...SNAPSHOT.aqlResult,
+          qaDecision: 'FAIL',
+          qaRemarks: null,
+        },
       },
     });
     const out = extractPdfText(failed);
@@ -212,7 +222,10 @@ describe('renderReportPdf (INS-003)', () => {
 
   it('renders the buyer brand colour without failing on a malformed one', async () => {
     await expect(
-      renderReportPdf({ ...BASE_INPUT, brandingSnapshot: { primaryColor: 'not-a-colour' } }),
+      renderReportPdf({
+        ...BASE_INPUT,
+        brandingSnapshot: { primaryColor: 'not-a-colour' },
+      }),
     ).resolves.toBeInstanceOf(Uint8Array);
   });
 

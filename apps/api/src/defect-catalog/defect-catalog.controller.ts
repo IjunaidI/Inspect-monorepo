@@ -1,5 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
-import { CreateDefectInput, DefectCatalogService } from './defect-catalog.service';
+import {
+  CreateDefectInput,
+  DefectCatalogService,
+} from './defect-catalog.service';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthUser } from '../auth/auth-user';

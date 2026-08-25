@@ -10,7 +10,9 @@ describe('contentHash', () => {
   });
 
   it('is independent of payload key order (uses canonicalization)', () => {
-    expect(contentHash({ a: 1, b: 2 }, [])).toBe(contentHash({ b: 2, a: 1 }, []));
+    expect(contentHash({ a: 1, b: 2 }, [])).toBe(
+      contentHash({ b: 2, a: 1 }, []),
+    );
   });
 
   it('changes when a photo hash changes', () => {

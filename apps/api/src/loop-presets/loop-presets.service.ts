@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
@@ -31,12 +35,22 @@ export class LoopPresetsService {
     private readonly audit: AuditService,
   ) {}
 
-  list(orgId: string, opts: { includeArchived?: boolean; q?: string; take?: number; skip?: number } = {}) {
+  list(
+    orgId: string,
+    opts: {
+      includeArchived?: boolean;
+      q?: string;
+      take?: number;
+      skip?: number;
+    } = {},
+  ) {
     return this.prisma.loopPreset.findMany({
       where: {
         orgId,
         ...(opts.includeArchived ? {} : { isArchived: false }),
-        ...(opts.q ? { name: { contains: opts.q, mode: 'insensitive' as const } } : {}),
+        ...(opts.q
+          ? { name: { contains: opts.q, mode: 'insensitive' as const } }
+          : {}),
       },
       orderBy: [{ name: 'asc' }, { version: 'desc' }],
       take: opts.take,
@@ -89,7 +103,10 @@ export class LoopPresetsService {
       // preset-detail presign turn the API into a signing oracle over any other
       // tenant's object (keys leak via viewUrls + inspection detail).
       if (it.referenceImageUrl != null) {
-        if (typeof it.referenceImageUrl !== 'string' || !it.referenceImageUrl.startsWith(refPrefix)) {
+        if (
+          typeof it.referenceImageUrl !== 'string' ||
+          !it.referenceImageUrl.startsWith(refPrefix)
+        ) {
           throw new BadRequestException(
             `item ${i + 1}: referenceImageUrl must be a key under ${refPrefix} (use POST /loop-presets/presign)`,
           );
@@ -106,7 +123,9 @@ export class LoopPresetsService {
         select: { id: true },
       });
       if (found.length !== catalogIds.length) {
-        throw new BadRequestException('one or more allowedDefectCatalogIds are not accessible');
+        throw new BadRequestException(
+          'one or more allowedDefectCatalogIds are not accessible',
+        );
       }
     }
 
@@ -157,7 +176,11 @@ export class LoopPresetsService {
           action: 'loopPreset.created',
           entityType: 'LoopPreset',
           entityId: preset.id,
-          metadata: { name: preset.name, version: preset.version, items: preset.items.length },
+          metadata: {
+            name: preset.name,
+            version: preset.version,
+            items: preset.items.length,
+          },
         },
         tx,
       );

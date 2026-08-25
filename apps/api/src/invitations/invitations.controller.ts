@@ -1,6 +1,9 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { AcceptInvitationInput, InvitationsService } from './invitations.service';
+import {
+  AcceptInvitationInput,
+  InvitationsService,
+} from './invitations.service';
 import { Public } from '../auth/public.decorator';
 import { inviteRateLimit } from '../common/throttler.config';
 
@@ -12,7 +15,10 @@ import { inviteRateLimit } from '../common/throttler.config';
  * time, before ConfigModule has loaded the repo-root .env into process.env.
  */
 const inviteThrottle = {
-  public: { ttl: () => inviteRateLimit().ttl, limit: () => inviteRateLimit().limit },
+  public: {
+    ttl: () => inviteRateLimit().ttl,
+    limit: () => inviteRateLimit().limit,
+  },
 };
 
 @Controller('invitations')

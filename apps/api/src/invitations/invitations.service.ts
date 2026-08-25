@@ -35,7 +35,8 @@ export class InvitationsService {
       include: { organization: { select: { name: true } } },
     });
     if (!invitation) throw new NotFoundException('Invitation not found');
-    if (invitation.acceptedAt) throw new GoneException('Invitation already used');
+    if (invitation.acceptedAt)
+      throw new GoneException('Invitation already used');
     if (invitation.expiresAt.getTime() < Date.now()) {
       throw new GoneException('Invitation has expired');
     }

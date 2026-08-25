@@ -42,7 +42,9 @@ jest.setTimeout(180_000);
 
 /** Nest renders `BadRequestException(msg)` as `{ statusCode, error, message }`. */
 const message = (body: any): string =>
-  Array.isArray(body?.message) ? body.message.join(', ') : String(body?.message ?? '');
+  Array.isArray(body?.message)
+    ? body.message.join(', ')
+    : String(body?.message ?? '');
 
 describe('AQL configurability end-to-end (INS-063)', () => {
   let app: INestApplication;
@@ -95,19 +97,36 @@ describe('AQL configurability end-to-end (INS-063)', () => {
     expect(created.computedSampling?.sampleSizeCodeLetter).toBe('J');
     expect(created.computedSampling?.sampleSize).toBe(80);
     // The whole point: 1.5 is NOT the default 2.5 (which is Ac 5 / Re 6 at J).
-    expect(created.computedSampling?.perClass?.major).toEqual({ aql: 1.5, ac: 3, re: 4 });
-    expect(created.computedSampling?.perClass?.critical).toEqual({ aql: 0, ac: 0, re: 1 });
-    expect(created.computedSampling?.perClass?.minor).toEqual({ aql: 4, ac: 7, re: 8 });
+    expect(created.computedSampling?.perClass?.major).toEqual({
+      aql: 1.5,
+      ac: 3,
+      re: 4,
+    });
+    expect(created.computedSampling?.perClass?.critical).toEqual({
+      aql: 0,
+      ac: 0,
+      re: 1,
+    });
+    expect(created.computedSampling?.perClass?.minor).toEqual({
+      aql: 4,
+      ac: 7,
+      re: 8,
+    });
 
     // It really landed in the database, not just in the response.
-    const row = await prisma.inspection.findUnique({ where: { id: configuredId } });
+    const row = await prisma.inspection.findUnique({
+      where: { id: configuredId },
+    });
     expect(row?.aqlPlan).toEqual({ critical: 0, major: 1.5, minor: 4 });
 
     // The create screen's preview agrees with what create actually stored.
     const preview = expect2xx(
-      await client.get('/inspections/aql-preview?lotSize=1000&critical=0&major=1.5&minor=4', {
-        token: org.ownerToken,
-      }),
+      await client.get(
+        '/inspections/aql-preview?lotSize=1000&critical=0&major=1.5&minor=4',
+        {
+          token: org.ownerToken,
+        },
+      ),
       'GET /inspections/aql-preview (major 1.5)',
     );
     expect(preview.sampleSizeCodeLetter).toBe('J');
@@ -115,11 +134,18 @@ describe('AQL configurability end-to-end (INS-063)', () => {
   });
 
   it('rejects an AQL outside the verified band with a 400 naming the allowed values (never a 500)', async () => {
-    const before = await prisma.inspection.count({ where: { orgId: org.orgId } });
+    const before = await prisma.inspection.count({
+      where: { orgId: org.orgId },
+    });
 
     const res = await client.post('/inspections', {
       token: org.ownerToken,
-      body: { poId: ws.poId, loopPresetId: ws.presetId, lotSize: 1000, aqlPlan: { major: 3.0 } },
+      body: {
+        poId: ws.poId,
+        loopPresetId: ws.presetId,
+        lotSize: 1000,
+        aqlPlan: { major: 3.0 },
+      },
     });
     expect(res.status).toBe(400);
     expect(message(res.body)).toMatch(/aqlPlan\.major must be one of/i);
@@ -129,12 +155,17 @@ describe('AQL configurability end-to-end (INS-063)', () => {
     }
     expect(res.body.id).toBeUndefined();
     // A rejected plan must not leave a half-built inspection behind.
-    expect(await prisma.inspection.count({ where: { orgId: org.orgId } })).toBe(before);
+    expect(await prisma.inspection.count({ where: { orgId: org.orgId } })).toBe(
+      before,
+    );
 
     // Same rule on the preview, so the screen and the create path agree.
-    const previewRes = await client.get('/inspections/aql-preview?lotSize=1000&major=3', {
-      token: org.ownerToken,
-    });
+    const previewRes = await client.get(
+      '/inspections/aql-preview?lotSize=1000&major=3',
+      {
+        token: org.ownerToken,
+      },
+    );
     expect(previewRes.status).toBe(400);
     expect(message(previewRes.body)).toMatch(/aqlPlan\.major must be one of/i);
 
@@ -142,7 +173,12 @@ describe('AQL configurability end-to-end (INS-063)', () => {
     // silently tightening a buyer's plan is as wrong as silently loosening it.
     const junk = await client.post('/inspections', {
       token: org.ownerToken,
-      body: { poId: ws.poId, loopPresetId: ws.presetId, lotSize: 1000, aqlPlan: { minor: '' } },
+      body: {
+        poId: ws.poId,
+        loopPresetId: ws.presetId,
+        lotSize: 1000,
+        aqlPlan: { minor: '' },
+      },
     });
     expect(junk.status).toBe(400);
     expect(message(junk.body)).toMatch(/aqlPlan\.minor must be one of/i);
@@ -152,16 +188,24 @@ describe('AQL configurability end-to-end (INS-063)', () => {
     // Lot 100 is code letter F, which the verified band has no Ac/Re column for:
     // the engine throws AqlPlanNotAvailableError. That is USER input, so it must
     // arrive as a 400 naming the letter — not as an unhandled 500.
-    const previewRes = await client.get('/inspections/aql-preview?lotSize=100&major=2.5', {
-      token: org.ownerToken,
-    });
+    const previewRes = await client.get(
+      '/inspections/aql-preview?lotSize=100&major=2.5',
+      {
+        token: org.ownerToken,
+      },
+    );
     expect(previewRes.status).toBe(400);
     expect(message(previewRes.body)).toMatch(/code letter F/i);
 
     // Create, with the SAME plan explicitly...
     const createRes = await client.post('/inspections', {
       token: org.ownerToken,
-      body: { poId: ws.poId, loopPresetId: ws.presetId, lotSize: 100, aqlPlan: { major: 2.5 } },
+      body: {
+        poId: ws.poId,
+        loopPresetId: ws.presetId,
+        lotSize: 100,
+        aqlPlan: { major: 2.5 },
+      },
     });
     expect(createRes.status).toBe(400);
     expect(message(createRes.body)).toMatch(/code letter F/i);
@@ -177,9 +221,12 @@ describe('AQL configurability end-to-end (INS-063)', () => {
     // The refusal is about the missing GRID COLUMN, not about small lots: an
     // all-zero plan ("any defect rejects") needs no column and still works at F.
     const zeroPlan = expect2xx(
-      await client.get('/inspections/aql-preview?lotSize=100&critical=0&major=0&minor=0', {
-        token: org.ownerToken,
-      }),
+      await client.get(
+        '/inspections/aql-preview?lotSize=100&critical=0&major=0&minor=0',
+        {
+          token: org.ownerToken,
+        },
+      ),
       'GET /inspections/aql-preview (lot 100, all-zero plan)',
     );
     expect(zeroPlan.sampleSizeCodeLetter).toBe('F');
@@ -210,8 +257,11 @@ describe('AQL configurability end-to-end (INS-063)', () => {
         token: adminToken,
         body: {
           storageKey: `e2e/${tag}/aqlcfg.jpg`,
-          contentHash: createHash('sha256').update(`${tag}-aqlcfg`).digest('hex'),
-          inspectionLoopItemId: configuredLoopId, cycleIndex: 0,
+          contentHash: createHash('sha256')
+            .update(`${tag}-aqlcfg`)
+            .digest('hex'),
+          inspectionLoopItemId: configuredLoopId,
+          cycleIndex: 0,
           clientRequestId: `photo-${tag}`,
         },
       }),
@@ -228,14 +278,19 @@ describe('AQL configurability end-to-end (INS-063)', () => {
           body: {
             customText: `Open seam #${i} (${tag})`,
             severity: 'MAJOR',
-            inspectionLoopItemId: configuredLoopId, cycleIndex: 0,
+            inspectionLoopItemId: configuredLoopId,
+            cycleIndex: 0,
             clientRequestId: `defect-${tag}-${i}`,
           },
         }),
         `populate tag MAJOR defect ${i}`,
       );
     }
-    expect(await prisma.defectInstance.count({ where: { inspectionId: configuredId } })).toBe(4);
+    expect(
+      await prisma.defectInstance.count({
+        where: { inspectionId: configuredId },
+      }),
+    ).toBe(4);
 
     const submitted = expect2xx(
       await client.post(`/inspections/${configuredId}/submit`, {
@@ -247,11 +302,22 @@ describe('AQL configurability end-to-end (INS-063)', () => {
     expect(submitted.status).toBe('SUBMITTED');
     // Submit rewrites computedSampling from the frozen aqlPlan — still 1.5, not
     // the code-level default that a re-read of DEFAULT_AQL would have produced.
-    expect(submitted.computedSampling?.perClass?.major).toEqual({ aql: 1.5, ac: 3, re: 4 });
-    expect(submitted.aqlResult?.perClass?.major).toEqual({ found: 4, ac: 3, re: 4, outcome: 'FAIL' });
+    expect(submitted.computedSampling?.perClass?.major).toEqual({
+      aql: 1.5,
+      ac: 3,
+      re: 4,
+    });
+    expect(submitted.aqlResult?.perClass?.major).toEqual({
+      found: 4,
+      ac: 3,
+      re: 4,
+      outcome: 'FAIL',
+    });
     expect(submitted.aqlResult?.systemRecommendation).toBe('FAIL');
 
-    const row = await prisma.inspection.findUnique({ where: { id: configuredId } });
+    const row = await prisma.inspection.findUnique({
+      where: { id: configuredId },
+    });
     expect(row?.aqlPlan).toEqual({ critical: 0, major: 1.5, minor: 4 });
   });
 });

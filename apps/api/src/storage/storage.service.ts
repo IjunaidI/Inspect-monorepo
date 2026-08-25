@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { presignS3Url } from './sigv4';
@@ -11,7 +16,9 @@ import { presignS3Url } from './sigv4';
  * fail exactly like "unset" so the operator gets a real message instead of a 403 from
  * the storage provider hours later.
  */
-export function looksLikePlaceholder(value: string | null | undefined): boolean {
+export function looksLikePlaceholder(
+  value: string | null | undefined,
+): boolean {
   if (value == null) return false;
   const trimmed = value.trim();
   if (!trimmed) return false; // emptiness is reported separately
@@ -27,7 +34,12 @@ export function looksLikePlaceholder(value: string | null | undefined): boolean 
   if (trimmed.includes('${')) return true; // ${{ Bucket.SECRET }} / ${VAR} left unexpanded
   if (/<[^>]*>/.test(trimmed)) return true; // <access-key-id>, https://<your-endpoint>
   if (/^x{3,}$/i.test(trimmed)) return true; // xxxxxxxx
-  if (['todo', 'tbd', 'none', 'null', 'undefined', 'example', 'string'].includes(lower)) return true;
+  if (
+    ['todo', 'tbd', 'none', 'null', 'undefined', 'example', 'string'].includes(
+      lower,
+    )
+  )
+    return true;
   return false;
 }
 
@@ -141,7 +153,8 @@ export class StorageService implements OnModuleInit {
 
   private storageConfig(): ResolvedStorageConfig {
     return {
-      endpoint: this.config.get<string>('S3_ENDPOINT') ?? 'http://localhost:9000',
+      endpoint:
+        this.config.get<string>('S3_ENDPOINT') ?? 'http://localhost:9000',
       region: this.config.get<string>('S3_REGION') ?? 'us-east-1',
       bucket: this.config.get<string>('S3_BUCKET') ?? 'inspect-photos',
       accessKeyId: this.config.get<string>('S3_ACCESS_KEY_ID') ?? '',
@@ -193,12 +206,18 @@ export class StorageService implements OnModuleInit {
     return null;
   }
 
-  private presign(key: string, method: 'GET' | 'PUT', expiresSeconds: number): string {
+  private presign(
+    key: string,
+    method: 'GET' | 'PUT',
+    expiresSeconds: number,
+  ): string {
     // Fail loudly (INS-053/INS-060): empty OR placeholder credentials would still
     // produce a signed-looking but permanently broken URL.
     const problem = this.configProblem();
     if (problem) {
-      throw new BadRequestException(`Object storage is not configured (${problem})`);
+      throw new BadRequestException(
+        `Object storage is not configured (${problem})`,
+      );
     }
     const c = this.storageConfig();
     return presignS3Url({

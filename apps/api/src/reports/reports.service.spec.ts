@@ -55,7 +55,13 @@ function approvedInspection(overrides: Record<string, unknown> = {}) {
     workmanshipNotes: 'Fine',
     packagingNotes: 'Fine',
     tamperProof: { deviceId: 'dev1' },
-    buyer: { id: 'buy1', name: 'Northwind Apparel', logoUrl: null, primaryColor: '#037BF4', branding: null },
+    buyer: {
+      id: 'buy1',
+      name: 'Northwind Apparel',
+      logoUrl: null,
+      primaryColor: '#037BF4',
+      branding: null,
+    },
     supplier: { id: 'sup1', name: 'Dhaka Knitwear' },
     product: { id: 'prod1', styleNumber: 'NW-1', description: 'Tee' },
     purchaseOrder: { poNumber: 'PO-1' },
@@ -96,7 +102,9 @@ function approvedInspection(overrides: Record<string, unknown> = {}) {
         ],
       },
     ],
-    measurements: [{ cycleIndex: 0, label: 'Length', recordedValue: '42.0', unit: 'cm' }],
+    measurements: [
+      { cycleIndex: 0, label: 'Length', recordedValue: '42.0', unit: 'cm' },
+    ],
     defects: [
       {
         defectCatalogId: null,
@@ -139,20 +147,31 @@ function makeService(
     config?: Record<string, unknown>;
   } = {},
 ): Harness {
-  const inspection = opts.inspection === undefined ? approvedInspection() : opts.inspection;
+  const inspection =
+    opts.inspection === undefined ? approvedInspection() : opts.inspection;
   let uploadedBytes: Uint8Array | undefined;
 
-  const created = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-    id: 'rep1',
-    pdfStorageKey: null,
-    verificationToken: 'tok-verify',
-    generatedAt: new Date('2026-08-01T09:00:00.000Z'),
-    ...data,
-  }));
-  const reportUpdate = jest.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => ({
-    id: where.id,
-    ...data,
-  }));
+  const created = jest.fn(
+    async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'rep1',
+      pdfStorageKey: null,
+      verificationToken: 'tok-verify',
+      generatedAt: new Date('2026-08-01T09:00:00.000Z'),
+      ...data,
+    }),
+  );
+  const reportUpdate = jest.fn(
+    async ({
+      where,
+      data,
+    }: {
+      where: { id: string };
+      data: Record<string, unknown>;
+    }) => ({
+      id: where.id,
+      ...data,
+    }),
+  );
   const inspectionUpdate = jest.fn(async () => ({}));
   const reportFindFirst = jest.fn(async () => opts.existingReport ?? null);
 
@@ -169,18 +188,29 @@ function makeService(
   };
   const prisma = {
     inspection: { findFirst: jest.fn(async () => inspection) },
-    report: { findFirst: reportFindFirst, update: reportUpdate, findUnique: jest.fn(async () => null) },
-    $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    report: {
+      findFirst: reportFindFirst,
+      update: reportUpdate,
+      findUnique: jest.fn(async () => null),
+    },
+    $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
+      fn(tx),
+    ),
   };
   const audit = { append: jest.fn(async () => ({})) };
   const storage = {
     isConfigured: jest.fn(() => opts.storageConfigured !== false),
-    keyForReportPdf: jest.fn((orgId: string, reportId: string) => `orgs/${orgId}/reports/${reportId}.pdf`),
+    keyForReportPdf: jest.fn(
+      (orgId: string, reportId: string) =>
+        `orgs/${orgId}/reports/${reportId}.pdf`,
+    ),
     putObject: jest.fn(async (_key: string, bytes: Uint8Array) => {
       if (opts.uploadFails) throw new Error('storage exploded');
       uploadedBytes = bytes;
     }),
-    presignDownload: jest.fn((key: string) => `https://s3.example/${key}?sig=abc`),
+    presignDownload: jest.fn(
+      (key: string) => `https://s3.example/${key}?sig=abc`,
+    ),
   };
   const config = new ConfigService({
     REPORT_SIGNING_PRIVATE_KEY_PEM: KEYS.privateKey,
@@ -188,7 +218,12 @@ function makeService(
     ...opts.config,
   });
 
-  const mail = { sendReportDelivered: jest.fn(async () => ({ sent: true, messageId: 'mid' })) };
+  const mail = {
+    sendReportDelivered: jest.fn(async () => ({
+      sent: true,
+      messageId: 'mid',
+    })),
+  };
   const service = new ReportsService(
     prisma as never,
     config,
@@ -211,19 +246,29 @@ function makeService(
 describe('ReportsService.generate — signed envelope (INS-019)', () => {
   it('signs a content hash that verifies against the platform public key', async () => {
     const { service, created } = makeService();
-    const report = (await service.generate('org1', OWNER, 'insp1')) as unknown as {
+    const report = (await service.generate(
+      'org1',
+      OWNER,
+      'insp1',
+    )) as unknown as {
       contentHash: string;
       signature: string;
       canonicalSnapshot: Record<string, unknown>;
     };
 
     expect(created).toHaveBeenCalledTimes(1);
-    expect(verify(report.contentHash, report.signature, KEYS.publicKey)).toBe(true);
+    expect(verify(report.contentHash, report.signature, KEYS.publicKey)).toBe(
+      true,
+    );
   });
 
   it('round-trips: recomputing the hash from the stored snapshot reproduces the signed hash', async () => {
     const { service } = makeService();
-    const report = (await service.generate('org1', OWNER, 'insp1')) as unknown as {
+    const report = (await service.generate(
+      'org1',
+      OWNER,
+      'insp1',
+    )) as unknown as {
       contentHash: string;
       canonicalSnapshot: { photoHashes: string[] };
     };
@@ -237,15 +282,25 @@ describe('ReportsService.generate — signed envelope (INS-019)', () => {
 
   it('freezes the buyer-visible fields (defects, quantity, decision, evidence) inside the signed envelope', async () => {
     const { service } = makeService();
-    const report = (await service.generate('org1', OWNER, 'insp1')) as unknown as {
+    const report = (await service.generate(
+      'org1',
+      OWNER,
+      'insp1',
+    )) as unknown as {
       canonicalSnapshot: Record<string, any>;
       brandingSnapshot: Record<string, unknown>;
     };
     const snap = report.canonicalSnapshot;
     expect(snap.poNumber).toBe('PO-1');
     expect(snap.defects).toHaveLength(1);
-    expect(snap.defects[0]).toMatchObject({ customText: 'Loose thread', severity: 'MINOR' });
-    expect(snap.quantity).toMatchObject({ quantityPresented: 990, quantityShortfall: 10 });
+    expect(snap.defects[0]).toMatchObject({
+      customText: 'Loose thread',
+      severity: 'MINOR',
+    });
+    expect(snap.quantity).toMatchObject({
+      quantityPresented: 990,
+      quantityShortfall: 10,
+    });
     expect(snap.aqlResult.qaDecision).toBe('PASS');
     expect(snap.aqlResult.decidedByUserId).toBe('u-qa');
     expect(snap.photoHashes).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
@@ -255,47 +310,56 @@ describe('ReportsService.generate — signed envelope (INS-019)', () => {
 
   it('is order-sensitive on photo evidence: a reordered photo set breaks the hash', async () => {
     const { service } = makeService();
-    const report = (await service.generate('org1', OWNER, 'insp1')) as unknown as {
+    const report = (await service.generate(
+      'org1',
+      OWNER,
+      'insp1',
+    )) as unknown as {
       contentHash: string;
       canonicalSnapshot: { photoHashes: string[] };
     };
     const swapped = [...report.canonicalSnapshot.photoHashes].reverse();
-    expect(contentHash({ ...report.canonicalSnapshot, photoHashes: swapped }, swapped)).not.toBe(
-      report.contentHash,
-    );
+    expect(
+      contentHash(
+        { ...report.canonicalSnapshot, photoHashes: swapped },
+        swapped,
+      ),
+    ).not.toBe(report.contentHash);
   });
 
   it('refuses a non-APPROVED inspection', async () => {
     const { service, created } = makeService({
       inspection: approvedInspection({ status: 'SUBMITTED' }),
     });
-    await expect(service.generate('org1', OWNER, 'insp1')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.generate('org1', OWNER, 'insp1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(created).not.toHaveBeenCalled();
   });
 
   it('404s an inspection outside the caller tenant', async () => {
     const { service } = makeService({ inspection: null });
-    await expect(service.generate('org1', OWNER, 'insp1')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.generate('org1', OWNER, 'insp1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('refuses to sign when no signing key is configured', async () => {
     const { service, created } = makeService({
       config: { REPORT_SIGNING_PRIVATE_KEY_PEM: '' },
     });
-    await expect(service.generate('org1', OWNER, 'insp1')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.generate('org1', OWNER, 'insp1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(created).not.toHaveBeenCalled();
   });
 });
 
 describe('ReportsService.generate — loop items + cycle depth (INS-081)', () => {
   function snapshotOf(created: { mock: { calls: unknown[][] } }) {
-    const arg = created.mock.calls[0][0] as { data: { canonicalSnapshot: unknown } };
+    const arg = created.mock.calls[0][0] as {
+      data: { canonicalSnapshot: unknown };
+    };
     return arg.data.canonicalSnapshot as Record<string, unknown>;
   }
 
@@ -313,14 +377,21 @@ describe('ReportsService.generate — loop items + cycle depth (INS-081)', () =>
     const { service, created } = makeService();
     await service.generate('org1', OWNER, 'insp1');
     // One complete pass over both items, against a plan calling for 80.
-    expect(snapshotOf(created).cycles).toEqual({ completed: 1, sampleSize: 80 });
+    expect(snapshotOf(created).cycles).toEqual({
+      completed: 1,
+      sampleSize: 80,
+    });
   });
 
   it('attributes each defect to its slot so the narrative can name the unit', async () => {
     const { service, created } = makeService();
     await service.generate('org1', OWNER, 'insp1');
     expect(snapshotOf(created).defects).toEqual([
-      expect.objectContaining({ itemPosition: 1, cycleIndex: 0, severity: 'MINOR' }),
+      expect.objectContaining({
+        itemPosition: 1,
+        cycleIndex: 0,
+        severity: 'MINOR',
+      }),
     ]);
   });
 
@@ -335,7 +406,10 @@ describe('ReportsService.generate — loop items + cycle depth (INS-081)', () =>
   it('orders the signed photo hashes by unit, then by item position', async () => {
     const { service, created } = makeService();
     await service.generate('org1', OWNER, 'insp1');
-    expect(snapshotOf(created).photoHashes).toEqual(['a'.repeat(64), 'b'.repeat(64)]);
+    expect(snapshotOf(created).photoHashes).toEqual([
+      'a'.repeat(64),
+      'b'.repeat(64),
+    ]);
   });
 });
 
@@ -386,7 +460,9 @@ describe('ReportsService.generate — idempotency (INS-019)', () => {
       }),
       existingReport: null,
     });
-    await expect(service.generate('org1', OWNER, 'insp1')).rejects.toMatchObject({
+    await expect(
+      service.generate('org1', OWNER, 'insp1'),
+    ).rejects.toMatchObject({
       code: 'P2002',
     });
   });
@@ -426,10 +502,16 @@ describe('ReportsService.generate — audit attribution (INS-019)', () => {
 
   it('records the signed content hash in the audit metadata', async () => {
     const { service, audit } = makeService();
-    const report = (await service.generate('org1', OWNER, 'insp1')) as unknown as {
+    const report = (await service.generate(
+      'org1',
+      OWNER,
+      'insp1',
+    )) as unknown as {
       contentHash: string;
     };
-    const call = audit.append.mock.calls.find((c) => c[0].action === 'report.generated');
+    const call = audit.append.mock.calls.find(
+      (c) => c[0].action === 'report.generated',
+    );
     expect(call![0].metadata).toEqual({
       inspectionId: 'insp1',
       contentHash: report.contentHash,
@@ -440,7 +522,11 @@ describe('ReportsService.generate — audit attribution (INS-019)', () => {
 describe('ReportsService.generate — PDF rendition (INS-003)', () => {
   it('renders the signed snapshot to a PDF, stores it and sets pdfStorageKey', async () => {
     const { service, storage, uploaded, reportUpdate } = makeService();
-    const report = (await service.generate('org1', OWNER, 'insp1')) as unknown as {
+    const report = (await service.generate(
+      'org1',
+      OWNER,
+      'insp1',
+    )) as unknown as {
       pdfStorageKey: string | null;
       contentHash: string;
     };
@@ -471,14 +557,19 @@ describe('ReportsService.generate — PDF rendition (INS-003)', () => {
   it('appends a hash-chained audit row for the rendition, with the byte length', async () => {
     const { service, audit, uploaded } = makeService();
     await service.generate('org1', OWNER, 'insp1');
-    const call = audit.append.mock.calls.find((c) => c[0].action === 'report.pdf.rendered');
+    const call = audit.append.mock.calls.find(
+      (c) => c[0].action === 'report.pdf.rendered',
+    );
     expect(call).toBeTruthy();
     expect(call![0]).toMatchObject({
       orgId: 'org1',
       entityType: 'Report',
       entityId: 'rep1',
       actorUserId: 'u-owner',
-      metadata: { pdfStorageKey: 'orgs/org1/reports/rep1.pdf', pdfBytes: uploaded()!.length },
+      metadata: {
+        pdfStorageKey: 'orgs/org1/reports/rep1.pdf',
+        pdfBytes: uploaded()!.length,
+      },
     });
   });
 
@@ -486,20 +577,30 @@ describe('ReportsService.generate — PDF rendition (INS-003)', () => {
   // outage must not lose the signature.
   it('still returns the signed report when the upload fails', async () => {
     const { service, reportUpdate } = makeService({ uploadFails: true });
-    const report = (await service.generate('org1', OWNER, 'insp1')) as unknown as {
+    const report = (await service.generate(
+      'org1',
+      OWNER,
+      'insp1',
+    )) as unknown as {
       pdfStorageKey: string | null;
       signature: string;
       contentHash: string;
     };
     expect(report.signature).toBeTruthy();
-    expect(verify(report.contentHash, report.signature, KEYS.publicKey)).toBe(true);
+    expect(verify(report.contentHash, report.signature, KEYS.publicKey)).toBe(
+      true,
+    );
     expect(report.pdfStorageKey).toBeNull();
     expect(reportUpdate).not.toHaveBeenCalled();
   });
 
   it('skips rendering entirely when object storage is not configured', async () => {
     const { service, storage } = makeService({ storageConfigured: false });
-    const report = (await service.generate('org1', OWNER, 'insp1')) as unknown as {
+    const report = (await service.generate(
+      'org1',
+      OWNER,
+      'insp1',
+    )) as unknown as {
       pdfStorageKey: string | null;
     };
     expect(storage.putObject).not.toHaveBeenCalled();
@@ -515,7 +616,10 @@ describe('ReportsService.generate — PDF rendition (INS-003)', () => {
       signature: 'sig-old',
       verificationToken: 'tok-old',
       generatedAt: new Date('2026-07-01T00:00:00.000Z'),
-      canonicalSnapshot: { buyer: { name: 'Northwind Apparel' }, poNumber: 'PO-1' },
+      canonicalSnapshot: {
+        buyer: { name: 'Northwind Apparel' },
+        poNumber: 'PO-1',
+      },
       brandingSnapshot: { primaryColor: '#037BF4' },
     };
     const { service, created, storage, uploaded } = makeService({
@@ -538,7 +642,9 @@ describe('ReportsService.pdfDownload (INS-003)', () => {
   function makeDownloadService(report: Record<string, unknown> | null) {
     const findFirst = jest.fn(async () => report);
     const storage = {
-      presignDownload: jest.fn((key: string, ttl: number) => `https://s3.example/${key}?ttl=${ttl}`),
+      presignDownload: jest.fn(
+        (key: string, ttl: number) => `https://s3.example/${key}?ttl=${ttl}`,
+      ),
       isConfigured: jest.fn(() => true),
     };
     const service = new ReportsService(
@@ -563,15 +669,18 @@ describe('ReportsService.pdfDownload (INS-003)', () => {
     );
     expect(out.reportId).toBe('rep1');
     expect(out.expiresInSeconds).toBe(300);
-    expect(storage.presignDownload).toHaveBeenCalledWith('orgs/org1/reports/rep1.pdf', 300);
+    expect(storage.presignDownload).toHaveBeenCalledWith(
+      'orgs/org1/reports/rep1.pdf',
+      300,
+    );
     expect(out.url).toContain('orgs/org1/reports/rep1.pdf');
   });
 
   it('404s a report belonging to another tenant (no existence leak)', async () => {
     const { service } = makeDownloadService(null);
-    await expect(service.pdfDownload('org1', 'rep-foreign')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.pdfDownload('org1', 'rep-foreign'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('404s with a clear message when no PDF has been rendered yet', async () => {
@@ -580,7 +689,9 @@ describe('ReportsService.pdfDownload (INS-003)', () => {
       pdfStorageKey: null,
       generatedAt: new Date(),
     });
-    await expect(service.pdfDownload('org1', 'rep1')).rejects.toThrow(/No PDF rendition/i);
+    await expect(service.pdfDownload('org1', 'rep1')).rejects.toThrow(
+      /No PDF rendition/i,
+    );
   });
 });
 
@@ -627,14 +738,24 @@ describe('ReportsService.deliver (INS-020)', () => {
     const reportFindFirst = jest.fn(async () => report);
     // Typed as the generic `jest.Mock` (not inferred from the 0-arg impl) so the
     // `.mock.calls[0][0]` assertions below index an `any[]` tuple rather than `[]`.
-    const guestFindMany: jest.Mock = jest.fn(async () => opts.guests ?? [guest()]);
-    const deliveryCreate = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-      id: 'del1',
-      ...data,
-    }));
+    const guestFindMany: jest.Mock = jest.fn(
+      async () => opts.guests ?? [guest()],
+    );
+    const deliveryCreate = jest.fn(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 'del1',
+        ...data,
+      }),
+    );
     const deliveryCreateMany = jest.fn(async () => ({ count: 1 }));
     const reportUpdate = jest.fn(
-      async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => ({
+      async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => ({
         id: where.id,
         ...data,
       }),
@@ -653,13 +774,18 @@ describe('ReportsService.deliver (INS-020)', () => {
       report: { findFirst: reportFindFirst },
       buyerGuest: { findMany: guestFindMany },
       reportDelivery: { createMany: deliveryCreateMany },
-      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+      $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
+        fn(tx),
+      ),
     };
     const service = new ReportsService(
       prisma as never,
       new ConfigService({}),
       audit as never,
-      { presignDownload: jest.fn(), isConfigured: jest.fn(() => true) } as never,
+      {
+        presignDownload: jest.fn(),
+        isConfigured: jest.fn(() => true),
+      } as never,
       { sendReportDelivered } as never,
     );
     return {
@@ -678,7 +804,11 @@ describe('ReportsService.deliver (INS-020)', () => {
     const { service, sendReportDelivered } = makeDeliverService({
       guests: [
         guest(),
-        guest({ id: 'g2', email: 'sourcing@northwind.example', token: 'magic-2' }),
+        guest({
+          id: 'g2',
+          email: 'sourcing@northwind.example',
+          token: 'magic-2',
+        }),
       ],
     });
     const out = await service.deliver('org1', OWNER, 'rep1');
@@ -696,7 +826,10 @@ describe('ReportsService.deliver (INS-020)', () => {
     );
     // Each recipient gets their OWN token — never another guest's credential.
     expect(sendReportDelivered).toHaveBeenCalledWith(
-      expect.objectContaining({ to: 'sourcing@northwind.example', token: 'magic-2' }),
+      expect.objectContaining({
+        to: 'sourcing@northwind.example',
+        token: 'magic-2',
+      }),
     );
     expect(out.emailsSent).toBe(2);
     expect(out.recipients).toEqual([
@@ -706,15 +839,27 @@ describe('ReportsService.deliver (INS-020)', () => {
   });
 
   it('never mails the same address twice in one call', async () => {
-    const { service, sendReportDelivered, deliveryCreateMany } = makeDeliverService({
-      guests: [guest(), guest({ id: 'g2', email: 'Buyer.QA@Northwind.example', token: 'magic-2' })],
-    });
+    const { service, sendReportDelivered, deliveryCreateMany } =
+      makeDeliverService({
+        guests: [
+          guest(),
+          guest({
+            id: 'g2',
+            email: 'Buyer.QA@Northwind.example',
+            token: 'magic-2',
+          }),
+        ],
+      });
     const out = await service.deliver('org1', OWNER, 'rep1');
     expect(sendReportDelivered).toHaveBeenCalledTimes(1);
     expect(out.emailsSent).toBe(1);
     expect(deliveryCreateMany).toHaveBeenCalledWith({
       data: [
-        { reportId: 'rep1', channel: 'EMAIL', recipientEmail: 'buyer.qa@northwind.example' },
+        {
+          reportId: 'rep1',
+          channel: 'EMAIL',
+          recipientEmail: 'buyer.qa@northwind.example',
+        },
       ],
     });
   });
@@ -738,7 +883,8 @@ describe('ReportsService.deliver (INS-020)', () => {
   });
 
   it('records the PORTAL delivery + DELIVERED status + audit row in ONE transaction', async () => {
-    const { service, deliveryCreate, reportUpdate, audit } = makeDeliverService();
+    const { service, deliveryCreate, reportUpdate, audit } =
+      makeDeliverService();
     const out = await service.deliver('org1', OWNER, 'rep1');
 
     expect(deliveryCreate).toHaveBeenCalledWith({
@@ -781,12 +927,17 @@ describe('ReportsService.deliver (INS-020)', () => {
   });
 
   it('writes EMAIL delivery rows only for messages the transport accepted', async () => {
-    const { service, deliveryCreateMany, sendReportDelivered } = makeDeliverService({
-      guests: [
-        guest(),
-        guest({ id: 'g2', email: 'sourcing@northwind.example', token: 'magic-2' }),
-      ],
-    });
+    const { service, deliveryCreateMany, sendReportDelivered } =
+      makeDeliverService({
+        guests: [
+          guest(),
+          guest({
+            id: 'g2',
+            email: 'sourcing@northwind.example',
+            token: 'magic-2',
+          }),
+        ],
+      });
     sendReportDelivered
       .mockResolvedValueOnce({ sent: true, messageId: 'mid-1' })
       .mockResolvedValueOnce({ sent: false, messageId: 'mid-2' });
@@ -799,7 +950,11 @@ describe('ReportsService.deliver (INS-020)', () => {
     expect(out.emailsSent).toBe(1);
     expect(deliveryCreateMany).toHaveBeenCalledWith({
       data: [
-        { reportId: 'rep1', channel: 'EMAIL', recipientEmail: 'buyer.qa@northwind.example' },
+        {
+          reportId: 'rep1',
+          channel: 'EMAIL',
+          recipientEmail: 'buyer.qa@northwind.example',
+        },
       ],
     });
   });
@@ -818,26 +973,42 @@ describe('ReportsService.deliver (INS-020)', () => {
   });
 
   it('reports {sent:false} per recipient when SMTP refuses the message', async () => {
-    const { service, deliveryCreateMany } = makeDeliverService({ mailSent: false });
+    const { service, deliveryCreateMany } = makeDeliverService({
+      mailSent: false,
+    });
     const out = await service.deliver('org1', OWNER, 'rep1');
-    expect(out.recipients).toEqual([{ email: 'buyer.qa@northwind.example', sent: false }]);
+    expect(out.recipients).toEqual([
+      { email: 'buyer.qa@northwind.example', sent: false },
+    ]);
     expect(out.emailsSent).toBe(0);
     expect(deliveryCreateMany).not.toHaveBeenCalled();
   });
 
   it('handles a buyer with no eligible guests: publishes to the portal, mails nobody', async () => {
-    const { service, sendReportDelivered, deliveryCreate, deliveryCreateMany, audit } =
-      makeDeliverService({ guests: [] });
+    const {
+      service,
+      sendReportDelivered,
+      deliveryCreate,
+      deliveryCreateMany,
+      audit,
+    } = makeDeliverService({ guests: [] });
     const out = await service.deliver('org1', OWNER, 'rep1');
 
     expect(sendReportDelivered).not.toHaveBeenCalled();
     expect(deliveryCreateMany).not.toHaveBeenCalled();
-    expect(deliveryCreate).toHaveBeenCalledWith({ data: { reportId: 'rep1', channel: 'PORTAL' } });
+    expect(deliveryCreate).toHaveBeenCalledWith({
+      data: { reportId: 'rep1', channel: 'PORTAL' },
+    });
     expect(out.status).toBe('DELIVERED');
     expect(out.recipients).toEqual([]);
     expect(out.emailsSent).toBe(0);
-    const call = audit.append.mock.calls.find((c) => c[0].action === 'report.delivered');
-    expect(call![0].metadata).toMatchObject({ recipientCount: 0, recipients: [] });
+    const call = audit.append.mock.calls.find(
+      (c) => c[0].action === 'report.delivered',
+    );
+    expect(call![0].metadata).toMatchObject({
+      recipientCount: 0,
+      recipients: [],
+    });
   });
 
   it('re-delivering appends a new row and keeps the ORIGINAL deliveredAt', async () => {
@@ -863,10 +1034,12 @@ describe('ReportsService.deliver (INS-020)', () => {
   });
 
   it('404s a report in another tenant without touching guests or mail', async () => {
-    const { service, guestFindMany, sendReportDelivered } = makeDeliverService({ report: null });
-    await expect(service.deliver('org1', OWNER, 'rep-foreign')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    const { service, guestFindMany, sendReportDelivered } = makeDeliverService({
+      report: null,
+    });
+    await expect(
+      service.deliver('org1', OWNER, 'rep-foreign'),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(guestFindMany).not.toHaveBeenCalled();
     expect(sendReportDelivered).not.toHaveBeenCalled();
   });

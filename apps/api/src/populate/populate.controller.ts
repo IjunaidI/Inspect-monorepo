@@ -38,7 +38,10 @@ export class PopulateController {
   constructor(private readonly populate: PopulateService) {}
 
   @Get()
-  load(@CurrentUser() user: AuthUser, @Param('inspectionId') inspectionId: string) {
+  load(
+    @CurrentUser() user: AuthUser,
+    @Param('inspectionId') inspectionId: string,
+  ) {
     return this.populate.loadForPopulate(inspectionId, user);
   }
 

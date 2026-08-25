@@ -5,7 +5,11 @@ function buildChain(payloadHashes: string[]): AuditChainEntry[] {
   const entries: AuditChainEntry[] = [];
   let prev: string | null = null;
   payloadHashes.forEach((payloadHash, i) => {
-    const entry: AuditChainEntry = { sequence: i, payloadHash, prevEntryHash: prev };
+    const entry: AuditChainEntry = {
+      sequence: i,
+      payloadHash,
+      prevEntryHash: prev,
+    };
     entries.push(entry);
     prev = linkHash(entry);
   });
@@ -14,13 +18,25 @@ function buildChain(payloadHashes: string[]): AuditChainEntry[] {
 
 describe('linkHash', () => {
   it('is deterministic', () => {
-    const e: AuditChainEntry = { sequence: 0, payloadHash: 'p0', prevEntryHash: null };
+    const e: AuditChainEntry = {
+      sequence: 0,
+      payloadHash: 'p0',
+      prevEntryHash: null,
+    };
     expect(linkHash(e)).toBe(linkHash(e));
   });
 
   it('changes when the entry content changes', () => {
-    const a: AuditChainEntry = { sequence: 0, payloadHash: 'p0', prevEntryHash: null };
-    const b: AuditChainEntry = { sequence: 0, payloadHash: 'p1', prevEntryHash: null };
+    const a: AuditChainEntry = {
+      sequence: 0,
+      payloadHash: 'p0',
+      prevEntryHash: null,
+    };
+    const b: AuditChainEntry = {
+      sequence: 0,
+      payloadHash: 'p1',
+      prevEntryHash: null,
+    };
     expect(linkHash(a)).not.toBe(linkHash(b));
   });
 });

@@ -32,13 +32,21 @@ describe('buildPresetSnapshot — INS-081', () => {
         description: null,
         referenceImageUrl: 'orgs/o/presets/a.jpg',
       },
-      { position: 2, itemName: 'Neck hole', description: 'inside seam', referenceImageUrl: null },
+      {
+        position: 2,
+        itemName: 'Neck hole',
+        description: 'inside seam',
+        referenceImageUrl: null,
+      },
     ],
     measurementFields: [{ label: 'Chest', unit: 'cm' }],
     allowedDefects: [
       {
         defectCatalogId: 'dc_1',
-        defectCatalog: { name: 'Broken stitch', defaultSeverity: 'MAJOR' as const },
+        defectCatalog: {
+          name: 'Broken stitch',
+          defaultSeverity: 'MAJOR' as const,
+        },
       },
     ],
   };
@@ -77,9 +85,14 @@ describe('billableKindFor (INS-018)', () => {
     expect(billableKindFor('insp-original')).toBe('RE_INSPECTION');
   });
 
-  it.each([[null], [undefined], ['']])('bills INSPECTION when the linkage is %p', (linkage) => {
-    expect(billableKindFor(linkage as string | null | undefined)).toBe('INSPECTION');
-  });
+  it.each([[null], [undefined], ['']])(
+    'bills INSPECTION when the linkage is %p',
+    (linkage) => {
+      expect(billableKindFor(linkage as string | null | undefined)).toBe(
+        'INSPECTION',
+      );
+    },
+  );
 });
 
 describe('qaDecisionToStatus', () => {

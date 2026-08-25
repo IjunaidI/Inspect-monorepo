@@ -56,14 +56,18 @@ function sha256Hex(data: string): string {
 export function presignS3Url(opts: PresignOptions): string {
   const url = new URL(opts.endpoint);
   const host = url.host;
-  const amzDate = opts.now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const amzDate = opts.now
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}/, '');
   const dateStamp = amzDate.slice(0, 8);
   const scope = `${dateStamp}/${opts.region}/s3/aws4_request`;
 
   // Path-style canonical URI (bucket in the path). Slashes in the key are kept.
-  const canonicalUri = opts.forcePathStyle === false
-    ? '/' + uriEncode(opts.key, false)
-    : '/' + uriEncode(opts.bucket, false) + '/' + uriEncode(opts.key, false);
+  const canonicalUri =
+    opts.forcePathStyle === false
+      ? '/' + uriEncode(opts.key, false)
+      : '/' + uriEncode(opts.bucket, false) + '/' + uriEncode(opts.key, false);
 
   const params: Record<string, string> = {
     'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
@@ -98,7 +102,9 @@ export function presignS3Url(opts: PresignOptions): string {
   const kRegion = hmac(kDate, opts.region);
   const kService = hmac(kRegion, 's3');
   const kSigning = hmac(kService, 'aws4_request');
-  const signature = createHmac('sha256', kSigning).update(stringToSign, 'utf8').digest('hex');
+  const signature = createHmac('sha256', kSigning)
+    .update(stringToSign, 'utf8')
+    .digest('hex');
 
   return `${url.protocol}//${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 }

@@ -2,7 +2,12 @@ import { BadRequestException } from '@nestjs/common';
 import { InspectionsService } from './inspections.service';
 import { AuthUser } from '../auth/auth-user';
 
-const QA: AuthUser = { userId: 'u-qa', orgId: 'org1', role: 'QA_MANAGER', actingAsOrgId: null };
+const QA: AuthUser = {
+  userId: 'u-qa',
+  orgId: 'org1',
+  role: 'QA_MANAGER',
+  actingAsOrgId: null,
+};
 // INS-079: a Platform Admin operating inside an assumed org must be attributed
 // as PLATFORM_ADMIN in the audit chain, not as an ordinary org member.
 const PLATFORM_ADMIN_ACTOR: AuthUser = {
@@ -44,9 +49,16 @@ function makeService(opts: MakeOpts = {}) {
   const tx = {
     inspection: {
       update: jest.fn(async () => ({ id: 'insp1', status: 'SUBMITTED' })),
-      findUnique: jest.fn(async () => ({ id: 'insp1', status: 'SUBMITTED', aqlResult: { systemRecommendation: 'PASS' } })),
+      findUnique: jest.fn(async () => ({
+        id: 'insp1',
+        status: 'SUBMITTED',
+        aqlResult: { systemRecommendation: 'PASS' },
+      })),
     },
-    aqlResult: { upsert: jest.fn(async () => ({})), update: jest.fn(async () => ({})) },
+    aqlResult: {
+      upsert: jest.fn(async () => ({})),
+      update: jest.fn(async () => ({})),
+    },
     billableEvent: {
       findUnique: jest.fn(async () => opts.billableEvent ?? null),
       create: jest.fn(async () => ({})),
@@ -54,19 +66,27 @@ function makeService(opts: MakeOpts = {}) {
   };
   const prisma = {
     inspection: { findFirst: jest.fn(async () => inspection) },
-    inspectionLoopItem: { findMany: jest.fn(async () => opts.items ?? DEFAULT_ITEMS) },
+    inspectionLoopItem: {
+      findMany: jest.fn(async () => opts.items ?? DEFAULT_ITEMS),
+    },
     photo: { findMany: jest.fn(async () => opts.photos ?? DEFAULT_PHOTOS) },
     defectInstance: { groupBy: jest.fn(async () => opts.defects ?? []) },
     user: { findMany: jest.fn(async () => opts.users ?? []) },
-    $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
+      fn(tx),
+    ),
   };
   const audit = { append: jest.fn(async () => ({})) };
   const mail = {
     sendInspectionSubmitted: jest.fn(async () => ({ sent: true })),
     sendInspectionDecided: jest.fn(async () => ({ sent: true })),
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const service = new InspectionsService(prisma as any, audit as any, mail as any);
+
+  const service = new InspectionsService(
+    prisma as any,
+    audit as any,
+    mail as any,
+  );
   return { service, prisma, tx, audit, mail };
 }
 
@@ -150,7 +170,11 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
       }),
     );
     expect(mail.sendInspectionSubmitted).toHaveBeenCalledTimes(2);
-    expect(mail.sendInspectionSubmitted).toHaveBeenCalledWith({ to: 'qa1@x.com', poNumber: 'PO-1', inspectionId: 'insp1' });
+    expect(mail.sendInspectionSubmitted).toHaveBeenCalledWith({
+      to: 'qa1@x.com',
+      poNumber: 'PO-1',
+      inspectionId: 'insp1',
+    });
   });
 
   it('decide mails the recipients with the decision', async () => {
@@ -165,7 +189,10 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
       },
       users: [{ email: 'insp@x.com' }],
     });
-    await service.decide('org1', QA, 'insp1', { decision: 'FAIL', remarks: 'seams' });
+    await service.decide('org1', QA, 'insp1', {
+      decision: 'FAIL',
+      remarks: 'seams',
+    });
     expect(prisma.user.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -197,20 +224,28 @@ describe('InspectionsService — status-change notifications (INS-069)', () => {
       },
       users: [{ email: 'owner@x.com' }],
     });
-    await service.decide('org1', QA, 'insp1', { decision: 'PASS', remarks: 'ok' });
+    await service.decide('org1', QA, 'insp1', {
+      decision: 'PASS',
+      remarks: 'ok',
+    });
     expect(prisma.user.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ OR: [{ role: 'ORG_OWNER' }] }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ OR: [{ role: 'ORG_OWNER' }] }),
+      }),
     );
   });
 });
 
 describe('InspectionsService.submit — audit attribution (INS-079)', () => {
   it('appends actorType USER for an ordinary org actor', async () => {
-    const { service, audit } = makeService({
-    });
+    const { service, audit } = makeService({});
     await service.submit('org1', QA, 'insp1', {});
     expect(audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'inspection.submitted', actorType: 'USER', actorUserId: QA.userId }),
+      expect.objectContaining({
+        action: 'inspection.submitted',
+        actorType: 'USER',
+        actorUserId: QA.userId,
+      }),
       expect.anything(),
     );
   });
@@ -218,8 +253,7 @@ describe('InspectionsService.submit — audit attribution (INS-079)', () => {
   // Without actorTypeFor wired into the call site, this regresses silently —
   // the literal 'USER' still satisfies every other assertion in this file.
   it('attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
-    const { service, audit } = makeService({
-    });
+    const { service, audit } = makeService({});
     await service.submit('org1', PLATFORM_ADMIN_ACTOR, 'insp1', {});
     expect(audit.append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -246,7 +280,11 @@ describe('InspectionsService.decide — audit attribution (INS-079)', () => {
     const { service, audit } = makeService({ inspection: decidableInspection });
     await service.decide('org1', QA, 'insp1', { decision: 'PASS' });
     expect(audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'inspection.decided', actorType: 'USER', actorUserId: QA.userId }),
+      expect.objectContaining({
+        action: 'inspection.decided',
+        actorType: 'USER',
+        actorUserId: QA.userId,
+      }),
       expect.anything(),
     );
   });
@@ -255,7 +293,9 @@ describe('InspectionsService.decide — audit attribution (INS-079)', () => {
   // the literal 'USER' still satisfies every other assertion in this file.
   it('attributes actorType PLATFORM_ADMIN when the actor is acting inside an assumed org', async () => {
     const { service, audit } = makeService({ inspection: decidableInspection });
-    await service.decide('org1', PLATFORM_ADMIN_ACTOR, 'insp1', { decision: 'PASS' });
+    await service.decide('org1', PLATFORM_ADMIN_ACTOR, 'insp1', {
+      decision: 'PASS',
+    });
     expect(audit.append).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'inspection.decided',
@@ -269,17 +309,36 @@ describe('InspectionsService.decide — audit attribution (INS-079)', () => {
 
 // ── create(): snapshot + frozen AQL plan (INS-021 / INS-063) ──
 
-const PO = { id: 'po1', orgId: 'org1', buyerId: 'b1', supplierId: 's1', productId: 'p1' };
+const PO = {
+  id: 'po1',
+  orgId: 'org1',
+  buyerId: 'b1',
+  supplierId: 's1',
+  productId: 'p1',
+};
 const PRESET = {
   id: 'preset1',
   version: 3,
   items: [
-    { position: 1, itemName: 'Front', description: null, referenceImageUrl: 'ref1' },
-    { position: 2, itemName: 'Back', description: null, referenceImageUrl: null },
+    {
+      position: 1,
+      itemName: 'Front',
+      description: null,
+      referenceImageUrl: 'ref1',
+    },
+    {
+      position: 2,
+      itemName: 'Back',
+      description: null,
+      referenceImageUrl: null,
+    },
   ],
   measurementFields: [{ label: 'Length', unit: 'cm' }],
   allowedDefects: [
-    { defectCatalogId: 'd1', defectCatalog: { name: 'Broken stitch', defaultSeverity: 'MAJOR' } },
+    {
+      defectCatalogId: 'd1',
+      defectCatalog: { name: 'Broken stitch', defaultSeverity: 'MAJOR' },
+    },
   ],
 };
 
@@ -297,16 +356,28 @@ function makeCreateService(opts: CreateOpts = {}) {
       findFirst: jest.fn(async () => opts.existingInspection ?? null),
       create: jest.fn(async () => ({ id: 'insp-new', items: [] })),
     },
-    purchaseOrder: { findFirst: jest.fn(async () => (opts.po === undefined ? PO : opts.po)) },
-    loopPreset: { findFirst: jest.fn(async () => (opts.preset === undefined ? PRESET : opts.preset)) },
+    purchaseOrder: {
+      findFirst: jest.fn(async () => (opts.po === undefined ? PO : opts.po)),
+    },
+    loopPreset: {
+      findFirst: jest.fn(async () =>
+        opts.preset === undefined ? PRESET : opts.preset,
+      ),
+    },
     user: {
       findFirst: jest.fn(async () =>
-        opts.inspector === undefined ? { id: 'u-insp', orgId: 'org1' } : opts.inspector,
+        opts.inspector === undefined
+          ? { id: 'u-insp', orgId: 'org1' }
+          : opts.inspector,
       ),
     },
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const service = new InspectionsService(prisma as any, { append: jest.fn() } as any, {} as any);
+
+  const service = new InspectionsService(
+    prisma as any,
+    { append: jest.fn() } as any,
+    {} as any,
+  );
   return { service, prisma };
 }
 
@@ -315,13 +386,13 @@ function makeCreateService(opts: CreateOpts = {}) {
  * parameter tuple, so `mock.calls[0][0]` is a type error under strict TS even
  * though the value is there at runtime — this is the one place we cast.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function firstArg(mock: jest.Mock): any {
   return (mock.mock.calls as unknown as any[][])[0][0];
 }
 
 /** The `data` argument the service handed to prisma.inspection.create. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function createdData(prisma: { inspection: { create: jest.Mock } }): any {
   return firstArg(prisma.inspection.create).data;
 }
@@ -368,7 +439,9 @@ describe('InspectionsService.create — snapshot + computed sampling (INS-021)',
   it('never passes a bare orgId scalar in the nested item create', async () => {
     const { service, prisma } = makeCreateService();
     await service.create('org1', 'u-qa', baseInput);
-    const created = createdData(prisma).items.create as Array<Record<string, unknown>>;
+    const created = createdData(prisma).items.create as Array<
+      Record<string, unknown>
+    >;
     for (const item of created) {
       expect(item).not.toHaveProperty('orgId');
       expect(item.organization).toEqual({ connect: { id: 'org1' } });
@@ -390,39 +463,51 @@ describe('InspectionsService.create — snapshot + computed sampling (INS-021)',
     expect(createdData(a.prisma).status).toBe('DRAFT');
 
     const b = makeCreateService();
-    await b.service.create('org1', 'u-qa', { ...baseInput, assignedInspectorId: 'u-insp' });
+    await b.service.create('org1', 'u-qa', {
+      ...baseInput,
+      assignedInspectorId: 'u-insp',
+    });
     expect(createdData(b.prisma).status).toBe('ASSIGNED');
   });
 
   it('replays a clientRequestId to the original row without creating a second inspection', async () => {
-    const { service, prisma } = makeCreateService({ existingInspection: { id: 'insp-original' } });
-    const out = await service.create('org1', 'u-qa', { ...baseInput, clientRequestId: 'crid-1' });
+    const { service, prisma } = makeCreateService({
+      existingInspection: { id: 'insp-original' },
+    });
+    const out = await service.create('org1', 'u-qa', {
+      ...baseInput,
+      clientRequestId: 'crid-1',
+    });
     expect((out as { id: string }).id).toBe('insp-original');
     expect(prisma.inspection.create).not.toHaveBeenCalled();
   });
 
   it('rejects a create with no poId', async () => {
     const { service, prisma } = makeCreateService();
-    await expect(service.create('org1', 'u-qa', { ...baseInput, poId: '' })).rejects.toThrow(
-      /poId is required/,
-    );
+    await expect(
+      service.create('org1', 'u-qa', { ...baseInput, poId: '' }),
+    ).rejects.toThrow(/poId is required/);
     expect(prisma.inspection.create).not.toHaveBeenCalled();
   });
 
   it('rejects a create with no loopPresetId', async () => {
     const { service, prisma } = makeCreateService();
-    await expect(service.create('org1', 'u-qa', { ...baseInput, loopPresetId: '' })).rejects.toThrow(
-      /loopPresetId is required/,
-    );
+    await expect(
+      service.create('org1', 'u-qa', { ...baseInput, loopPresetId: '' }),
+    ).rejects.toThrow(/loopPresetId is required/);
     expect(prisma.inspection.create).not.toHaveBeenCalled();
   });
 
   it('rejects a PO, preset, inspector or superseded inspection outside the org (tenant isolation)', async () => {
-    await expect(makeCreateService({ po: null }).service.create('org1', 'u-qa', baseInput)).rejects.toThrow(
-      /purchase order not found in organization/,
-    );
     await expect(
-      makeCreateService({ preset: null }).service.create('org1', 'u-qa', baseInput),
+      makeCreateService({ po: null }).service.create('org1', 'u-qa', baseInput),
+    ).rejects.toThrow(/purchase order not found in organization/);
+    await expect(
+      makeCreateService({ preset: null }).service.create(
+        'org1',
+        'u-qa',
+        baseInput,
+      ),
     ).rejects.toThrow(/loop preset not found in organization/);
     await expect(
       makeCreateService({ inspector: null }).service.create('org1', 'u-qa', {
@@ -431,10 +516,14 @@ describe('InspectionsService.create — snapshot + computed sampling (INS-021)',
       }),
     ).rejects.toThrow(/assigned inspector not found in organization/);
     await expect(
-      makeCreateService({ existingInspection: null }).service.create('org1', 'u-qa', {
-        ...baseInput,
-        supersedesInspectionId: 'insp-foreign',
-      }),
+      makeCreateService({ existingInspection: null }).service.create(
+        'org1',
+        'u-qa',
+        {
+          ...baseInput,
+          supersedesInspectionId: 'insp-foreign',
+        },
+      ),
     ).rejects.toThrow(/superseded inspection not found in organization/);
   });
 });
@@ -442,10 +531,17 @@ describe('InspectionsService.create — snapshot + computed sampling (INS-021)',
 describe('InspectionsService.create — per-class AQL configuration (INS-063)', () => {
   it('freezes the caller plan and computes it: major 1.5 at lot 1000 -> ac 3 / re 4', async () => {
     const { service, prisma } = makeCreateService();
-    await service.create('org1', 'u-qa', { ...baseInput, aqlPlan: { major: 1.5 } });
+    await service.create('org1', 'u-qa', {
+      ...baseInput,
+      aqlPlan: { major: 1.5 },
+    });
     const data = createdData(prisma);
     expect(data.aqlPlan).toEqual({ critical: 0, major: 1.5, minor: 4.0 });
-    expect(data.computedSampling.perClass.major).toEqual({ aql: 1.5, ac: 3, re: 4 });
+    expect(data.computedSampling.perClass.major).toEqual({
+      aql: 1.5,
+      ac: 3,
+      re: 4,
+    });
   });
 
   it('an omitted plan still freezes the spec defaults (critical 0 / major 2.5 / minor 4.0)', async () => {
@@ -462,30 +558,43 @@ describe('InspectionsService.create — per-class AQL configuration (INS-063)', 
 
   it('rejects an AQL outside the verified band with a 400 naming the allowed values (not a 500)', async () => {
     const { service, prisma } = makeCreateService();
-    const call = service.create('org1', 'u-qa', { ...baseInput, aqlPlan: { major: 3.0 } });
+    const call = service.create('org1', 'u-qa', {
+      ...baseInput,
+      aqlPlan: { major: 3.0 },
+    });
     await expect(call).rejects.toThrow(BadRequestException);
     await expect(
       service.create('org1', 'u-qa', { ...baseInput, aqlPlan: { major: 3.0 } }),
-    ).rejects.toThrow(/aqlPlan\.major must be one of 0, 1\.0, 1\.5, 2\.5, 4\.0, 6\.5/);
+    ).rejects.toThrow(
+      /aqlPlan\.major must be one of 0, 1\.0, 1\.5, 2\.5, 4\.0, 6\.5/,
+    );
     expect(prisma.inspection.create).not.toHaveBeenCalled();
   });
 
   it('rejects a hole in the grid with a 400: lot 100 (code letter F) has no non-zero column', async () => {
     const { service, prisma } = makeCreateService();
     await expect(
-      service.create('org1', 'u-qa', { ...baseInput, lotSize: 100, aqlPlan: { major: 2.5 } }),
+      service.create('org1', 'u-qa', {
+        ...baseInput,
+        lotSize: 100,
+        aqlPlan: { major: 2.5 },
+      }),
     ).rejects.toThrow(BadRequestException);
     await expect(
-      service.create('org1', 'u-qa', { ...baseInput, lotSize: 100, aqlPlan: { major: 2.5 } }),
+      service.create('org1', 'u-qa', {
+        ...baseInput,
+        lotSize: 100,
+        aqlPlan: { major: 2.5 },
+      }),
     ).rejects.toThrow(/AQL plan not available for code letter F/);
     expect(prisma.inspection.create).not.toHaveBeenCalled();
   });
 
   it('rejects an unusable lot size with a 400 rather than an unhandled engine throw', async () => {
     const { service } = makeCreateService();
-    await expect(service.create('org1', 'u-qa', { ...baseInput, lotSize: 1 })).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(
+      service.create('org1', 'u-qa', { ...baseInput, lotSize: 1 }),
+    ).rejects.toThrow(BadRequestException);
   });
 });
 
@@ -496,12 +605,19 @@ describe('InspectionsService.submit — lifecycle (INS-021)', () => {
 
   it('locks the inspection: SUBMITTED + submittedAt + tamperProof + the re-derived sampling', async () => {
     const { service, tx } = makeService(ready);
-    await service.submit('org1', QA, 'insp1', { deviceId: 'dev-1', gps: { lat: 1, lng: 2 } });
+    await service.submit('org1', QA, 'insp1', {
+      deviceId: 'dev-1',
+      gps: { lat: 1, lng: 2 },
+    });
     const data = firstArg(tx.inspection.update).data;
     expect(data.status).toBe('SUBMITTED');
     expect(data.submittedAt).toBeInstanceOf(Date);
     expect(data.tamperProof).toEqual(
-      expect.objectContaining({ inspectorId: 'u-qa', deviceId: 'dev-1', gps: { lat: 1, lng: 2 } }),
+      expect.objectContaining({
+        inspectorId: 'u-qa',
+        deviceId: 'dev-1',
+        gps: { lat: 1, lng: 2 },
+      }),
     );
     // lot 500 -> code letter H, n 50 (re-derived from the FROZEN plan, not the live defaults).
     expect(data.computedSampling).toEqual(
@@ -514,7 +630,12 @@ describe('InspectionsService.submit — lifecycle (INS-021)', () => {
     await service.submit('org1', QA, 'insp1', {});
     const upsert = firstArg(tx.aqlResult.upsert);
     expect(upsert.create.systemRecommendation).toBe('PASS');
-    expect(upsert.create.perClass.major).toEqual({ found: 0, ac: 3, re: 4, outcome: 'PASS' });
+    expect(upsert.create.perClass.major).toEqual({
+      found: 0,
+      ac: 3,
+      re: 4,
+      outcome: 'PASS',
+    });
   });
 
   it('writes the AQL verdict: majors at the rejection number -> FAIL', async () => {
@@ -535,7 +656,12 @@ describe('InspectionsService.submit — lifecycle (INS-021)', () => {
     });
     await service.submit('org1', QA, 'insp1', {});
     const upsert = firstArg(tx.aqlResult.upsert);
-    expect(upsert.create.perClass.major).toEqual({ found: 3, ac: 2, re: 3, outcome: 'FAIL' });
+    expect(upsert.create.perClass.major).toEqual({
+      found: 3,
+      ac: 2,
+      re: 3,
+      outcome: 'FAIL',
+    });
     expect(upsert.create.systemRecommendation).toBe('FAIL');
   });
 
@@ -544,7 +670,13 @@ describe('InspectionsService.submit — lifecycle (INS-021)', () => {
     async (status) => {
       const { service, prisma } = makeService({
         ...ready,
-        inspection: { id: 'insp1', orgId: 'org1', status, lotSize: 500, aqlPlan: {} },
+        inspection: {
+          id: 'insp1',
+          orgId: 'org1',
+          status,
+          lotSize: 500,
+          aqlPlan: {},
+        },
       });
       await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
         new RegExp(`Cannot submit an inspection in status ${status}`),
@@ -556,9 +688,17 @@ describe('InspectionsService.submit — lifecycle (INS-021)', () => {
   it('refuses to submit without a lot size (no lot size, no sampling plan)', async () => {
     const { service, prisma } = makeService({
       ...ready,
-      inspection: { id: 'insp1', orgId: 'org1', status: 'ASSIGNED', lotSize: null, aqlPlan: {} },
+      inspection: {
+        id: 'insp1',
+        orgId: 'org1',
+        status: 'ASSIGNED',
+        lotSize: null,
+        aqlPlan: {},
+      },
     });
-    await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(/lotSize must be set/);
+    await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
+      /lotSize must be set/,
+    );
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
@@ -585,7 +725,10 @@ describe('InspectionsService.submit — billable linkage (INS-018)', () => {
   });
 
   it('bills a genuine re-inspection chain as RE_INSPECTION', async () => {
-    const { service, tx } = makeService({ ...ready, inspection: supersedingInspection });
+    const { service, tx } = makeService({
+      ...ready,
+      inspection: supersedingInspection,
+    });
     await service.submit('org1', QA, 'insp1', {});
     expect(tx.billableEvent.create).toHaveBeenCalledWith({
       data: { orgId: 'org1', inspectionId: 'insp1', kind: 'RE_INSPECTION' },
@@ -593,7 +736,10 @@ describe('InspectionsService.submit — billable linkage (INS-018)', () => {
   });
 
   it('rejects a RE_INSPECTION event sitting on an inspection that supersedes nothing', async () => {
-    const { service, tx } = makeService({ ...ready, billableEvent: { kind: 'RE_INSPECTION' } });
+    const { service, tx } = makeService({
+      ...ready,
+      billableEvent: { kind: 'RE_INSPECTION' },
+    });
     await expect(service.submit('org1', QA, 'insp1', {})).rejects.toThrow(
       /Billing integrity: existing BillableEvent kind RE_INSPECTION contradicts/,
     );
@@ -612,7 +758,10 @@ describe('InspectionsService.submit — billable linkage (INS-018)', () => {
   });
 
   it('does not double-bill a matching pre-existing event', async () => {
-    const { service, tx } = makeService({ ...ready, billableEvent: { kind: 'INSPECTION' } });
+    const { service, tx } = makeService({
+      ...ready,
+      billableEvent: { kind: 'INSPECTION' },
+    });
     await service.submit('org1', QA, 'insp1', {});
     expect(tx.billableEvent.create).not.toHaveBeenCalled();
   });
@@ -634,32 +783,48 @@ describe('InspectionsService.decide — status transitions (INS-021)', () => {
     ['PASS', 'APPROVED'],
     ['FAIL', 'REJECTED'],
     ['HOLD', 'HOLD'],
-  ] as const)('%s -> %s, recorded on both the inspection and the AQL result', async (decision, status) => {
-    const { service, tx } = makeService({ inspection: decidable('SUBMITTED') });
-    await service.decide('org1', QA, 'insp1', { decision, remarks: 'note' });
-    expect(tx.inspection.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status } }));
-    expect(tx.aqlResult.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          qaDecision: decision,
-          qaRemarks: 'note',
-          decidedByUserId: 'u-qa',
+  ] as const)(
+    '%s -> %s, recorded on both the inspection and the AQL result',
+    async (decision, status) => {
+      const { service, tx } = makeService({
+        inspection: decidable('SUBMITTED'),
+      });
+      await service.decide('org1', QA, 'insp1', { decision, remarks: 'note' });
+      expect(tx.inspection.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status } }),
+      );
+      expect(tx.aqlResult.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            qaDecision: decision,
+            qaRemarks: 'note',
+            decidedByUserId: 'u-qa',
+          }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
-  it.each(['SUBMITTED', 'UNDER_REVIEW', 'HOLD'])('accepts a decision from status %s', async (status) => {
-    const { service, prisma } = makeService({ inspection: decidable(status) });
-    await service.decide('org1', QA, 'insp1', { decision: 'PASS' });
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-  });
+  it.each(['SUBMITTED', 'UNDER_REVIEW', 'HOLD'])(
+    'accepts a decision from status %s',
+    async (status) => {
+      const { service, prisma } = makeService({
+        inspection: decidable(status),
+      });
+      await service.decide('org1', QA, 'insp1', { decision: 'PASS' });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it.each(['DRAFT', 'ASSIGNED', 'IN_PROGRESS', 'APPROVED', 'REJECTED'])(
     'refuses a decision from status %s',
     async (status) => {
-      const { service, prisma } = makeService({ inspection: decidable(status) });
-      await expect(service.decide('org1', QA, 'insp1', { decision: 'PASS' })).rejects.toThrow(
+      const { service, prisma } = makeService({
+        inspection: decidable(status),
+      });
+      await expect(
+        service.decide('org1', QA, 'insp1', { decision: 'PASS' }),
+      ).rejects.toThrow(
         new RegExp(`Cannot decide an inspection in status ${status}`),
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -670,9 +835,9 @@ describe('InspectionsService.decide — status transitions (INS-021)', () => {
     const { service, prisma } = makeService({
       inspection: { ...decidable('SUBMITTED'), aqlResult: null },
     });
-    await expect(service.decide('org1', QA, 'insp1', { decision: 'PASS' })).rejects.toThrow(
-      /no AQL result \(submit first\)/,
-    );
+    await expect(
+      service.decide('org1', QA, 'insp1', { decision: 'PASS' }),
+    ).rejects.toThrow(/no AQL result \(submit first\)/);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -727,7 +892,11 @@ describe('InspectionsService.start — audit attribution (INS-079)', () => {
     const { service, audit } = makeService();
     await service.start('org1', QA, 'insp1');
     expect(audit.append).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'inspection.started', actorType: 'USER', actorUserId: QA.userId }),
+      expect.objectContaining({
+        action: 'inspection.started',
+        actorType: 'USER',
+        actorUserId: QA.userId,
+      }),
       expect.anything(),
     );
   });

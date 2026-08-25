@@ -40,17 +40,27 @@ describe('Auth & RBAC negative matrix (integration)', () => {
     adminToken = await loginAdmin(client);
     orgA = await createOrgWithOwner(client, adminToken, `${tag}-a`);
     orgB = await createOrgWithOwner(client, adminToken, `${tag}-b`);
-    ({ token: inspectorToken } = await inviteAndActivate(client, orgA.ownerToken, {
-      email: `inspector+${tag}@e2e.local`,
-      role: 'INSPECTOR',
-      password: `E2eInspector!${tag}`,
-    }));
+    ({ token: inspectorToken } = await inviteAndActivate(
+      client,
+      orgA.ownerToken,
+      {
+        email: `inspector+${tag}@e2e.local`,
+        role: 'INSPECTOR',
+        password: `E2eInspector!${tag}`,
+      },
+    ));
     buyerAId = expect2xx(
-      await client.post('/buyers', { token: orgA.ownerToken, body: { name: `Buyer A ${tag}` } }),
+      await client.post('/buyers', {
+        token: orgA.ownerToken,
+        body: { name: `Buyer A ${tag}` },
+      }),
       'POST /buyers (org A)',
     ).id;
     buyerBId = expect2xx(
-      await client.post('/buyers', { token: orgB.ownerToken, body: { name: `Buyer B ${tag}` } }),
+      await client.post('/buyers', {
+        token: orgB.ownerToken,
+        body: { name: `Buyer B ${tag}` },
+      }),
       'POST /buyers (org B)',
     ).id;
   });
@@ -72,7 +82,12 @@ describe('Auth & RBAC negative matrix (integration)', () => {
 
     it('rejects a PLATFORM_ADMIN token forged with the removed dev-default secret (INS-036)', async () => {
       const forged = signJwt(
-        { sub: 'attacker', orgId: null, role: 'PLATFORM_ADMIN', type: 'access' },
+        {
+          sub: 'attacker',
+          orgId: null,
+          role: 'PLATFORM_ADMIN',
+          type: 'access',
+        },
         'dev-access-secret',
         3600,
       );
@@ -85,7 +100,12 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       expect(secret).toBeTruthy();
       const past = Math.floor(Date.now() / 1000) - 3600;
       const expired = signJwt(
-        { sub: 'someone', orgId: orgA.orgId, role: 'ORG_OWNER', type: 'access' },
+        {
+          sub: 'someone',
+          orgId: orgA.orgId,
+          role: 'ORG_OWNER',
+          type: 'access',
+        },
         secret,
         60,
         past,
@@ -95,7 +115,9 @@ describe('Auth & RBAC negative matrix (integration)', () => {
     });
 
     it('rejects a refresh token presented as an access token', async () => {
-      const res = await client.get('/auth/me', { token: orgA.ownerRefreshToken });
+      const res = await client.get('/auth/me', {
+        token: orgA.ownerRefreshToken,
+      });
       expect(res.status).toBe(401);
     });
   });
@@ -125,7 +147,9 @@ describe('Auth & RBAC negative matrix (integration)', () => {
     });
 
     it('rejects a garbage refresh token', async () => {
-      const res = await client.post('/auth/refresh', { body: { refreshToken: 'garbage' } });
+      const res = await client.post('/auth/refresh', {
+        body: { refreshToken: 'garbage' },
+      });
       expect(res.status).toBe(401);
     });
 
@@ -158,7 +182,11 @@ describe('Auth & RBAC negative matrix (integration)', () => {
     it('ORG_OWNER cannot create orgs (PLATFORM_ADMIN floor)', async () => {
       const res = await client.post('/admin/orgs', {
         token: orgA.ownerToken,
-        body: { name: 'nope', type: 'INSPECTION_COMPANY', ownerEmail: `x+${tag}@e2e.local` },
+        body: {
+          name: 'nope',
+          type: 'INSPECTION_COMPANY',
+          ownerEmail: `x+${tag}@e2e.local`,
+        },
       });
       expect(res.status).toBe(403);
     });
@@ -169,10 +197,13 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       // capture evidence, and moved the boundary from the role check to a
       // row-level scope. So the route is now REACHABLE for an org role and an
       // unknown id resolves to 404 — never a 403, which would confirm existence.
-      const res = await client.post('/inspections/any-id/populate/photos/presign', {
-        token: orgA.ownerToken,
-        body: { ext: 'jpg' },
-      });
+      const res = await client.post(
+        '/inspections/any-id/populate/photos/presign',
+        {
+          token: orgA.ownerToken,
+          body: { ext: 'jpg' },
+        },
+      );
       expect(res.status).toBe(404);
     });
 
@@ -185,7 +216,9 @@ describe('Auth & RBAC negative matrix (integration)', () => {
 
   describe('cross-org isolation', () => {
     it("owner A cannot read org B's buyer by id", async () => {
-      const res = await client.get(`/buyers/${buyerBId}`, { token: orgA.ownerToken });
+      const res = await client.get(`/buyers/${buyerBId}`, {
+        token: orgA.ownerToken,
+      });
       expect(res.status).toBe(404);
     });
 
@@ -242,7 +275,9 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       expect(hit.some((b) => b.id === buyerAId)).toBe(true);
 
       const miss = expect2xx(
-        await client.get('/buyers?q=zzz-no-such-buyer', { token: orgA.ownerToken }),
+        await client.get('/buyers?q=zzz-no-such-buyer', {
+          token: orgA.ownerToken,
+        }),
         'GET /buyers?q=<miss>',
       ) as any[];
       expect(miss.length).toBe(0);
@@ -258,7 +293,9 @@ describe('Auth & RBAC negative matrix (integration)', () => {
     });
 
     it('a repeated q param does not 500 (review hardening)', async () => {
-      const res = await client.get('/buyers?q=a&q=b', { token: orgA.ownerToken });
+      const res = await client.get('/buyers?q=a&q=b', {
+        token: orgA.ownerToken,
+      });
       expect(res.status).toBe(200);
     });
 
@@ -266,7 +303,10 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       // Two known buyers exist in org A by now (Buyer A + at least one more via
       // other suites is NOT guaranteed here, so create a second one).
       expect2xx(
-        await client.post('/buyers', { token: orgA.ownerToken, body: { name: `Buyer A2 ${tag}` } }),
+        await client.post('/buyers', {
+          token: orgA.ownerToken,
+          body: { name: `Buyer A2 ${tag}` },
+        }),
         'POST /buyers (pagination fixture)',
       );
       const page1 = expect2xx(
@@ -291,7 +331,9 @@ describe('Auth & RBAC negative matrix (integration)', () => {
         }),
         'GET /search (org A)',
       ) as Array<{ type: string; id: string }>;
-      expect(hits.some((h) => h.type === 'buyer' && h.id === buyerAId)).toBe(true);
+      expect(hits.some((h) => h.type === 'buyer' && h.id === buyerAId)).toBe(
+        true,
+      );
 
       const crossHits = expect2xx(
         await client.get(`/search?q=${encodeURIComponent(`Buyer A ${tag}`)}`, {
@@ -374,7 +416,11 @@ describe('Auth & RBAC negative matrix (integration)', () => {
 
       expect2xx(
         await client.post('/invitations/accept', {
-          body: { token: invitation.token, password: `E2eLookup!${tag}`, name: 'Lookup' },
+          body: {
+            token: invitation.token,
+            password: `E2eLookup!${tag}`,
+            name: 'Lookup',
+          },
         }),
         'POST /invitations/accept (lookup fixture)',
       );
@@ -384,7 +430,11 @@ describe('Auth & RBAC negative matrix (integration)', () => {
 
     it('invitation accept is public (bad token is a 4xx, not a 401 guard rejection)', async () => {
       const res = await client.post('/invitations/accept', {
-        body: { token: 'definitely-not-a-token', password: 'Whatever!123', name: 'X' },
+        body: {
+          token: 'definitely-not-a-token',
+          password: 'Whatever!123',
+          name: 'X',
+        },
       });
       expect(res.status).toBeGreaterThanOrEqual(400);
       expect(res.status).toBeLessThan(500);

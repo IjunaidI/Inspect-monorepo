@@ -2,7 +2,11 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { AuthUser } from '../auth/auth-user';
 
-const ACTOR = { userId: 'u1', orgId: 'orgA', role: 'ORG_OWNER' } as unknown as AuthUser;
+const ACTOR = {
+  userId: 'u1',
+  orgId: 'orgA',
+  role: 'ORG_OWNER',
+} as unknown as AuthUser;
 
 /**
  * INS-074: a description must be *clearable* from the console.
@@ -15,16 +19,20 @@ const ACTOR = { userId: 'u1', orgId: 'orgA', role: 'ORG_OWNER' } as unknown as A
  *   text             -> trimmed text, inner line breaks preserved
  */
 function makeService() {
-  const update = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-    id: 'p1',
-    orgId: 'orgA',
-    styleNumber: 'ST-1',
-    ...data,
-  }));
-  const create = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({
-    id: 'p1',
-    ...data,
-  }));
+  const update = jest.fn(
+    async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'p1',
+      orgId: 'orgA',
+      styleNumber: 'ST-1',
+      ...data,
+    }),
+  );
+  const create = jest.fn(
+    async ({ data }: { data: Record<string, unknown> }) => ({
+      id: 'p1',
+      ...data,
+    }),
+  );
   const findFirst = jest.fn(async () => ({
     id: 'p1',
     orgId: 'orgA',
@@ -38,33 +46,45 @@ function makeService() {
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
   const audit = { append: jest.fn(async () => undefined) };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const service = new ProductsService(prisma as any, audit as any);
   return { service, create, update, findFirst, audit };
 }
 
 /** The `data` object handed to prisma.product.update on the last call. */
 function lastUpdateData(update: jest.Mock): Record<string, unknown> {
-  return update.mock.calls[update.mock.calls.length - 1][0].data as Record<string, unknown>;
+  return update.mock.calls[update.mock.calls.length - 1][0].data as Record<
+    string,
+    unknown
+  >;
 }
 
 describe('ProductsService.update description clear-path (INS-074)', () => {
   it('clears the column when the console sends an explicit null', async () => {
     const { service, update } = makeService();
-    await service.update('orgA', ACTOR, 'p1', { styleNumber: 'ST-1', description: null });
+    await service.update('orgA', ACTOR, 'p1', {
+      styleNumber: 'ST-1',
+      description: null,
+    });
     const data = lastUpdateData(update);
     expect(data).toHaveProperty('description', null);
   });
 
   it('treats an emptied textarea ("") as a clear, not as "leave unchanged"', async () => {
     const { service, update } = makeService();
-    await service.update('orgA', ACTOR, 'p1', { styleNumber: 'ST-1', description: '' });
+    await service.update('orgA', ACTOR, 'p1', {
+      styleNumber: 'ST-1',
+      description: '',
+    });
     expect(lastUpdateData(update)).toHaveProperty('description', null);
   });
 
   it('treats a whitespace-only description as a clear', async () => {
     const { service, update } = makeService();
-    await service.update('orgA', ACTOR, 'p1', { styleNumber: 'ST-1', description: '   \n\t  ' });
+    await service.update('orgA', ACTOR, 'p1', {
+      styleNumber: 'ST-1',
+      description: '   \n\t  ',
+    });
     expect(lastUpdateData(update)).toHaveProperty('description', null);
   });
 
@@ -74,7 +94,9 @@ describe('ProductsService.update description clear-path (INS-074)', () => {
     const data = lastUpdateData(update);
     // Absent — NOT `undefined`-valued and NOT null: a styleNumber-only PATCH
     // must not wipe an existing description.
-    expect(Object.prototype.hasOwnProperty.call(data, 'description')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(data, 'description')).toBe(
+      false,
+    );
     expect(data.styleNumber).toBe('ST-2');
   });
 
@@ -99,7 +121,10 @@ describe('ProductsService.update description clear-path (INS-074)', () => {
 describe('ProductsService.create description normalisation (INS-074)', () => {
   it('persists null rather than an empty string when no description is typed', async () => {
     const { service, create } = makeService();
-    await service.create('orgA', ACTOR, { styleNumber: 'ST-9', description: '' });
+    await service.create('orgA', ACTOR, {
+      styleNumber: 'ST-9',
+      description: '',
+    });
     expect(create.mock.calls[0][0].data.description).toBeNull();
   });
 
@@ -111,7 +136,10 @@ describe('ProductsService.create description normalisation (INS-074)', () => {
 
   it('trims the outer whitespace off a supplied description', async () => {
     const { service, create } = makeService();
-    await service.create('orgA', ACTOR, { styleNumber: 'ST-9', description: '  Polo shirt  ' });
+    await service.create('orgA', ACTOR, {
+      styleNumber: 'ST-9',
+      description: '  Polo shirt  ',
+    });
     expect(create.mock.calls[0][0].data.description).toBe('Polo shirt');
   });
 

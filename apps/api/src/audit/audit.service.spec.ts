@@ -6,7 +6,11 @@
  * real `rows` array so sequence/link assertions are made against what the
  * service actually persisted, not against what it was asked to persist.
  */
-import { AuditService, AuditAppendInput, auditSequenceLockKey } from './audit.service';
+import {
+  AuditService,
+  AuditAppendInput,
+  auditSequenceLockKey,
+} from './audit.service';
 import { linkHash, verifyChain } from './audit-chain';
 
 interface StoredRow {
@@ -57,13 +61,23 @@ function makeService(opts: { createFails?: number } = {}) {
   // A transaction client is the root client MINUS $transaction — that absence is
   // exactly what AuditService uses to decide whether it must open its own.
   const tx = { $executeRaw, auditLog: { findFirst, create } };
-  const $transaction = jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx));
+  const $transaction = jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
+    fn(tx),
+  );
   const prisma = { ...tx, $transaction };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const service = new AuditService(prisma as any);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { service, prisma, tx: tx as any, rows, $executeRaw, findFirst, create, $transaction };
+
+  return {
+    service,
+    prisma,
+    tx: tx as any,
+    rows,
+    $executeRaw,
+    findFirst,
+    create,
+    $transaction,
+  };
 }
 
 const BASE: AuditAppendInput = {
@@ -114,9 +128,15 @@ describe('AuditService.append — chain construction', () => {
     await service.append({ ...BASE, orgId: 'org2' }, tx);
     await service.append({ ...BASE, orgId: null }, tx);
 
-    expect(rows.filter((r) => r.orgId === 'org1').map((r) => r.sequence)).toEqual([1, 2]);
-    expect(rows.filter((r) => r.orgId === 'org2').map((r) => r.sequence)).toEqual([1]);
-    expect(rows.filter((r) => r.orgId === null).map((r) => r.sequence)).toEqual([1]);
+    expect(
+      rows.filter((r) => r.orgId === 'org1').map((r) => r.sequence),
+    ).toEqual([1, 2]);
+    expect(
+      rows.filter((r) => r.orgId === 'org2').map((r) => r.sequence),
+    ).toEqual([1]);
+    expect(rows.filter((r) => r.orgId === null).map((r) => r.sequence)).toEqual(
+      [1],
+    );
   });
 });
 
@@ -240,7 +260,9 @@ describe('AuditService.append — sequence serialization (INS-012)', () => {
 
 describe('AuditService.append — duplicate-sequence retry (INS-012 defence in depth)', () => {
   it('retries the whole transaction on P2002 when it owns the transaction', async () => {
-    const { service, create, $transaction, $executeRaw, rows } = makeService({ createFails: 1 });
+    const { service, create, $transaction, $executeRaw, rows } = makeService({
+      createFails: 1,
+    });
     const row = await service.append(BASE);
 
     expect(create).toHaveBeenCalledTimes(2);
@@ -270,7 +292,9 @@ describe('AuditService.append — duplicate-sequence retry (INS-012 defence in d
     // caller-supplied tx is impossible — it must surface and let the caller's
     // business mutation roll back. The advisory lock is what prevents this.
     const { service, tx, create } = makeService({ createFails: 1 });
-    await expect(service.append(BASE, tx)).rejects.toMatchObject({ code: 'P2002' });
+    await expect(service.append(BASE, tx)).rejects.toMatchObject({
+      code: 'P2002',
+    });
     expect(create).toHaveBeenCalledTimes(1);
   });
 });

@@ -40,7 +40,12 @@ import {
 
 interface Summary {
   inspectionsByStatus: Record<string, number>;
-  qaDecisionCounts: { PASS: number; FAIL: number; HOLD: number; PENDING: number };
+  qaDecisionCounts: {
+    PASS: number;
+    FAIL: number;
+    HOLD: number;
+    PENDING: number;
+  };
   quality: {
     decidedInspections: number;
     sampledUnits: number;
@@ -67,7 +72,10 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
   const tag = runTag('kpi');
 
   const summaryFor = async (token: string): Promise<Summary> =>
-    expect2xx(await client.get('/dashboard/summary', { token }), 'GET /dashboard/summary');
+    expect2xx(
+      await client.get('/dashboard/summary', { token }),
+      'GET /dashboard/summary',
+    );
 
   /**
    * Drive one inspection from create to a binding QA decision. Populate is
@@ -93,10 +101,13 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
     expect(inspection.computedSampling.sampleSize).toBe(80);
 
     const presign = expect2xx(
-      await client.post(`/inspections/${inspectionId}/populate/photos/presign`, {
-        token: adminToken,
-        body: { ext: 'jpg' },
-      }),
+      await client.post(
+        `/inspections/${inspectionId}/populate/photos/presign`,
+        {
+          token: adminToken,
+          body: { ext: 'jpg' },
+        },
+      ),
       `presign (${opts.label})`,
     );
     expect2xx(
@@ -104,8 +115,11 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
         token: adminToken,
         body: {
           storageKey: presign.storageKey,
-          contentHash: createHash('sha256').update(`${tag}-${opts.label}`).digest('hex'),
-          inspectionLoopItemId: loopId, cycleIndex: 0,
+          contentHash: createHash('sha256')
+            .update(`${tag}-${opts.label}`)
+            .digest('hex'),
+          inspectionLoopItemId: loopId,
+          cycleIndex: 0,
         },
       }),
       `register photo (${opts.label})`,
@@ -119,7 +133,8 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
             ...(ws.minorDefectId
               ? { defectCatalogId: ws.minorDefectId }
               : { customText: `KPI defect ${i}`, severity: 'MINOR' }),
-            inspectionLoopItemId: loopId, cycleIndex: 0,
+            inspectionLoopItemId: loopId,
+            cycleIndex: 0,
             clientRequestId: `kpi-${tag}-${opts.label}-${i}`,
           },
         }),
@@ -161,7 +176,12 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
     const summary = await summaryFor(orgZ.ownerToken);
 
     expect(summary.inspectionsByStatus).toEqual({});
-    expect(summary.qaDecisionCounts).toEqual({ PASS: 0, FAIL: 0, HOLD: 0, PENDING: 0 });
+    expect(summary.qaDecisionCounts).toEqual({
+      PASS: 0,
+      FAIL: 0,
+      HOLD: 0,
+      PENDING: 0,
+    });
     expect(summary.quality).toEqual({
       decidedInspections: 0,
       sampledUnits: 0,
@@ -178,14 +198,27 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
   }, 120_000);
 
   it('org A: two decided inspections roll up to the hand-computed DPHU 0.63 / passRate 50', async () => {
-    await runInspection(orgA, wsA, { label: 'pass', defects: 1, decision: 'PASS' });
-    await runInspection(orgA, wsA, { label: 'fail', defects: 0, decision: 'FAIL' });
+    await runInspection(orgA, wsA, {
+      label: 'pass',
+      defects: 1,
+      decision: 'PASS',
+    });
+    await runInspection(orgA, wsA, {
+      label: 'fail',
+      defects: 0,
+      decision: 'FAIL',
+    });
 
     const summary = await summaryFor(orgA.ownerToken);
 
     // The breakdown the console renders: PASS -> APPROVED, FAIL -> REJECTED.
     expect(summary.inspectionsByStatus).toEqual({ APPROVED: 1, REJECTED: 1 });
-    expect(summary.qaDecisionCounts).toEqual({ PASS: 1, FAIL: 1, HOLD: 0, PENDING: 0 });
+    expect(summary.qaDecisionCounts).toEqual({
+      PASS: 1,
+      FAIL: 1,
+      HOLD: 0,
+      PENDING: 0,
+    });
 
     expect(summary.quality.decidedInspections).toBe(2);
     expect(summary.quality.sampledUnits).toBe(160); // 80 + 80
@@ -198,11 +231,20 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
 
   it('is tenant-isolated in both directions: org Z sees only its own decided lot', async () => {
     const wsZ = await createWorkspace(client, orgZ.ownerToken, `${tag}-z`);
-    await runInspection(orgZ, wsZ, { label: 'z-fail', defects: 0, decision: 'FAIL' });
+    await runInspection(orgZ, wsZ, {
+      label: 'z-fail',
+      defects: 0,
+      decision: 'FAIL',
+    });
 
     const z = await summaryFor(orgZ.ownerToken);
     expect(z.inspectionsByStatus).toEqual({ REJECTED: 1 });
-    expect(z.qaDecisionCounts).toEqual({ PASS: 0, FAIL: 1, HOLD: 0, PENDING: 0 });
+    expect(z.qaDecisionCounts).toEqual({
+      PASS: 0,
+      FAIL: 1,
+      HOLD: 0,
+      PENDING: 0,
+    });
     expect(z.quality.decidedInspections).toBe(1);
     expect(z.quality.sampledUnits).toBe(80); // NOT 240 — org A's 160 must not leak in
     expect(z.quality.defectsFound).toBe(0);
@@ -213,7 +255,12 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
     // ...and org A is unchanged by org Z's activity.
     const a = await summaryFor(orgA.ownerToken);
     expect(a.inspectionsByStatus).toEqual({ APPROVED: 1, REJECTED: 1 });
-    expect(a.qaDecisionCounts).toEqual({ PASS: 1, FAIL: 1, HOLD: 0, PENDING: 0 });
+    expect(a.qaDecisionCounts).toEqual({
+      PASS: 1,
+      FAIL: 1,
+      HOLD: 0,
+      PENDING: 0,
+    });
     expect(a.quality.sampledUnits).toBe(160);
     expect(a.quality.dphu).toBe(0.63);
     expect(a.quality.passRate).toBe(50);
@@ -225,7 +272,9 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
       role: 'INSPECTOR',
       password: `E2eInspector!${tag}`,
     });
-    const res = await client.get('/dashboard/summary', { token: inspector.token });
+    const res = await client.get('/dashboard/summary', {
+      token: inspector.token,
+    });
     expect(res.status).toBe(403);
   }, 120_000);
 });

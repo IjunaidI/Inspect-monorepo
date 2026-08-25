@@ -37,7 +37,9 @@ export class DefectCatalogService {
       throw new BadRequestException('name is required');
     }
     if (!['CRITICAL', 'MAJOR', 'MINOR'].includes(input.defaultSeverity)) {
-      throw new BadRequestException('defaultSeverity must be CRITICAL, MAJOR or MINOR');
+      throw new BadRequestException(
+        'defaultSeverity must be CRITICAL, MAJOR or MINOR',
+      );
     }
     // INS-006: audit inside the business transaction. A defect's severity feeds
     // the AQL class counts, so who added it and when is forensically relevant.
@@ -59,7 +61,10 @@ export class DefectCatalogService {
           action: 'defectCatalog.created',
           entityType: 'DefectCatalog',
           entityId: defect.id,
-          metadata: { name: defect.name, defaultSeverity: defect.defaultSeverity },
+          metadata: {
+            name: defect.name,
+            defaultSeverity: defect.defaultSeverity,
+          },
         },
         tx,
       );
@@ -73,7 +78,9 @@ export class DefectCatalogService {
       throw new NotFoundException('Defect not found');
     }
     if (row.orgId !== orgId) {
-      throw new ForbiddenException('Cannot modify a global or other-organization defect');
+      throw new ForbiddenException(
+        'Cannot modify a global or other-organization defect',
+      );
     }
     return this.prisma.$transaction(async (tx) => {
       const defect = await tx.defectCatalog.update({

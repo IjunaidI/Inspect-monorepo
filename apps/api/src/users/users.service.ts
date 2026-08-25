@@ -65,7 +65,8 @@ export class UsersService {
   }
 
   async invite(orgId: string, inviter: AuthUser, input: InviteUserInput) {
-    if (!input?.email?.trim()) throw new BadRequestException('email is required');
+    if (!input?.email?.trim())
+      throw new BadRequestException('email is required');
     const email = input.email.trim().toLowerCase();
     const role = input.role ?? 'INSPECTOR';
     if (role === 'PLATFORM_ADMIN') {
@@ -113,25 +114,47 @@ export class UsersService {
    * so this endpoint is not an account-existence oracle.
    */
   async createMember(orgId: string, actor: AuthUser, input: CreateMemberInput) {
-    if (!input?.email?.trim()) throw new BadRequestException('email is required');
+    if (!input?.email?.trim())
+      throw new BadRequestException('email is required');
     if (!input?.password || input.password.length < 8) {
       throw new BadRequestException('password (min 8 characters) is required');
     }
     const email = input.email.trim().toLowerCase();
     const role = input.role ?? 'INSPECTOR';
-    if (role === 'PLATFORM_ADMIN') throw new ForbiddenException('Cannot create a platform admin');
-    if (!hasAtLeast(actor.role, role)) throw new ForbiddenException('Cannot create a role above your own');
-    const existing = await this.prisma.user.findUnique({ where: { email }, select: { orgId: true } });
-    if (existing) throw new ForbiddenException('An account already exists for this email');
+    if (role === 'PLATFORM_ADMIN')
+      throw new ForbiddenException('Cannot create a platform admin');
+    if (!hasAtLeast(actor.role, role))
+      throw new ForbiddenException('Cannot create a role above your own');
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { orgId: true },
+    });
+    if (existing)
+      throw new ForbiddenException('An account already exists for this email');
 
     const passwordHash = await hashPassword(input.password);
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
-        data: { orgId, email, name: input.name?.trim() || email, role, status: 'ACTIVE', passwordHash },
+        data: {
+          orgId,
+          email,
+          name: input.name?.trim() || email,
+          role,
+          status: 'ACTIVE',
+          passwordHash,
+        },
         select: SAFE_SELECT,
       });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'user.member_added', entityType: 'User', entityId: user.id, metadata: { role } },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'user.member_added',
+          entityType: 'User',
+          entityId: user.id,
+          metadata: { role },
+        },
         tx,
       );
       return user;
@@ -143,12 +166,23 @@ export class UsersService {
    * practice via a deactivated-but-token-alive owner (JwtAuthGuard is stateless),
    * so this is not dead defense.
    */
-  private async assertNotLastActiveOwner(orgId: string, targetUserId: string, verb: string): Promise<void> {
+  private async assertNotLastActiveOwner(
+    orgId: string,
+    targetUserId: string,
+    verb: string,
+  ): Promise<void> {
     const otherActiveOwners = await this.prisma.user.count({
-      where: { orgId, role: 'ORG_OWNER', status: 'ACTIVE', id: { not: targetUserId } },
+      where: {
+        orgId,
+        role: 'ORG_OWNER',
+        status: 'ACTIVE',
+        id: { not: targetUserId },
+      },
     });
     if (otherActiveOwners === 0) {
-      throw new BadRequestException(`Cannot ${verb} the organization's only active owner`);
+      throw new BadRequestException(
+        `Cannot ${verb} the organization's only active owner`,
+      );
     }
   }
 
@@ -162,15 +196,33 @@ export class UsersService {
     if (!hasAtLeast(actor.role, role)) {
       throw new ForbiddenException('Cannot assign a role above your own');
     }
-    const user = await this.prisma.user.findFirst({ where: { id: userId, orgId } });
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, orgId },
+    });
     if (!user) throw new NotFoundException('User not found');
-    if (user.role === 'ORG_OWNER' && role !== 'ORG_OWNER' && user.status === 'ACTIVE') {
+    if (
+      user.role === 'ORG_OWNER' &&
+      role !== 'ORG_OWNER' &&
+      user.status === 'ACTIVE'
+    ) {
       await this.assertNotLastActiveOwner(orgId, userId, 'demote');
     }
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({ where: { id: userId }, data: { role }, select: SAFE_SELECT });
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: { role },
+        select: SAFE_SELECT,
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'user.role_changed', entityType: 'User', entityId: userId, metadata: { role } },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'user.role_changed',
+          entityType: 'User',
+          entityId: userId,
+          metadata: { role },
+        },
         tx,
       );
       return updated;
@@ -181,15 +233,28 @@ export class UsersService {
     if (actor.userId === userId) {
       throw new ForbiddenException('You cannot deactivate your own account');
     }
-    const user = await this.prisma.user.findFirst({ where: { id: userId, orgId } });
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, orgId },
+    });
     if (!user) throw new NotFoundException('User not found');
     if (user.role === 'ORG_OWNER' && user.status === 'ACTIVE') {
       await this.assertNotLastActiveOwner(orgId, userId, 'deactivate');
     }
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({ where: { id: userId }, data: { status: 'DEACTIVATED' }, select: SAFE_SELECT });
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: { status: 'DEACTIVATED' },
+        select: SAFE_SELECT,
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'user.deactivated', entityType: 'User', entityId: userId },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'user.deactivated',
+          entityType: 'User',
+          entityId: userId,
+        },
         tx,
       );
       return updated;
@@ -198,16 +263,35 @@ export class UsersService {
 
   /** Deactivation is reversible (INS-058) — INVITED accounts must finish their invite instead. */
   async reactivate(orgId: string, actor: AuthUser, userId: string) {
-    const user = await this.prisma.user.findFirst({ where: { id: userId, orgId } });
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, orgId },
+    });
     if (!user) throw new NotFoundException('User not found');
-    if (user.status === 'ACTIVE') return this.prisma.user.findFirst({ where: { id: userId }, select: SAFE_SELECT });
+    if (user.status === 'ACTIVE')
+      return this.prisma.user.findFirst({
+        where: { id: userId },
+        select: SAFE_SELECT,
+      });
     if (user.status === 'INVITED') {
-      throw new BadRequestException('This account has a pending invitation — it activates by accepting the invite');
+      throw new BadRequestException(
+        'This account has a pending invitation — it activates by accepting the invite',
+      );
     }
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({ where: { id: userId }, data: { status: 'ACTIVE' }, select: SAFE_SELECT });
+      const updated = await tx.user.update({
+        where: { id: userId },
+        data: { status: 'ACTIVE' },
+        select: SAFE_SELECT,
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'user.reactivated', entityType: 'User', entityId: userId },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'user.reactivated',
+          entityType: 'User',
+          entityId: userId,
+        },
         tx,
       );
       return updated;

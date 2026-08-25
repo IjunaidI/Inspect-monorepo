@@ -35,10 +35,15 @@ async function expectRejected(fn: () => Promise<unknown>): Promise<string> {
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
   }
-  throw new Error('expected the database to reject this write, but it succeeded');
+  throw new Error(
+    'expected the database to reject this write, but it succeeded',
+  );
 }
 
-async function constraintExists(prisma: PrismaService, name: string): Promise<boolean> {
+async function constraintExists(
+  prisma: PrismaService,
+  name: string,
+): Promise<boolean> {
   const rows = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
     `SELECT count(*)::int AS n FROM pg_constraint WHERE conname = '${name}'`,
   );
@@ -99,7 +104,9 @@ describe('DB-level invariants (integration)', () => {
 
   it('INS-010: refuses a child row whose orgId disagrees with its parent inspection', async () => {
     if (!(await constraintExists(prisma, 'photos_inspectionId_orgId_fkey'))) {
-      console.warn('SKIP INS-010: composite FK not present (migration not applied)');
+      console.warn(
+        'SKIP INS-010: composite FK not present (migration not applied)',
+      );
       return;
     }
     const inspectionId = await draftInspection();
@@ -114,7 +121,9 @@ describe('DB-level invariants (integration)', () => {
     );
     expect(message).toMatch(/photos_inspectionId_orgId_fkey|foreign key/i);
 
-    const leaked = await prisma.photo.findFirst({ where: { id: `${tag}-crossorg` } });
+    const leaked = await prisma.photo.findFirst({
+      where: { id: `${tag}-crossorg` },
+    });
     expect(leaked).toBeNull();
   });
 
@@ -125,15 +134,21 @@ describe('DB-level invariants (integration)', () => {
       `INSERT INTO "photos" ("id","orgId","inspectionId","inspectionLoopItemId","cycleIndex","storageKey","source","contentHash","createdAt")
        VALUES ('${tag}-aligned', '${orgA.orgId}', '${inspectionId}', '${itemId}', 0, 'k', 'MANUAL_UPLOAD', 'h', now())`,
     );
-    const ok = await prisma.photo.findFirst({ where: { id: `${tag}-aligned` } });
+    const ok = await prisma.photo.findFirst({
+      where: { id: `${tag}-aligned` },
+    });
     expect(ok?.orgId).toBe(orgA.orgId);
   });
 
   // ── INS-015 · DefectInstance = catalog XOR custom ──────────────────────────
 
   it('INS-015: refuses a defect instance with neither catalog id nor custom text', async () => {
-    if (!(await constraintExists(prisma, 'defect_instances_catalog_xor_custom'))) {
-      console.warn('SKIP INS-015: CHECK constraint not present (migration not applied)');
+    if (
+      !(await constraintExists(prisma, 'defect_instances_catalog_xor_custom'))
+    ) {
+      console.warn(
+        'SKIP INS-015: CHECK constraint not present (migration not applied)',
+      );
       return;
     }
     const inspectionId = await draftInspection();
@@ -147,7 +162,10 @@ describe('DB-level invariants (integration)', () => {
   });
 
   it('INS-015: refuses a defect instance with BOTH catalog id and custom text', async () => {
-    if (!(await constraintExists(prisma, 'defect_instances_catalog_xor_custom'))) return;
+    if (
+      !(await constraintExists(prisma, 'defect_instances_catalog_xor_custom'))
+    )
+      return;
     if (!wsA.minorDefectId) {
       console.warn('SKIP INS-015 both-set: no global MINOR defect seeded');
       return;
@@ -166,7 +184,9 @@ describe('DB-level invariants (integration)', () => {
 
   it('INS-011: the database refuses UPDATE and DELETE on audit_logs', async () => {
     if (!(await triggerExists(prisma, 'audit_logs_no_update'))) {
-      console.warn('SKIP INS-011: append-only triggers not present (migration not applied)');
+      console.warn(
+        'SKIP INS-011: append-only triggers not present (migration not applied)',
+      );
       return;
     }
     // Any audited write produces a row; org creation always does.
@@ -184,7 +204,9 @@ describe('DB-level invariants (integration)', () => {
     expect(updateMessage).toMatch(/append-only/i);
 
     const deleteMessage = await expectRejected(() =>
-      prisma.$executeRawUnsafe(`DELETE FROM "audit_logs" WHERE "id" = '${row!.id}'`),
+      prisma.$executeRawUnsafe(
+        `DELETE FROM "audit_logs" WHERE "id" = '${row!.id}'`,
+      ),
     );
     expect(deleteMessage).toMatch(/append-only/i);
 
@@ -194,7 +216,9 @@ describe('DB-level invariants (integration)', () => {
   });
 
   it('INS-011: INSERT into audit_logs still works (append-only, not read-only)', async () => {
-    const before = await prisma.auditLog.count({ where: { orgId: orgA.orgId } });
+    const before = await prisma.auditLog.count({
+      where: { orgId: orgA.orgId },
+    });
     // A normal audited mutation through the API.
     expect2xx(
       await client.post('/buyers', {
@@ -211,23 +235,30 @@ describe('DB-level invariants (integration)', () => {
 
   it('INS-014: pre-submission inspection edits are still allowed', async () => {
     if (!(await triggerExists(prisma, 'inspections_frozen_after_submit'))) {
-      console.warn('SKIP INS-014: immutability triggers not present (migration not applied)');
+      console.warn(
+        'SKIP INS-014: immutability triggers not present (migration not applied)',
+      );
       return;
     }
     const inspectionId = await draftInspection();
     await prisma.$executeRawUnsafe(
       `UPDATE "inspections" SET "lotSize" = 800 WHERE "id" = '${inspectionId}'`,
     );
-    const row = await prisma.inspection.findUnique({ where: { id: inspectionId } });
+    const row = await prisma.inspection.findUnique({
+      where: { id: inspectionId },
+    });
     expect(row?.lotSize).toBe(800);
   });
 
   it('INS-014: a SUBMITTED inspection freezes its evidence but still moves through statuses', async () => {
-    if (!(await triggerExists(prisma, 'inspections_frozen_after_submit'))) return;
+    if (!(await triggerExists(prisma, 'inspections_frozen_after_submit')))
+      return;
     const inspectionId = await draftInspection();
     // Submit through the API so the lifecycle preconditions are real.
     const loops = expect2xx(
-      await client.get(`/inspections/${inspectionId}`, { token: orgA.ownerToken }),
+      await client.get(`/inspections/${inspectionId}`, {
+        token: orgA.ownerToken,
+      }),
       'GET /inspections/:id',
     );
     // INS-081: one photo per loop item completes cycle 0 — the submit gate needs
@@ -239,7 +270,8 @@ describe('DB-level invariants (integration)', () => {
             token: adminToken,
             orgId: orgA.orgId,
             body: {
-              inspectionLoopItemId: loop.id, cycleIndex: 0,
+              inspectionLoopItemId: loop.id,
+              cycleIndex: 0,
               storageKey: `k-${tag}-${loop.id}-${i}`,
               source: 'MANUAL_UPLOAD',
               contentHash: `h-${tag}-${loop.id}-${i}`,
@@ -250,7 +282,10 @@ describe('DB-level invariants (integration)', () => {
       }
     }
     expect2xx(
-      await client.post(`/inspections/${inspectionId}/submit`, { token: orgA.ownerToken, body: {} }),
+      await client.post(`/inspections/${inspectionId}/submit`, {
+        token: orgA.ownerToken,
+        body: {},
+      }),
       'POST /inspections/:id/submit',
     );
 
@@ -266,24 +301,33 @@ describe('DB-level invariants (integration)', () => {
     await prisma.$executeRawUnsafe(
       `UPDATE "inspections" SET "status" = 'UNDER_REVIEW' WHERE "id" = '${inspectionId}'`,
     );
-    const row = await prisma.inspection.findUnique({ where: { id: inspectionId } });
+    const row = await prisma.inspection.findUnique({
+      where: { id: inspectionId },
+    });
     expect(row?.status).toBe('UNDER_REVIEW');
     expect(row?.lotSize).toBe(500);
 
     // And no hard delete.
     const deleteMessage = await expectRejected(() =>
-      prisma.$executeRawUnsafe(`DELETE FROM "inspections" WHERE "id" = '${inspectionId}'`),
+      prisma.$executeRawUnsafe(
+        `DELETE FROM "inspections" WHERE "id" = '${inspectionId}'`,
+      ),
     );
     expect(deleteMessage).toMatch(/hard delete is not permitted/i);
   });
 
   it('INS-014: evidence rows cannot be added or removed once the inspection is submitted', async () => {
     if (!(await triggerExists(prisma, 'photos_frozen_after_submit'))) {
-      console.warn('SKIP INS-014 evidence: trigger not present (migration not applied)');
+      console.warn(
+        'SKIP INS-014 evidence: trigger not present (migration not applied)',
+      );
       return;
     }
     const submitted = await prisma.inspection.findFirst({
-      where: { orgId: orgA.orgId, status: { in: ['SUBMITTED', 'UNDER_REVIEW'] } },
+      where: {
+        orgId: orgA.orgId,
+        status: { in: ['SUBMITTED', 'UNDER_REVIEW'] },
+      },
       orderBy: { createdAt: 'desc' },
     });
     if (!submitted) {
@@ -302,15 +346,21 @@ describe('DB-level invariants (integration)', () => {
   // ── INS-046 · Report.canonicalSnapshot NOT NULL ────────────────────────────
 
   it('INS-046: the database refuses a signed report with a null canonicalSnapshot', async () => {
-    const nullable = await prisma.$queryRawUnsafe<Array<{ is_nullable: string }>>(
+    const nullable = await prisma.$queryRawUnsafe<
+      Array<{ is_nullable: string }>
+    >(
       `SELECT is_nullable FROM information_schema.columns
        WHERE table_name = 'reports' AND column_name = 'canonicalSnapshot'`,
     );
     if (nullable[0]?.is_nullable !== 'NO') {
-      console.warn('SKIP INS-046: column still nullable (migration not applied)');
+      console.warn(
+        'SKIP INS-046: column still nullable (migration not applied)',
+      );
       return;
     }
-    const existing = await prisma.report.findFirst({ where: { orgId: orgA.orgId } });
+    const existing = await prisma.report.findFirst({
+      where: { orgId: orgA.orgId },
+    });
     if (!existing) {
       // Nothing to null out; the schema assertion above is already the guarantee.
       expect(nullable[0].is_nullable).toBe('NO');
@@ -349,7 +399,9 @@ describe('DB-level invariants (integration)', () => {
       `INSERT INTO "billable_events" ("id","orgId","inspectionId","kind","occurredAt")
        VALUES ('${tag}-okbill', '${orgA.orgId}', '${inspectionId}', 'INSPECTION', now())`,
     );
-    const row = await prisma.billableEvent.findFirst({ where: { id: `${tag}-okbill` } });
+    const row = await prisma.billableEvent.findFirst({
+      where: { id: `${tag}-okbill` },
+    });
     expect(row?.kind).toBe('INSPECTION');
   });
 });

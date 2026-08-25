@@ -47,18 +47,30 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
   let buyerIdsB: string[];
   let burst: ApiResult[];
 
-  async function seedBuyers(token: string, tag: string, count: number): Promise<string[]> {
+  async function seedBuyers(
+    token: string,
+    tag: string,
+    count: number,
+  ): Promise<string[]> {
     // POST /buyers does not audit, so seeding in parallel is safe and cheap.
     const created = await Promise.all(
       Array.from({ length: count }, (_, i) =>
-        client.post('/buyers', { token, body: { name: `Audit Race Buyer ${tag}-${i}` } }),
+        client.post('/buyers', {
+          token,
+          body: { name: `Audit Race Buyer ${tag}-${i}` },
+        }),
       ),
     );
-    return created.map((res, i) => expect2xx(res, `POST /buyers #${i} (${tag})`).id as string);
+    return created.map(
+      (res, i) => expect2xx(res, `POST /buyers #${i} (${tag})`).id as string,
+    );
   }
 
   async function chainFor(orgId: string) {
-    return prisma.auditLog.findMany({ where: { orgId }, orderBy: { sequence: 'asc' } });
+    return prisma.auditLog.findMany({
+      where: { orgId },
+      orderBy: { sequence: 'asc' },
+    });
   }
 
   beforeAll(async () => {
@@ -81,10 +93,14 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     const pending: Promise<ApiResult>[] = [];
     for (let i = 0; i < Math.max(SAME_ORG_BURST, OTHER_ORG_BURST); i++) {
       if (i < SAME_ORG_BURST) {
-        pending.push(client.delete(`/buyers/${buyerIdsA[i]}`, { token: orgA.ownerToken }));
+        pending.push(
+          client.delete(`/buyers/${buyerIdsA[i]}`, { token: orgA.ownerToken }),
+        );
       }
       if (i < OTHER_ORG_BURST) {
-        pending.push(client.delete(`/buyers/${buyerIdsB[i]}`, { token: orgB.ownerToken }));
+        pending.push(
+          client.delete(`/buyers/${buyerIdsB[i]}`, { token: orgB.ownerToken }),
+        );
       }
     }
     burst = await Promise.all(pending);
@@ -110,14 +126,19 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     // rolls back the caller's transaction, so the archive silently does not
     // happen. Assert the domain effect landed for all of them.
     return prisma.buyer
-      .findMany({ where: { id: { in: buyerIdsA } }, select: { id: true, archivedAt: true } })
+      .findMany({
+        where: { id: { in: buyerIdsA } },
+        select: { id: true, archivedAt: true },
+      })
       .then((rows) => {
         expect(rows).toHaveLength(SAME_ORG_BURST);
-        expect(rows.filter((r) => r.archivedAt !== null)).toHaveLength(SAME_ORG_BURST);
+        expect(rows.filter((r) => r.archivedAt !== null)).toHaveLength(
+          SAME_ORG_BURST,
+        );
       });
   });
 
-  it("produces a gap-free, duplicate-free 1..M sequence for the contended org", async () => {
+  it('produces a gap-free, duplicate-free 1..M sequence for the contended org', async () => {
     const rows = await chainFor(orgA.orgId);
     // org.created (from createOrgWithOwner) + one row per concurrent archive.
     expect(rows.length).toBeGreaterThanOrEqual(SAME_ORG_BURST + 1);
@@ -133,7 +154,9 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     // Non-vacuity guard for the sequence test above: a chain of length M is
     // trivially 1..M if the appends never happened at all.
     expect(archived).toHaveLength(SAME_ORG_BURST);
-    expect(new Set(archived.map((r) => r.entityId))).toEqual(new Set(buyerIdsA));
+    expect(new Set(archived.map((r) => r.entityId))).toEqual(
+      new Set(buyerIdsA),
+    );
   });
 
   it("leaves the contended org's hash chain verifiable end to end", async () => {
@@ -141,7 +164,9 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     expect(verifyChain(rows)).toBe(true);
     // Non-vacuity: verifyChain must reject a tampered copy of these very rows,
     // otherwise the assertion above proves nothing about this data.
-    const tampered = rows.map((r, i) => (i === rows.length - 1 ? { ...r, prevEntryHash: null } : r));
+    const tampered = rows.map((r, i) =>
+      i === rows.length - 1 ? { ...r, prevEntryHash: null } : r,
+    );
     expect(verifyChain(tampered)).toBe(false);
   });
 
@@ -150,7 +175,9 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     expect(rows.length).toBeGreaterThanOrEqual(OTHER_ORG_BURST + 1);
     expect(rows.map((r) => r.sequence)).toEqual(rows.map((_, i) => i + 1));
     expect(verifyChain(rows)).toBe(true);
-    expect(rows.filter((r) => r.action === 'buyer.archived')).toHaveLength(OTHER_ORG_BURST);
+    expect(rows.filter((r) => r.action === 'buyer.archived')).toHaveLength(
+      OTHER_ORG_BURST,
+    );
     // Per-org counters, not a global one: both orgs must own a sequence 1.
     expect(rows[0].sequence).toBe(1);
     // Tenant isolation: org A's writes must not have leaked into org B's chain.

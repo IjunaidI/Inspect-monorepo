@@ -41,7 +41,10 @@ describe('presignS3PutUrl', () => {
 
   it('changes the signature when the key (object path) changes', () => {
     const a = presignS3PutUrl(base);
-    const b = presignS3PutUrl({ ...base, key: 'orgs/o1/inspections/i1/photos/other.jpg' });
+    const b = presignS3PutUrl({
+      ...base,
+      key: 'orgs/o1/inspections/i1/photos/other.jpg',
+    });
     expect(a).not.toBe(b);
   });
 });
@@ -56,7 +59,9 @@ describe('presignS3Url method generalization (INS-049)', () => {
     const get = presignS3Url({ ...base, method: 'GET' });
     expect(get).not.toBe(put);
     // Same canonical URI/query scaffold — only the signed method differs.
-    expect(get.split('X-Amz-Signature=')[0]).toBe(put.split('X-Amz-Signature=')[0]);
+    expect(get.split('X-Amz-Signature=')[0]).toBe(
+      put.split('X-Amz-Signature=')[0],
+    );
     expect(get).toMatch(/X-Amz-Signature=[0-9a-f]{64}$/);
   });
 

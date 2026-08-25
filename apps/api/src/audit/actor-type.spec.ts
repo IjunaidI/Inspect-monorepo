@@ -3,11 +3,16 @@ import { AuthUser } from '../auth/auth-user';
 
 /** Only the two fields actorTypeFor reads. */
 const actor = (role: string, actingAsOrgId: string | null) =>
-  ({ role, actingAsOrgId } as unknown as Pick<AuthUser, 'actingAsOrgId' | 'role'>);
+  ({ role, actingAsOrgId }) as unknown as Pick<
+    AuthUser,
+    'actingAsOrgId' | 'role'
+  >;
 
 describe('actorTypeFor (INS-079, widened by INS-006)', () => {
   it('reports PLATFORM_ADMIN when acting inside an assumed org', () => {
-    expect(actorTypeFor(actor('PLATFORM_ADMIN', 'org-1'))).toBe('PLATFORM_ADMIN');
+    expect(actorTypeFor(actor('PLATFORM_ADMIN', 'org-1'))).toBe(
+      'PLATFORM_ADMIN',
+    );
   });
 
   /**
@@ -20,9 +25,12 @@ describe('actorTypeFor (INS-079, widened by INS-006)', () => {
     expect(actorTypeFor(actor('PLATFORM_ADMIN', null))).toBe('PLATFORM_ADMIN');
   });
 
-  it.each(['ORG_OWNER', 'QA_MANAGER', 'INSPECTOR'])('reports USER for %s', (role) => {
-    expect(actorTypeFor(actor(role, null))).toBe('USER');
-  });
+  it.each(['ORG_OWNER', 'QA_MANAGER', 'INSPECTOR'])(
+    'reports USER for %s',
+    (role) => {
+      expect(actorTypeFor(actor(role, null))).toBe('USER');
+    },
+  );
 
   /**
    * Defence in depth: JwtAuthGuard ignores X-Org-Id for every non-admin role, so

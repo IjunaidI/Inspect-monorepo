@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import {
   SuppliersService,
   CreateSupplierInput,
@@ -16,7 +25,10 @@ export class SuppliersController {
   constructor(private readonly suppliers: SuppliersService) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query() query: RawListQuery & { includeArchived?: string }) {
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: RawListQuery & { includeArchived?: string },
+  ) {
     return this.suppliers.list(requireOrgId(user), {
       ...parseListQuery(query),
       includeArchived: query.includeArchived === '1',

@@ -57,10 +57,18 @@ describe('cycleState', () => {
   });
 
   it('finishes an earlier partial cycle before starting a new unit', () => {
-    const photos = [shot('a', 0), shot('b', 0), shot('a', 1), shot('b', 1), shot('c', 1)];
+    const photos = [
+      shot('a', 0),
+      shot('b', 0),
+      shot('a', 1),
+      shot('b', 1),
+      shot('c', 1),
+    ];
     const state = cycleState(ITEMS, photos);
     expect(state.completedCycles).toBe(1);
-    expect(state.partialCycles).toEqual([{ cycleIndex: 0, missingItemIds: ['c'] }]);
+    expect(state.partialCycles).toEqual([
+      { cycleIndex: 0, missingItemIds: ['c'] },
+    ]);
     expect(state.nextSlot).toEqual({ cycleIndex: 0, itemId: 'c' });
   });
 

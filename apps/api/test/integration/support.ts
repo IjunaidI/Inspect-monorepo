@@ -121,12 +121,18 @@ export async function createOrgWithOwner(
   );
   const accepted = expect2xx(
     await client.post('/invitations/accept', {
-      body: { token: created.invitation.token, password: ownerPassword, name: `E2E Owner ${tag}` },
+      body: {
+        token: created.invitation.token,
+        password: ownerPassword,
+        name: `E2E Owner ${tag}`,
+      },
     }),
     'POST /invitations/accept',
   );
   const login = expect2xx(
-    await client.post('/auth/login', { body: { email: ownerEmail, password: ownerPassword } }),
+    await client.post('/auth/login', {
+      body: { email: ownerEmail, password: ownerPassword },
+    }),
     'owner POST /auth/login',
   );
   return {
@@ -154,12 +160,18 @@ export async function inviteAndActivate(
   );
   const accepted = expect2xx(
     await client.post('/invitations/accept', {
-      body: { token: invitation.token, password: opts.password, name: opts.name ?? opts.email },
+      body: {
+        token: invitation.token,
+        password: opts.password,
+        name: opts.name ?? opts.email,
+      },
     }),
     'POST /invitations/accept (invitee)',
   );
   const login = expect2xx(
-    await client.post('/auth/login', { body: { email: opts.email, password: opts.password } }),
+    await client.post('/auth/login', {
+      body: { email: opts.email, password: opts.password },
+    }),
     'invitee POST /auth/login',
   );
   return { token: login.accessToken, userId: accepted.id };
@@ -191,15 +203,24 @@ export async function createWorkspace(
   tag: string,
 ): Promise<WorkspaceFixture> {
   const buyer = expect2xx(
-    await client.post('/buyers', { token: ownerToken, body: { name: `E2E Buyer ${tag}` } }),
+    await client.post('/buyers', {
+      token: ownerToken,
+      body: { name: `E2E Buyer ${tag}` },
+    }),
     'POST /buyers',
   );
   const supplier = expect2xx(
-    await client.post('/suppliers', { token: ownerToken, body: { name: `E2E Supplier ${tag}` } }),
+    await client.post('/suppliers', {
+      token: ownerToken,
+      body: { name: `E2E Supplier ${tag}` },
+    }),
     'POST /suppliers',
   );
   const product = expect2xx(
-    await client.post('/products', { token: ownerToken, body: { styleNumber: `STYLE-${tag}` } }),
+    await client.post('/products', {
+      token: ownerToken,
+      body: { styleNumber: `STYLE-${tag}` },
+    }),
     'POST /products',
   );
   const po = expect2xx(
@@ -258,7 +279,10 @@ interface RawSqlClient {
 }
 
 /** True when the named trigger exists (i.e. the INS-014 migration has been applied). */
-export async function triggerExists(prisma: RawSqlClient, name: string): Promise<boolean> {
+export async function triggerExists(
+  prisma: RawSqlClient,
+  name: string,
+): Promise<boolean> {
   const rows = await prisma.$queryRawUnsafe<Array<{ n: number }>>(
     `SELECT count(*)::int AS n FROM pg_trigger WHERE NOT tgisinternal AND tgname = '${name}'`,
   );

@@ -80,17 +80,18 @@ export class ReportsService {
   private signingPrivateKey(): string {
     const pem = this.config.get<string>('REPORT_SIGNING_PRIVATE_KEY_PEM');
     if (!pem) {
-      throw new BadRequestException('REPORT_SIGNING_PRIVATE_KEY_PEM is not configured');
+      throw new BadRequestException(
+        'REPORT_SIGNING_PRIVATE_KEY_PEM is not configured',
+      );
     }
     return pem;
   }
 
   /** Public verification page for a report (spec §9) — printed in the PDF footer. */
   private verificationUrl(verificationToken: string): string {
-    const base = (this.config.get<string>('WEB_BASE_URL') || DEFAULT_WEB_BASE_URL).replace(
-      /\/+$/,
-      '',
-    );
+    const base = (
+      this.config.get<string>('WEB_BASE_URL') || DEFAULT_WEB_BASE_URL
+    ).replace(/\/+$/, '');
     return `${base}/r/${verificationToken}`;
   }
 
@@ -116,19 +117,29 @@ export class ReportsService {
     if (!inspection) throw new NotFoundException('Inspection not found');
     // Immutable + idempotent. The signed record never changes; the PDF rendition
     // is backfilled here when a previous generate() ran with storage down.
-    if (inspection.report) return this.ensurePdf(orgId, actor, inspection.report);
+    if (inspection.report)
+      return this.ensurePdf(orgId, actor, inspection.report);
     if (inspection.status !== 'APPROVED') {
-      throw new BadRequestException('Only an APPROVED inspection can be reported');
+      throw new BadRequestException(
+        'Only an APPROVED inspection can be reported',
+      );
     }
 
     // INS-081: deterministic evidence ordering — by unit, then by the item's
     // position within the loop. The signature covers this exact sequence, so the
     // sort happens here in JS rather than depending on relation-ordering support.
     const orderedPhotos = inspection.items
-      .flatMap((item) => item.photos.map((p) => ({ ...p, itemPosition: item.position })))
-      .sort((a, b) => a.cycleIndex - b.cycleIndex || a.itemPosition - b.itemPosition);
+      .flatMap((item) =>
+        item.photos.map((p) => ({ ...p, itemPosition: item.position })),
+      )
+      .sort(
+        (a, b) =>
+          a.cycleIndex - b.cycleIndex || a.itemPosition - b.itemPosition,
+      );
     const orderedPhotoHashes = orderedPhotos.map((p) => p.contentHash);
-    const itemPositionById = new Map(inspection.items.map((i) => [i.id, i.position]));
+    const itemPositionById = new Map(
+      inspection.items.map((i) => [i.id, i.position]),
+    );
     const state = cycleState(
       inspection.items.map((i) => ({ id: i.id, position: i.position })),
       orderedPhotos.map((p) => ({
@@ -137,7 +148,8 @@ export class ReportsService {
       })),
     );
     const sampleSize =
-      (inspection.computedSampling as { sampleSize?: number } | null)?.sampleSize ?? null;
+      (inspection.computedSampling as { sampleSize?: number } | null)
+        ?.sampleSize ?? null;
     // Everything a buyer can see on the report MUST be inside the signed envelope
     // (security review): the defect list + its photo evidence, the quantity/carton
     // verification, workmanship/packaging notes, supplier/product identity, and the
@@ -148,7 +160,10 @@ export class ReportsService {
       inspectionType: inspection.inspectionType,
       poNumber: inspection.purchaseOrder?.poNumber ?? null,
       buyer: { id: inspection.buyerId, name: inspection.buyer?.name ?? null },
-      supplier: { id: inspection.supplierId, name: inspection.supplier?.name ?? null },
+      supplier: {
+        id: inspection.supplierId,
+        name: inspection.supplier?.name ?? null,
+      },
       product: {
         id: inspection.productId,
         styleNumber: inspection.product?.styleNumber ?? null,
@@ -230,7 +245,8 @@ export class ReportsService {
             inspectionId: inspection.id,
             orgId,
             buyerId: inspection.buyerId,
-            brandingSnapshot: brandingSnapshot as unknown as Prisma.InputJsonValue,
+            brandingSnapshot:
+              brandingSnapshot as unknown as Prisma.InputJsonValue,
             canonicalSnapshot: canonical as unknown as Prisma.InputJsonValue,
             contentHash: hash,
             signature,
@@ -262,7 +278,10 @@ export class ReportsService {
       // Concurrency-safe idempotency (security review): if a racing generate()
       // won the Report.inspectionId @unique, return the existing report instead
       // of surfacing an opaque 500.
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
         const existing = await this.prisma.report.findFirst({
           where: { inspectionId, orgId },
         });
@@ -389,7 +408,9 @@ export class ReportsService {
       where: { id: reportId, orgId },
       include: {
         buyer: { select: { id: true, name: true } },
-        inspection: { select: { purchaseOrder: { select: { poNumber: true } } } },
+        inspection: {
+          select: { purchaseOrder: { select: { poNumber: true } } },
+        },
       },
     });
     if (!report) throw new NotFoundException('Report not found');
@@ -523,8 +544,21 @@ export class ReportsService {
         ...(opts.q
           ? {
               OR: [
-                { buyer: { name: { contains: opts.q, mode: 'insensitive' as const } } },
-                { inspection: { purchaseOrder: { poNumber: { contains: opts.q, mode: 'insensitive' as const } } } },
+                {
+                  buyer: {
+                    name: { contains: opts.q, mode: 'insensitive' as const },
+                  },
+                },
+                {
+                  inspection: {
+                    purchaseOrder: {
+                      poNumber: {
+                        contains: opts.q,
+                        mode: 'insensitive' as const,
+                      },
+                    },
+                  },
+                },
               ],
             }
           : {}),
@@ -581,10 +615,19 @@ export class ReportsService {
       .export({ type: 'spki', format: 'pem' })
       .toString();
 
-    const snapshot = report.canonicalSnapshot as { photoHashes?: string[] } | null;
-    const recomputed = contentHash(report.canonicalSnapshot, snapshot?.photoHashes ?? []);
+    const snapshot = report.canonicalSnapshot as {
+      photoHashes?: string[];
+    } | null;
+    const recomputed = contentHash(
+      report.canonicalSnapshot,
+      snapshot?.photoHashes ?? [],
+    );
     const hashMatches = recomputed === report.contentHash;
-    const signatureValid = verify(report.contentHash, report.signature, publicPem);
+    const signatureValid = verify(
+      report.contentHash,
+      report.signature,
+      publicPem,
+    );
 
     return {
       valid: hashMatches && signatureValid,

@@ -32,14 +32,18 @@ function tokenFor(role: Role, orgId: string | null): string {
 
 /** Express lowercases incoming header names, so the double must too. */
 function headers(role: Role, orgId: string | null, assumed?: string) {
-  const h: Record<string, string> = { authorization: `Bearer ${tokenFor(role, orgId)}` };
+  const h: Record<string, string> = {
+    authorization: `Bearer ${tokenFor(role, orgId)}`,
+  };
   if (assumed !== undefined) h['x-org-id'] = assumed;
   return h;
 }
 
 describe('JwtAuthGuard — assumed org resolution (INS-079)', () => {
   it('honors X-Org-Id for a verified PLATFORM_ADMIN', () => {
-    const { ctx, req } = contextFor(headers('PLATFORM_ADMIN', null, 'org-target'));
+    const { ctx, req } = contextFor(
+      headers('PLATFORM_ADMIN', null, 'org-target'),
+    );
     expect(guard().canActivate(ctx)).toBe(true);
     expect(req.user).toEqual({
       userId: 'user-1',
@@ -51,9 +55,11 @@ describe('JwtAuthGuard — assumed org resolution (INS-079)', () => {
 
   // The tenant boundary: a non-admin must be completely unaffected by the header.
   it.each(['ORG_OWNER', 'QA_MANAGER', 'INSPECTOR'] as Role[])(
-    'ignores X-Org-Id for %s — orgId stays the token\'s own',
+    "ignores X-Org-Id for %s — orgId stays the token's own",
     (role) => {
-      const { ctx, req } = contextFor(headers(role, 'org-own', 'org-someone-else'));
+      const { ctx, req } = contextFor(
+        headers(role, 'org-own', 'org-someone-else'),
+      );
       expect(guard().canActivate(ctx)).toBe(true);
       expect(req.user.orgId).toBe('org-own');
       expect(req.user.actingAsOrgId).toBeNull();
@@ -72,15 +78,20 @@ describe('JwtAuthGuard — assumed org resolution (INS-079)', () => {
     expect(req.user.actingAsOrgId).toBeNull();
   });
 
-  it.each(['', '   '])('treats a blank header (%p) as no assumption', (blank) => {
-    const { ctx, req } = contextFor(headers('PLATFORM_ADMIN', null, blank));
-    expect(guard().canActivate(ctx)).toBe(true);
-    expect(req.user.orgId).toBeNull();
-    expect(req.user.actingAsOrgId).toBeNull();
-  });
+  it.each(['', '   '])(
+    'treats a blank header (%p) as no assumption',
+    (blank) => {
+      const { ctx, req } = contextFor(headers('PLATFORM_ADMIN', null, blank));
+      expect(guard().canActivate(ctx)).toBe(true);
+      expect(req.user.orgId).toBeNull();
+      expect(req.user.actingAsOrgId).toBeNull();
+    },
+  );
 
   it('trims surrounding whitespace on an assumed org id', () => {
-    const { ctx, req } = contextFor(headers('PLATFORM_ADMIN', null, '  org-target  '));
+    const { ctx, req } = contextFor(
+      headers('PLATFORM_ADMIN', null, '  org-target  '),
+    );
     expect(guard().canActivate(ctx)).toBe(true);
     expect(req.user.orgId).toBe('org-target');
   });
@@ -99,7 +110,10 @@ describe('JwtAuthGuard — assumed org resolution (INS-079)', () => {
       'wrong-secret',
       900,
     );
-    const { ctx } = contextFor({ authorization: `Bearer ${forged}`, 'x-org-id': 'org-target' });
+    const { ctx } = contextFor({
+      authorization: `Bearer ${forged}`,
+      'x-org-id': 'org-target',
+    });
     expect(() => guard().canActivate(ctx)).toThrow('Invalid or expired token');
   });
 });

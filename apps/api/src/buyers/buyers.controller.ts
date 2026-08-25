@@ -1,6 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { BuyersService, CreateBuyerInput, UpdateBuyerInput } from './buyers.service';
+import {
+  BuyersService,
+  CreateBuyerInput,
+  UpdateBuyerInput,
+} from './buyers.service';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthUser } from '../auth/auth-user';
@@ -26,7 +39,10 @@ export class BuyersController {
   ) {}
 
   @Get()
-  async list(@CurrentUser() user: AuthUser, @Query() query: RawListQuery & { includeArchived?: string }) {
+  async list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: RawListQuery & { includeArchived?: string },
+  ) {
     const orgId = requireOrgId(user);
     const rows = await this.buyers.list(orgId, {
       ...parseListQuery(query),
@@ -46,7 +62,11 @@ export class BuyersController {
     const raw = body?.ext ?? '';
     const ext = /^[a-z0-9]{1,5}$/i.test(raw) ? raw.toLowerCase() : 'png';
     const key = `${buyerLogoPrefix(orgId)}${randomUUID()}.${ext}`;
-    return { storageKey: key, uploadUrl: this.storage.presignUpload(key), method: 'PUT' as const };
+    return {
+      storageKey: key,
+      uploadUrl: this.storage.presignUpload(key),
+      method: 'PUT' as const,
+    };
   }
 
   @Get(':id')

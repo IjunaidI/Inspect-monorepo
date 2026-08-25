@@ -5,7 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { canonicalize } from '../tamper-proof/canonicalize';
 import { linkHash } from './audit-chain';
 
-export type AuditActorType = 'USER' | 'PLATFORM_ADMIN' | 'BUYER_GUEST' | 'SYSTEM';
+export type AuditActorType =
+  | 'USER'
+  | 'PLATFORM_ADMIN'
+  | 'BUYER_GUEST'
+  | 'SYSTEM';
 
 export interface AuditAppendInput {
   orgId: string | null;
@@ -61,7 +65,9 @@ function isDuplicateSequence(err: unknown): boolean {
  * client, we are NOT inside a transaction yet".
  */
 type MaybeRootClient = Prisma.TransactionClient & {
-  $transaction?: <R>(fn: (tx: Prisma.TransactionClient) => Promise<R>) => Promise<R>;
+  $transaction?: <R>(
+    fn: (tx: Prisma.TransactionClient) => Promise<R>,
+  ) => Promise<R>;
 };
 
 /**

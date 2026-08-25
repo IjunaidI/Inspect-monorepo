@@ -136,8 +136,11 @@ jobs:
       - name: Build (API)
         run: pnpm --filter @inspect/api build
 
-      # Enable after local verification:
-      # - name: Lint
-      #   run: pnpm lint
-      # - name: Build (web)
-      #   run: pnpm --filter @inspect/web build
+      # INS-048: lint is now a real gate. Both apps moved to ESLint 9 flat
+      # configs (the API's .eslintrc.js and the web's `next lint` were both dead
+      # ends), so `pnpm lint` runs clean and a regression fails the build.
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build (web)
+        run: pnpm --filter @inspect/web build

@@ -9,8 +9,14 @@ import { ConfigService } from '@nestjs/config';
  */
 export function requireSecret(config: ConfigService, key: string): string {
   const value = config.get<string>(key);
-  if (!value || value.trim() === '' || value.trim().toUpperCase() === 'CHANGE_ME') {
-    throw new Error(`${key} is required (set a strong secret; refusing a default/placeholder)`);
+  if (
+    !value ||
+    value.trim() === '' ||
+    value.trim().toUpperCase() === 'CHANGE_ME'
+  ) {
+    throw new Error(
+      `${key} is required (set a strong secret; refusing a default/placeholder)`,
+    );
   }
   return value;
 }

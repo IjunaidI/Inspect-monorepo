@@ -37,11 +37,17 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     buyerAName = `Assume Buyer ${runTag('a')}`;
     buyerBName = `Assume Buyer ${runTag('b')}`;
     expect2xx(
-      await client.post('/buyers', { token: orgA.ownerToken, body: { name: buyerAName } }),
+      await client.post('/buyers', {
+        token: orgA.ownerToken,
+        body: { name: buyerAName },
+      }),
       'POST /buyers (org A)',
     );
     expect2xx(
-      await client.post('/buyers', { token: orgB.ownerToken, body: { name: buyerBName } }),
+      await client.post('/buyers', {
+        token: orgB.ownerToken,
+        body: { name: buyerBName },
+      }),
       'POST /buyers (org B)',
     );
   }, 120_000);
@@ -74,8 +80,13 @@ describe('Platform-Admin org assumption (INS-079)', () => {
 
   // The tenant boundary: the header must do nothing at all for a non-admin.
   it('ignores X-Org-Id from an ORG_OWNER — no leak, no error', async () => {
-    const res = await client.get('/buyers', { token: orgB.ownerToken, orgId: orgA.orgId });
-    const rows = expect2xx(res, 'GET /buyers (owner B spoofing org A)') as { name: string }[];
+    const res = await client.get('/buyers', {
+      token: orgB.ownerToken,
+      orgId: orgA.orgId,
+    });
+    const rows = expect2xx(res, 'GET /buyers (owner B spoofing org A)') as {
+      name: string;
+    }[];
     expect(rows.some((x) => x.name === buyerAName)).toBe(false);
     // Positive control: a 200 with an empty/irrelevant list would satisfy the
     // assertion above vacuously. Proving the response is genuinely owner B's
@@ -95,11 +106,17 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     // Archive is DELETE /buyers/:id (BuyersController), not a dedicated
     // /:id/archive route.
     expect2xx(
-      await client.delete(`/buyers/${created.id}`, { token: adminToken, orgId: orgA.orgId }),
+      await client.delete(`/buyers/${created.id}`, {
+        token: adminToken,
+        orgId: orgA.orgId,
+      }),
       'DELETE /buyers/:id (assuming org A)',
     );
 
-    const me = expect2xx(await client.get('/auth/me', { token: adminToken }), 'GET /auth/me');
+    const me = expect2xx(
+      await client.get('/auth/me', { token: adminToken }),
+      'GET /auth/me',
+    );
 
     // There is no audit read endpoint (verified: no @Controller('audit') exists),
     // so assert against the row directly. This is the whole point of the task —
@@ -107,7 +124,11 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     const prisma = new PrismaClient();
     try {
       const row = await prisma.auditLog.findFirst({
-        where: { orgId: orgA.orgId, action: 'buyer.archived', entityId: created.id },
+        where: {
+          orgId: orgA.orgId,
+          action: 'buyer.archived',
+          entityId: created.id,
+        },
       });
       expect(row).toBeTruthy();
       expect(row!.actorType).toBe('PLATFORM_ADMIN');
@@ -132,7 +153,12 @@ describe('Platform-Admin org assumption (INS-079)', () => {
       // Keyed to the write actually under test (org A's beforeAll fixture
       // also logs a PLATFORM_ADMIN 'org.created' row, so a bare actorType
       // check would pass even if attribution on THIS write regressed).
-      expect(rows.some((r) => r.action === 'buyer.archived' && r.actorType === 'PLATFORM_ADMIN')).toBe(true);
+      expect(
+        rows.some(
+          (r) =>
+            r.action === 'buyer.archived' && r.actorType === 'PLATFORM_ADMIN',
+        ),
+      ).toBe(true);
     } finally {
       await prisma.$disconnect();
     }
@@ -155,7 +181,11 @@ describe('Platform-Admin org assumption (INS-079)', () => {
   it('403s an ORG_OWNER on POST /admin/orgs', async () => {
     const res = await client.post('/admin/orgs', {
       token: orgA.ownerToken,
-      body: { name: 'Should Not Exist', type: 'INSPECTION_COMPANY', ownerEmail: `no+${runTag('n')}@e2e.local` },
+      body: {
+        name: 'Should Not Exist',
+        type: 'INSPECTION_COMPANY',
+        ownerEmail: `no+${runTag('n')}@e2e.local`,
+      },
     });
     expect(res.status).toBe(403);
   });
@@ -195,20 +225,27 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     // populate.service.ts's loadForPopulate: it looks the inspection up by id
     // only, matching the write routes' established cross-tenant contract).
     const presign = expect2xx(
-      await client.post(`/inspections/${inspectionId}/populate/photos/presign`, {
-        token: adminToken,
-        body: { ext: 'jpg' },
-      }),
+      await client.post(
+        `/inspections/${inspectionId}/populate/photos/presign`,
+        {
+          token: adminToken,
+          body: { ext: 'jpg' },
+        },
+      ),
       'populate presign',
     );
-    const contentHash = createHash('sha256').update(`e2e-photo-${tag}`).digest('hex');
-    const photo = expect2xx(
+    const contentHash = createHash('sha256')
+      .update(`e2e-photo-${tag}`)
+      .digest('hex');
+    // The binding is unused — expect2xx is what asserts the 2xx here.
+    expect2xx(
       await client.post(`/inspections/${inspectionId}/populate/photos`, {
         token: adminToken,
         body: {
           storageKey: presign.storageKey,
           contentHash,
-          inspectionLoopItemId: loopId, cycleIndex: 0,
+          inspectionLoopItemId: loopId,
+          cycleIndex: 0,
           clientRequestId: `photo-${tag}`,
         },
       }),
@@ -247,12 +284,19 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     );
     expect(report.id).toBeTruthy();
 
-    const me = expect2xx(await client.get('/auth/me', { token: adminToken }), 'GET /auth/me');
+    const me = expect2xx(
+      await client.get('/auth/me', { token: adminToken }),
+      'GET /auth/me',
+    );
 
     const prisma = new PrismaClient();
     try {
       const row = await prisma.auditLog.findFirst({
-        where: { orgId: orgA.orgId, action: 'report.generated', entityId: report.id },
+        where: {
+          orgId: orgA.orgId,
+          action: 'report.generated',
+          entityId: report.id,
+        },
       });
       expect(row).toBeTruthy();
       expect(row!.actorType).toBe('PLATFORM_ADMIN');

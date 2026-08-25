@@ -18,7 +18,9 @@ function makeMail() {
   // `.mock.calls[0][0]` below indexes an `any[]` tuple rather than `[]`.
   const sendMail: jest.Mock = jest.fn(async () => ({ messageId: 'mid-1' }));
   const config = new ConfigService({ WEB_BASE_URL: 'https://console.example' });
-  const service = new MailService(config, { sendMail } as unknown as Transporter);
+  const service = new MailService(config, {
+    sendMail,
+  } as unknown as Transporter);
   return { service, sendMail };
 }
 
@@ -35,10 +37,16 @@ describe('MailService report delivery (INS-020)', () => {
     });
 
     expect(res).toEqual({ sent: true, messageId: 'mid-1' });
-    const msg = sendMail.mock.calls[0][0] as { to: string; subject: string; text: string };
+    const msg = sendMail.mock.calls[0][0] as {
+      to: string;
+      subject: string;
+      text: string;
+    };
     expect(msg.to).toBe('buyer.qa@northwind.example');
     expect(msg.subject).toContain('PO-77');
-    expect(msg.text).toContain('https://console.example/portal?token=magic%20token%2F1');
+    expect(msg.text).toContain(
+      'https://console.example/portal?token=magic%20token%2F1',
+    );
     expect(msg.text).toContain('https://console.example/r/verify-9');
     expect(msg.text).toContain('Northwind Apparel');
   });
@@ -74,7 +82,11 @@ describe('MailService report delivery (INS-020)', () => {
     const { service, sendMail } = makeMail();
     sendMail.mockRejectedValueOnce(new Error('SMTP connection refused'));
     await expect(
-      service.sendReportDelivered({ to: 'guest@buyer.com', token: 'tok', reportId: 'rep-1' }),
+      service.sendReportDelivered({
+        to: 'guest@buyer.com',
+        token: 'tok',
+        reportId: 'rep-1',
+      }),
     ).resolves.toEqual({ sent: false });
   });
 });

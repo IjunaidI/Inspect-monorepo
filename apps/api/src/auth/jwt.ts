@@ -28,9 +28,15 @@ export function signJwt(
   now: number = nowSeconds(),
 ): string {
   const header = { alg: 'HS256', typ: 'JWT' };
-  const body: JwtPayload = { ...payload, iat: now, exp: now + expiresInSeconds };
+  const body: JwtPayload = {
+    ...payload,
+    iat: now,
+    exp: now + expiresInSeconds,
+  };
   const signingInput = `${encodeSegment(header)}.${encodeSegment(body)}`;
-  const signature = createHmac('sha256', secret).update(signingInput).digest('base64url');
+  const signature = createHmac('sha256', secret)
+    .update(signingInput)
+    .digest('base64url');
   return `${signingInput}.${signature}`;
 }
 

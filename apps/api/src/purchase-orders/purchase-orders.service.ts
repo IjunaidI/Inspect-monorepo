@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
@@ -42,14 +46,25 @@ export class PurchaseOrdersService {
     return po;
   }
 
-  async create(orgId: string, actor: AuthUser, input: CreatePurchaseOrderInput) {
+  async create(
+    orgId: string,
+    actor: AuthUser,
+    input: CreatePurchaseOrderInput,
+  ) {
     if (!input?.poNumber?.trim()) {
       throw new BadRequestException('poNumber is required');
     }
     if (!input.buyerId || !input.supplierId || !input.productId) {
-      throw new BadRequestException('buyerId, supplierId and productId are required');
+      throw new BadRequestException(
+        'buyerId, supplierId and productId are required',
+      );
     }
-    await this.assertBelongsToOrg(orgId, input.buyerId, input.supplierId, input.productId);
+    await this.assertBelongsToOrg(
+      orgId,
+      input.buyerId,
+      input.supplierId,
+      input.productId,
+    );
     // INS-006: audit inside the business transaction.
     return this.prisma.$transaction(async (tx) => {
       const po = await tx.purchaseOrder.create({
@@ -84,12 +99,20 @@ export class PurchaseOrdersService {
     });
   }
 
-  async update(orgId: string, actor: AuthUser, id: string, input: UpdatePurchaseOrderInput) {
+  async update(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    input: UpdatePurchaseOrderInput,
+  ) {
     await this.get(orgId, id);
     return this.prisma.$transaction(async (tx) => {
       const po = await tx.purchaseOrder.update({
         where: { id },
-        data: { poNumber: input.poNumber?.trim(), totalQuantity: input.totalQuantity },
+        data: {
+          poNumber: input.poNumber?.trim(),
+          totalQuantity: input.totalQuantity,
+        },
       });
       await this.audit.append(
         {
@@ -143,12 +166,24 @@ export class PurchaseOrdersService {
     productId: string,
   ): Promise<void> {
     const [buyer, supplier, product] = await Promise.all([
-      this.prisma.buyer.findFirst({ where: { id: buyerId, orgId }, select: { id: true } }),
-      this.prisma.supplier.findFirst({ where: { id: supplierId, orgId }, select: { id: true } }),
-      this.prisma.product.findFirst({ where: { id: productId, orgId }, select: { id: true } }),
+      this.prisma.buyer.findFirst({
+        where: { id: buyerId, orgId },
+        select: { id: true },
+      }),
+      this.prisma.supplier.findFirst({
+        where: { id: supplierId, orgId },
+        select: { id: true },
+      }),
+      this.prisma.product.findFirst({
+        where: { id: productId, orgId },
+        select: { id: true },
+      }),
     ]);
-    if (!buyer) throw new BadRequestException('buyer not found in organization');
-    if (!supplier) throw new BadRequestException('supplier not found in organization');
-    if (!product) throw new BadRequestException('product not found in organization');
+    if (!buyer)
+      throw new BadRequestException('buyer not found in organization');
+    if (!supplier)
+      throw new BadRequestException('supplier not found in organization');
+    if (!product)
+      throw new BadRequestException('product not found in organization');
   }
 }

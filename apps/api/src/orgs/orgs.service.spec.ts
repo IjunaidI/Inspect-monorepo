@@ -32,12 +32,12 @@ function makeService(
     organization: {
       findFirst: jest.fn(async () => existingOrg),
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<any>) => fn(tx)),
   };
   const audit = { append: jest.fn(async () => ({})) };
   const mail = { sendUserInvitation: jest.fn(async () => mailResult) };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const service = new OrgsService(prisma as any, audit as any, mail as any);
   return { service, tx, audit, mail, prisma };
 }
@@ -90,16 +90,25 @@ describe('OrgsService.create', () => {
     const { service, tx, mail } = makeService();
 
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      service.create('admin-1', { name: '', type: 'MANUFACTURER', ownerEmail: 'x@y.com' } as any),
+      service.create('admin-1', {
+        name: '',
+        type: 'MANUFACTURER',
+        ownerEmail: 'x@y.com',
+      } as any),
     ).rejects.toThrow('name is required');
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      service.create('admin-1', { name: 'A', type: 'NOPE', ownerEmail: 'x@y.com' } as any),
+      service.create('admin-1', {
+        name: 'A',
+        type: 'NOPE',
+        ownerEmail: 'x@y.com',
+      } as any),
     ).rejects.toThrow('type must be');
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      service.create('admin-1', { name: 'A', type: 'MANUFACTURER', ownerEmail: ' ' } as any),
+      service.create('admin-1', {
+        name: 'A',
+        type: 'MANUFACTURER',
+        ownerEmail: ' ',
+      } as any),
     ).rejects.toThrow('ownerEmail is required');
 
     expect(tx.organization.create).not.toHaveBeenCalled();
@@ -107,7 +116,10 @@ describe('OrgsService.create', () => {
   });
 
   it('rejects an ownerEmail that already has an account and sends nothing', async () => {
-    const { service, tx, mail } = makeService({ sent: true }, { id: 'existing-user' });
+    const { service, tx, mail } = makeService(
+      { sent: true },
+      { id: 'existing-user' },
+    );
 
     await expect(
       service.create('admin-1', {
@@ -122,10 +134,17 @@ describe('OrgsService.create', () => {
   });
 
   it('rejects a duplicate name and writes nothing', async () => {
-    const { service, tx, mail } = makeService({ sent: true }, null, { id: 'org-existing', name: 'Polo' });
+    const { service, tx, mail } = makeService({ sent: true }, null, {
+      id: 'org-existing',
+      name: 'Polo',
+    });
 
     await expect(
-      service.create('admin-1', { name: 'Polo', type: 'MANUFACTURER', ownerEmail: 'x@y.com' }),
+      service.create('admin-1', {
+        name: 'Polo',
+        type: 'MANUFACTURER',
+        ownerEmail: 'x@y.com',
+      }),
     ).rejects.toThrow('An organization named "Polo" already exists');
 
     expect(tx.organization.create).not.toHaveBeenCalled();
@@ -153,10 +172,16 @@ describe('OrgsService.create', () => {
   // 409, not a raw 500.
   it('maps a P2002 unique-violation from the race to the same conflict error', async () => {
     const { service, tx } = makeService();
-    tx.organization.create.mockRejectedValueOnce(Object.assign(new Error('unique'), { code: 'P2002' }));
+    tx.organization.create.mockRejectedValueOnce(
+      Object.assign(new Error('unique'), { code: 'P2002' }),
+    );
 
     await expect(
-      service.create('admin-1', { name: 'Polo', type: 'MANUFACTURER', ownerEmail: 'x@y.com' }),
+      service.create('admin-1', {
+        name: 'Polo',
+        type: 'MANUFACTURER',
+        ownerEmail: 'x@y.com',
+      }),
     ).rejects.toThrow('An organization named "Polo" already exists');
   });
 });

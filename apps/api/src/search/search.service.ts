@@ -18,48 +18,61 @@ export class SearchService {
   async search(orgId: string, q?: string): Promise<SearchHit[]> {
     if (!q) return [];
     const contains = { contains: q, mode: 'insensitive' as const };
-    const [buyers, suppliers, products, pos, inspections] = await this.prisma.$transaction([
-      this.prisma.buyer.findMany({
-        where: { orgId, name: contains },
-        take: PER_TYPE,
-        select: { id: true, name: true },
-      }),
-      this.prisma.supplier.findMany({
-        where: { orgId, name: contains },
-        take: PER_TYPE,
-        select: { id: true, name: true },
-      }),
-      this.prisma.product.findMany({
-        where: { orgId, OR: [{ styleNumber: contains }, { description: contains }] },
-        take: PER_TYPE,
-        select: { id: true, styleNumber: true, description: true },
-      }),
-      this.prisma.purchaseOrder.findMany({
-        where: { orgId, poNumber: contains },
-        take: PER_TYPE,
-        select: { id: true, poNumber: true, buyer: { select: { name: true } } },
-      }),
-      this.prisma.inspection.findMany({
-        where: {
-          orgId,
-          OR: [
-            { purchaseOrder: { poNumber: contains } },
-            { buyer: { name: contains } },
-            { product: { styleNumber: contains } },
-          ],
-        },
-        take: PER_TYPE,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          status: true,
-          purchaseOrder: { select: { poNumber: true } },
-          buyer: { select: { name: true } },
-        },
-      }),
-    ]);
+    const [buyers, suppliers, products, pos, inspections] =
+      await this.prisma.$transaction([
+        this.prisma.buyer.findMany({
+          where: { orgId, name: contains },
+          take: PER_TYPE,
+          select: { id: true, name: true },
+        }),
+        this.prisma.supplier.findMany({
+          where: { orgId, name: contains },
+          take: PER_TYPE,
+          select: { id: true, name: true },
+        }),
+        this.prisma.product.findMany({
+          where: {
+            orgId,
+            OR: [{ styleNumber: contains }, { description: contains }],
+          },
+          take: PER_TYPE,
+          select: { id: true, styleNumber: true, description: true },
+        }),
+        this.prisma.purchaseOrder.findMany({
+          where: { orgId, poNumber: contains },
+          take: PER_TYPE,
+          select: {
+            id: true,
+            poNumber: true,
+            buyer: { select: { name: true } },
+          },
+        }),
+        this.prisma.inspection.findMany({
+          where: {
+            orgId,
+            OR: [
+              { purchaseOrder: { poNumber: contains } },
+              { buyer: { name: contains } },
+              { product: { styleNumber: contains } },
+            ],
+          },
+          take: PER_TYPE,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            status: true,
+            purchaseOrder: { select: { poNumber: true } },
+            buyer: { select: { name: true } },
+          },
+        }),
+      ]);
     return [
-      ...buyers.map<SearchHit>((b) => ({ type: 'buyer', id: b.id, label: b.name, sublabel: null })),
+      ...buyers.map<SearchHit>((b) => ({
+        type: 'buyer',
+        id: b.id,
+        label: b.name,
+        sublabel: null,
+      })),
       ...suppliers.map<SearchHit>((s) => ({
         type: 'supplier',
         id: s.id,

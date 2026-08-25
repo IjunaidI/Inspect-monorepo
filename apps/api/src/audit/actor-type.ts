@@ -22,7 +22,9 @@ import { AuditActorType } from './audit.service';
  * it for a verified PLATFORM_ADMIN (it is ignored outright for every other role),
  * so it can never promote an org user.
  */
-export function actorTypeFor(actor: Pick<AuthUser, 'actingAsOrgId' | 'role'>): AuditActorType {
+export function actorTypeFor(
+  actor: Pick<AuthUser, 'actingAsOrgId' | 'role'>,
+): AuditActorType {
   if (actor.role === 'PLATFORM_ADMIN') return 'PLATFORM_ADMIN';
   return actor.actingAsOrgId ? 'PLATFORM_ADMIN' : 'USER';
 }

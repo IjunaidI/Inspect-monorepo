@@ -28,7 +28,10 @@ interface StorageProbe {
   reason: string;
 }
 
-async function probeStorage(endpoint: string, bucket: string): Promise<StorageProbe> {
+async function probeStorage(
+  endpoint: string,
+  bucket: string,
+): Promise<StorageProbe> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2500);
   try {
@@ -51,7 +54,10 @@ async function probeStorage(endpoint: string, bucket: string): Promise<StoragePr
     }
     return { usable: true, reason: 'ok' };
   } catch {
-    return { usable: false, reason: `object storage unreachable at ${endpoint}` };
+    return {
+      usable: false,
+      reason: `object storage unreachable at ${endpoint}`,
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -72,9 +78,11 @@ describe('Photo byte upload via presigned URL (integration)', () => {
     storageUp = probe.usable;
     if (!storageUp) {
       if (process.env.REQUIRE_STORAGE === '1') {
-        throw new Error(`REQUIRE_STORAGE=1 but the byte path cannot run: ${probe.reason}`);
+        throw new Error(
+          `REQUIRE_STORAGE=1 but the byte path cannot run: ${probe.reason}`,
+        );
       }
-      // eslint-disable-next-line no-console
+
       console.warn(
         `[storage-bytes] SKIPPED — ${probe.reason}. ` +
           'Point S3_* at reachable object storage (a managed S3-compatible bucket, or local MinIO via docker-compose.dev.yml plus bucket creation) to exercise the byte path.',
@@ -96,17 +104,25 @@ describe('Photo byte upload via presigned URL (integration)', () => {
     const inspection = expect2xx(
       await client.post('/inspections', {
         token: org.ownerToken,
-        body: { poId: ws.poId, loopPresetId: ws.presetId, lotSize: 500, clientRequestId: `bytes-${tag}` },
+        body: {
+          poId: ws.poId,
+          loopPresetId: ws.presetId,
+          lotSize: 500,
+          clientRequestId: `bytes-${tag}`,
+        },
       }),
       'POST /inspections',
     );
     const loopId = inspection.items?.[0]?.id;
 
     const presign = expect2xx(
-      await client.post(`/inspections/${inspection.id}/populate/photos/presign`, {
-        token: adminToken,
-        body: { ext: 'jpg' },
-      }),
+      await client.post(
+        `/inspections/${inspection.id}/populate/photos/presign`,
+        {
+          token: adminToken,
+          body: { ext: 'jpg' },
+        },
+      ),
       'populate presign',
     );
 
@@ -126,7 +142,8 @@ describe('Photo byte upload via presigned URL (integration)', () => {
         body: {
           storageKey: presign.storageKey,
           contentHash,
-          inspectionLoopItemId: loopId, cycleIndex: 0,
+          inspectionLoopItemId: loopId,
+          cycleIndex: 0,
           clientRequestId: `bytes-photo-${tag}`,
         },
       }),
@@ -138,16 +155,23 @@ describe('Photo byte upload via presigned URL (integration)', () => {
     // INS-049: the inspection detail decorates the photo with a presigned GET
     // viewUrl, and fetching it returns the EXACT uploaded bytes.
     const detail = expect2xx(
-      await client.get(`/inspections/${inspection.id}`, { token: org.ownerToken }),
+      await client.get(`/inspections/${inspection.id}`, {
+        token: org.ownerToken,
+      }),
       'GET /inspections/:id (viewUrl)',
     );
     const detailPhoto = detail.items
-      ?.flatMap((l: { photos?: Array<{ id: string; viewUrl?: string | null }> }) => l.photos ?? [])
+      ?.flatMap(
+        (l: { photos?: Array<{ id: string; viewUrl?: string | null }> }) =>
+          l.photos ?? [],
+      )
       .find((p: { id: string }) => p.id === photo.id);
     expect(detailPhoto?.viewUrl).toBeTruthy();
     const download = await fetch(detailPhoto.viewUrl);
     expect(download.status).toBe(200);
     const downloaded = Buffer.from(await download.arrayBuffer());
-    expect(createHash('sha256').update(downloaded).digest('hex')).toBe(contentHash);
+    expect(createHash('sha256').update(downloaded).digest('hex')).toBe(
+      contentHash,
+    );
   });
 });

@@ -52,7 +52,9 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     const value = config[key];
     const s = value == null ? '' : String(value).trim();
     if (s === '' || s.toUpperCase() === 'CHANGE_ME') {
-      throw new Error(`${key} is required (set a strong secret; refusing a default/placeholder)`);
+      throw new Error(
+        `${key} is required (set a strong secret; refusing a default/placeholder)`,
+      );
     }
   }
   return config;
@@ -76,12 +78,14 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
           throw new Error('REDIS_URL is required');
         }
         // Tunable via env (INS-053); the old hardcoded values remain the defaults.
-        const ttl = Number(process.env.CACHE_TTL_MS) > 0
-          ? Number(process.env.CACHE_TTL_MS)
-          : 60 * 60 * 24 * 7 * 1000;
-        const lruSize = Number(process.env.CACHE_LRU_SIZE) > 0
-          ? Number(process.env.CACHE_LRU_SIZE)
-          : 5000;
+        const ttl =
+          Number(process.env.CACHE_TTL_MS) > 0
+            ? Number(process.env.CACHE_TTL_MS)
+            : 60 * 60 * 24 * 7 * 1000;
+        const lruSize =
+          Number(process.env.CACHE_LRU_SIZE) > 0
+            ? Number(process.env.CACHE_LRU_SIZE)
+            : 5000;
         return {
           ttl,
           stores: [
@@ -124,7 +128,8 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
       // Resolve the real client ourselves, honouring RATE_LIMIT_TRUSTED_PROXIES.
       getTracker: (req) => clientIpFromRequest(req),
       skipIf: () => rateLimitDisabled(),
-      errorMessage: 'Too many requests — please slow down and try again shortly.',
+      errorMessage:
+        'Too many requests — please slow down and try again shortly.',
     }),
     PrismaModule,
     HealthModule,

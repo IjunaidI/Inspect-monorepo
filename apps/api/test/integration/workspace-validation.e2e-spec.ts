@@ -39,7 +39,10 @@ interface StorageProbe {
 }
 
 /** Same probe as storage-bytes.e2e-spec.ts — see its notes on managed 403s vs MinIO 404s. */
-async function probeStorage(endpoint: string, bucket: string): Promise<StorageProbe> {
+async function probeStorage(
+  endpoint: string,
+  bucket: string,
+): Promise<StorageProbe> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 2500);
   try {
@@ -48,11 +51,17 @@ async function probeStorage(endpoint: string, bucket: string): Promise<StoragePr
       signal: controller.signal,
     });
     if (res.status === 404) {
-      return { usable: false, reason: `bucket "${bucket}" not found at ${endpoint}` };
+      return {
+        usable: false,
+        reason: `bucket "${bucket}" not found at ${endpoint}`,
+      };
     }
     return { usable: true, reason: 'ok' };
   } catch {
-    return { usable: false, reason: `object storage unreachable at ${endpoint}` };
+    return {
+      usable: false,
+      reason: `object storage unreachable at ${endpoint}`,
+    };
   } finally {
     clearTimeout(timer);
   }
@@ -80,9 +89,11 @@ describe('Workspace write validation (integration)', () => {
     storageUp = probe.usable;
     if (!storageUp) {
       if (process.env.REQUIRE_STORAGE === '1') {
-        throw new Error(`REQUIRE_STORAGE=1 but the buyer-logo byte path cannot run: ${probe.reason}`);
+        throw new Error(
+          `REQUIRE_STORAGE=1 but the buyer-logo byte path cannot run: ${probe.reason}`,
+        );
       }
-      // eslint-disable-next-line no-console
+
       console.warn(
         `[workspace-validation] logo BYTE assertions SKIPPED — ${probe.reason}. ` +
           'Validation and org-prefix-guard assertions still ran.',
@@ -187,7 +198,10 @@ describe('Workspace write validation (integration)', () => {
         await client.post('/suppliers', {
           token: org.ownerToken,
           // The extra key must be stripped: the column is canonical { lat, lng }.
-          body: { name: `Gps ok ${tag}`, gps: { lat: 23.8103, lng: 90.4125, altitude: 5 } },
+          body: {
+            name: `Gps ok ${tag}`,
+            gps: { lat: 23.8103, lng: 90.4125, altitude: 5 },
+          },
         }),
         'POST /suppliers (valid gps)',
       );
@@ -205,7 +219,10 @@ describe('Workspace write validation (integration)', () => {
       const created = expect2xx(
         await client.post('/suppliers', {
           token: org.ownerToken,
-          body: { name: `Gps patch ${tag}`, gps: { lat: 11.1085, lng: 77.3411 } },
+          body: {
+            name: `Gps patch ${tag}`,
+            gps: { lat: 11.1085, lng: 77.3411 },
+          },
         }),
         'POST /suppliers (patch fixture)',
       );
@@ -225,12 +242,18 @@ describe('Workspace write validation (integration)', () => {
       const created = expect2xx(
         await client.post('/suppliers', {
           token: org.ownerToken,
-          body: { name: `Gps clear ${tag}`, gps: { lat: 21.0285, lng: 105.8542 } },
+          body: {
+            name: `Gps clear ${tag}`,
+            gps: { lat: 21.0285, lng: 105.8542 },
+          },
         }),
         'POST /suppliers (clear fixture)',
       );
       expect2xx(
-        await client.patch(`/suppliers/${created.id}`, { token: org.ownerToken, body: { gps: null } }),
+        await client.patch(`/suppliers/${created.id}`, {
+          token: org.ownerToken,
+          body: { gps: null },
+        }),
         'PATCH /suppliers/:id (clear gps)',
       );
       const after = expect2xx(
@@ -245,7 +268,10 @@ describe('Workspace write validation (integration)', () => {
   describe('buyer logo', () => {
     it('echoes a legacy absolute URL but nulls a crafted foreign-org key', async () => {
       const buyer = expect2xx(
-        await client.post('/buyers', { token: org.ownerToken, body: { name: `Logo guard ${tag}` } }),
+        await client.post('/buyers', {
+          token: org.ownerToken,
+          body: { name: `Logo guard ${tag}` },
+        }),
         'POST /buyers (logo guard fixture)',
       );
 
@@ -254,7 +280,10 @@ describe('Workspace write validation (integration)', () => {
       // asserted below is the org-prefix guard talking — not a blanket null.
       const legacy = `https://legacy.example.com/${tag}/logo.png`;
       expect2xx(
-        await client.patch(`/buyers/${buyer.id}`, { token: org.ownerToken, body: { logoUrl: legacy } }),
+        await client.patch(`/buyers/${buyer.id}`, {
+          token: org.ownerToken,
+          body: { logoUrl: legacy },
+        }),
         'PATCH /buyers/:id (legacy URL)',
       );
       const legacyRead = expect2xx(
@@ -269,7 +298,10 @@ describe('Workspace write validation (integration)', () => {
       const foreignKey = `orgs/${foreignOrg.orgId}/buyers/${randomUUID()}.png`;
       expect(foreignOrg.orgId).not.toBe(org.orgId);
       expect2xx(
-        await client.patch(`/buyers/${buyer.id}`, { token: org.ownerToken, body: { logoUrl: foreignKey } }),
+        await client.patch(`/buyers/${buyer.id}`, {
+          token: org.ownerToken,
+          body: { logoUrl: foreignKey },
+        }),
         'PATCH /buyers/:id (foreign key)',
       );
       const foreignRead = expect2xx(
@@ -286,17 +318,25 @@ describe('Workspace write validation (integration)', () => {
       if (!storageUp) return; // skipped — see beforeAll warning
 
       const buyer = expect2xx(
-        await client.post('/buyers', { token: org.ownerToken, body: { name: `Logo bytes ${tag}` } }),
+        await client.post('/buyers', {
+          token: org.ownerToken,
+          body: { name: `Logo bytes ${tag}` },
+        }),
         'POST /buyers (logo bytes fixture)',
       );
 
       const presign = expect2xx(
-        await client.post('/buyers/presign', { token: org.ownerToken, body: { ext: 'png' } }),
+        await client.post('/buyers/presign', {
+          token: org.ownerToken,
+          body: { ext: 'png' },
+        }),
         'POST /buyers/presign',
       );
       // The key is namespaced to THIS org — that prefix is exactly what the
       // read-time guard re-checks.
-      expect(presign.storageKey).toMatch(new RegExp(`^orgs/${org.orgId}/buyers/`));
+      expect(presign.storageKey).toMatch(
+        new RegExp(`^orgs/${org.orgId}/buyers/`),
+      );
       expect(presign.method).toBe('PUT');
       expect(presign.uploadUrl).toContain('X-Amz-Signature');
 
@@ -304,7 +344,10 @@ describe('Workspace write validation (integration)', () => {
         Buffer.from([0x89, 0x50, 0x4e, 0x47]), // PNG magic
         Buffer.from(`e2e buyer logo ${tag}`, 'utf8'),
       ]);
-      const put = await fetch(presign.uploadUrl, { method: 'PUT', body: bytes });
+      const put = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        body: bytes,
+      });
       expect(put.status).toBeGreaterThanOrEqual(200);
       expect(put.status).toBeLessThan(300);
 
@@ -331,14 +374,21 @@ describe('Workspace write validation (integration)', () => {
 
       // The list endpoint decorates too (the console renders logos from it).
       const list = expect2xx(
-        await client.get(`/buyers?q=${encodeURIComponent(`Logo bytes ${tag}`)}`, {
-          token: org.ownerToken,
-        }),
+        await client.get(
+          `/buyers?q=${encodeURIComponent(`Logo bytes ${tag}`)}`,
+          {
+            token: org.ownerToken,
+          },
+        ),
         'GET /buyers (logo view url)',
       );
-      const row = (list as Array<{ id: string; logoUrl: string; logoViewUrl: string | null }>).find(
-        (b) => b.id === buyer.id,
-      );
+      const row = (
+        list as Array<{
+          id: string;
+          logoUrl: string;
+          logoViewUrl: string | null;
+        }>
+      ).find((b) => b.id === buyer.id);
       expect(row?.logoUrl).toBe(presign.storageKey);
       expect(row?.logoViewUrl).toBeTruthy();
 
@@ -354,7 +404,10 @@ describe('Workspace write validation (integration)', () => {
       // yields is unambiguously the org-prefix guard.
       const foreignKey = `orgs/${foreignOrg.orgId}/buyers/${randomUUID()}.png`;
       expect2xx(
-        await client.patch(`/buyers/${buyer.id}`, { token: org.ownerToken, body: { logoUrl: foreignKey } }),
+        await client.patch(`/buyers/${buyer.id}`, {
+          token: org.ownerToken,
+          body: { logoUrl: foreignKey },
+        }),
         'PATCH /buyers/:id (foreign key, storage up)',
       );
       const guarded = expect2xx(

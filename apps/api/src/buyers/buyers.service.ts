@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
@@ -43,11 +47,15 @@ const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
  *
  * `undefined` = field absent (no change); `null`/`''` = explicit clear.
  */
-export function normalizePrimaryColor(value: unknown): string | null | undefined {
+export function normalizePrimaryColor(
+  value: unknown,
+): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value !== 'string') {
-    throw new BadRequestException('primaryColor must be a hex colour string like #1457A3');
+    throw new BadRequestException(
+      'primaryColor must be a hex colour string like #1457A3',
+    );
   }
   const trimmed = value.trim();
   if (trimmed === '') return null;
@@ -66,12 +74,22 @@ export class BuyersService {
     private readonly audit: AuditService,
   ) {}
 
-  list(orgId: string, opts: { includeArchived?: boolean; q?: string; take?: number; skip?: number } = {}) {
+  list(
+    orgId: string,
+    opts: {
+      includeArchived?: boolean;
+      q?: string;
+      take?: number;
+      skip?: number;
+    } = {},
+  ) {
     return this.prisma.buyer.findMany({
       where: {
         orgId,
         ...(opts.includeArchived ? {} : { archivedAt: null }),
-        ...(opts.q ? { name: { contains: opts.q, mode: 'insensitive' as const } } : {}),
+        ...(opts.q
+          ? { name: { contains: opts.q, mode: 'insensitive' as const } }
+          : {}),
       },
       orderBy: { name: 'asc' },
       take: opts.take,
@@ -131,7 +149,12 @@ export class BuyersService {
     });
   }
 
-  async update(orgId: string, actor: AuthUser, id: string, input: UpdateBuyerInput) {
+  async update(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    input: UpdateBuyerInput,
+  ) {
     // Validate before touching the DB (INS-077).
     const primaryColor = normalizePrimaryColor(input.primaryColor);
     await this.get(orgId, id);
@@ -174,14 +197,19 @@ export class BuyersService {
    * without this a caller could point at another tenant's preset. null (clear)
    * and undefined (no change) pass through untouched.
    */
-  private async assertPresetInOrg(orgId: string, presetId?: string | null): Promise<void> {
+  private async assertPresetInOrg(
+    orgId: string,
+    presetId?: string | null,
+  ): Promise<void> {
     if (!presetId) return;
     const preset = await this.prisma.loopPreset.findFirst({
       where: { id: presetId, orgId },
       select: { id: true },
     });
     if (!preset) {
-      throw new BadRequestException('defaultLoopPresetId not found in organization');
+      throw new BadRequestException(
+        'defaultLoopPresetId not found in organization',
+      );
     }
   }
 
@@ -190,9 +218,19 @@ export class BuyersService {
     // Idempotent: re-archiving must not overwrite the original timestamp (INS-061).
     if (buyer.archivedAt) return buyer;
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.buyer.update({ where: { id }, data: { archivedAt: new Date() } });
+      const updated = await tx.buyer.update({
+        where: { id },
+        data: { archivedAt: new Date() },
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'buyer.archived', entityType: 'Buyer', entityId: id },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'buyer.archived',
+          entityType: 'Buyer',
+          entityId: id,
+        },
         tx,
       );
       return updated;
@@ -204,9 +242,19 @@ export class BuyersService {
     const buyer = await this.get(orgId, id);
     if (!buyer.archivedAt) return buyer;
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.buyer.update({ where: { id }, data: { archivedAt: null } });
+      const updated = await tx.buyer.update({
+        where: { id },
+        data: { archivedAt: null },
+      });
       await this.audit.append(
-        { orgId, actorType: actorTypeFor(actor), actorUserId: actor.userId, action: 'buyer.restored', entityType: 'Buyer', entityId: id },
+        {
+          orgId,
+          actorType: actorTypeFor(actor),
+          actorUserId: actor.userId,
+          action: 'buyer.restored',
+          entityType: 'Buyer',
+          entityId: id,
+        },
         tx,
       );
       return updated;

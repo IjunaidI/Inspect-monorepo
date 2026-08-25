@@ -54,7 +54,10 @@ describe('rate-limit config helpers (INS-047)', () => {
     });
 
     it('falls back on garbage, zero or negative values (never unlimited)', () => {
-      cleanEnv({ RATE_LIMIT_AUTH_LIMIT: 'lots', RATE_LIMIT_AUTH_TTL_MS: 'soon' });
+      cleanEnv({
+        RATE_LIMIT_AUTH_LIMIT: 'lots',
+        RATE_LIMIT_AUTH_TTL_MS: 'soon',
+      });
       expect(authRateLimit()).toEqual({ ttl: 60_000, limit: 30 });
       cleanEnv({ RATE_LIMIT_AUTH_LIMIT: '0', RATE_LIMIT_AUTH_TTL_MS: '-5' });
       expect(authRateLimit()).toEqual({ ttl: 60_000, limit: 30 });
@@ -134,7 +137,9 @@ describe('rate-limit config helpers (INS-047)', () => {
     });
 
     it('falls back to socket.remoteAddress when req.ip is absent', () => {
-      expect(clientIpFromRequest({ socket: { remoteAddress: '10.0.0.5' } }, 0)).toBe('10.0.0.5');
+      expect(
+        clientIpFromRequest({ socket: { remoteAddress: '10.0.0.5' } }, 0),
+      ).toBe('10.0.0.5');
     });
 
     it('resolves the real client through one trusted proxy', () => {
@@ -165,20 +170,30 @@ describe('rate-limit config helpers (INS-047)', () => {
       // A longer forged prefix does not help either.
       const longer = {
         ip: '10.0.0.1',
-        headers: { 'x-forwarded-for': 'a.a.a.a, b.b.b.b, c.c.c.c, 203.0.113.9' },
+        headers: {
+          'x-forwarded-for': 'a.a.a.a, b.b.b.b, c.c.c.c, 203.0.113.9',
+        },
       };
       expect(clientIpFromRequest(longer, 1)).toBe('203.0.113.9');
     });
 
     it('falls back to the socket peer when the chain is shorter than the hop count', () => {
-      const req = { ip: '10.0.0.9', headers: { 'x-forwarded-for': '203.0.113.9' } };
+      const req = {
+        ip: '10.0.0.9',
+        headers: { 'x-forwarded-for': '203.0.113.9' },
+      };
       expect(clientIpFromRequest(req, 3)).toBe('10.0.0.9');
     });
 
     it('falls back to the socket peer when the header is missing or blank', () => {
-      expect(clientIpFromRequest({ ip: '10.0.0.9', headers: {} }, 1)).toBe('10.0.0.9');
+      expect(clientIpFromRequest({ ip: '10.0.0.9', headers: {} }, 1)).toBe(
+        '10.0.0.9',
+      );
       expect(
-        clientIpFromRequest({ ip: '10.0.0.9', headers: { 'x-forwarded-for': ' , ' } }, 1),
+        clientIpFromRequest(
+          { ip: '10.0.0.9', headers: { 'x-forwarded-for': ' , ' } },
+          1,
+        ),
       ).toBe('10.0.0.9');
     });
 
@@ -196,7 +211,10 @@ describe('rate-limit config helpers (INS-047)', () => {
     });
 
     it('reads RATE_LIMIT_TRUSTED_PROXIES when no hop count is passed', () => {
-      const req = { ip: '10.0.0.1', headers: { 'x-forwarded-for': '203.0.113.9' } };
+      const req = {
+        ip: '10.0.0.1',
+        headers: { 'x-forwarded-for': '203.0.113.9' },
+      };
       cleanEnv();
       expect(clientIpFromRequest(req)).toBe('10.0.0.1');
       cleanEnv({ RATE_LIMIT_TRUSTED_PROXIES: '1' });

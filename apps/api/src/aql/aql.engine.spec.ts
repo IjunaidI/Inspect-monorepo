@@ -49,15 +49,23 @@ describe('sampleSizeForCodeLetter', () => {
 
 describe('planFor (Ac/Re; single sampling normal; Re = Ac + 1)', () => {
   // Canonical garment-QC anchor: code letter L (n=200).
-  it('L @ 1.0 -> Ac 5 / Re 6', () => expect(planFor('L', 1.0)).toEqual({ aql: 1.0, ac: 5, re: 6 }));
-  it('L @ 1.5 -> Ac 7 / Re 8', () => expect(planFor('L', 1.5)).toEqual({ aql: 1.5, ac: 7, re: 8 }));
-  it('L @ 2.5 -> Ac 10 / Re 11', () => expect(planFor('L', 2.5)).toEqual({ aql: 2.5, ac: 10, re: 11 }));
-  it('L @ 4.0 -> Ac 14 / Re 15', () => expect(planFor('L', 4.0)).toEqual({ aql: 4.0, ac: 14, re: 15 }));
-  it('L @ 6.5 -> Ac 21 / Re 22', () => expect(planFor('L', 6.5)).toEqual({ aql: 6.5, ac: 21, re: 22 }));
+  it('L @ 1.0 -> Ac 5 / Re 6', () =>
+    expect(planFor('L', 1.0)).toEqual({ aql: 1.0, ac: 5, re: 6 }));
+  it('L @ 1.5 -> Ac 7 / Re 8', () =>
+    expect(planFor('L', 1.5)).toEqual({ aql: 1.5, ac: 7, re: 8 }));
+  it('L @ 2.5 -> Ac 10 / Re 11', () =>
+    expect(planFor('L', 2.5)).toEqual({ aql: 2.5, ac: 10, re: 11 }));
+  it('L @ 4.0 -> Ac 14 / Re 15', () =>
+    expect(planFor('L', 4.0)).toEqual({ aql: 4.0, ac: 14, re: 15 }));
+  it('L @ 6.5 -> Ac 21 / Re 22', () =>
+    expect(planFor('L', 6.5)).toEqual({ aql: 6.5, ac: 21, re: 22 }));
 
-  it('H @ 2.5 -> Ac 3 / Re 4', () => expect(planFor('H', 2.5)).toEqual({ aql: 2.5, ac: 3, re: 4 }));
-  it('J @ 2.5 -> Ac 5 / Re 6', () => expect(planFor('J', 2.5)).toEqual({ aql: 2.5, ac: 5, re: 6 }));
-  it('K @ 2.5 -> Ac 7 / Re 8', () => expect(planFor('K', 2.5)).toEqual({ aql: 2.5, ac: 7, re: 8 }));
+  it('H @ 2.5 -> Ac 3 / Re 4', () =>
+    expect(planFor('H', 2.5)).toEqual({ aql: 2.5, ac: 3, re: 4 }));
+  it('J @ 2.5 -> Ac 5 / Re 6', () =>
+    expect(planFor('J', 2.5)).toEqual({ aql: 2.5, ac: 5, re: 6 }));
+  it('K @ 2.5 -> Ac 7 / Re 8', () =>
+    expect(planFor('K', 2.5)).toEqual({ aql: 2.5, ac: 7, re: 8 }));
 
   it('critical AQL 0 -> Ac 0 / Re 1 (any defect rejects), independent of letter', () => {
     expect(planFor('H', 0)).toEqual({ aql: 0, ac: 0, re: 1 });

@@ -2,7 +2,11 @@
  * Pure mapping helpers for the inspection aggregate (no Prisma, no Nest) so the
  * snapshot/counting/decision logic is unit-testable without a database.
  */
-import type { BillableEventKind, DefectSeverity, QaDecision } from '@inspect/shared-types';
+import type {
+  BillableEventKind,
+  DefectSeverity,
+  QaDecision,
+} from '@inspect/shared-types';
 import { DefectClass, DefectCounts } from '../aql/aql.types';
 
 export interface SeverityRow {
@@ -12,7 +16,11 @@ export interface SeverityRow {
 
 /** Fold grouped defect counts into the {critical,major,minor} shape the AQL engine wants. */
 export function toDefectCounts(rows: SeverityRow[]): DefectCounts {
-  const counts: Record<DefectClass, number> = { critical: 0, major: 0, minor: 0 };
+  const counts: Record<DefectClass, number> = {
+    critical: 0,
+    major: 0,
+    minor: 0,
+  };
   for (const row of rows) {
     if (row.severity === 'CRITICAL') counts.critical = row.count;
     else if (row.severity === 'MAJOR') counts.major = row.count;
@@ -77,7 +85,9 @@ export type BillableKind = BillableEventKind;
  * from the one service path that mints the event) is what stops the two columns
  * from drifting apart while the DB has no CHECK constraint.
  */
-export function billableKindFor(supersedesInspectionId?: string | null): BillableKind {
+export function billableKindFor(
+  supersedesInspectionId?: string | null,
+): BillableKind {
   return supersedesInspectionId ? 'RE_INSPECTION' : 'INSPECTION';
 }
 
@@ -85,7 +95,9 @@ export type QaDecisionValue = QaDecision;
 export type InspectionDecisionStatus = 'APPROVED' | 'REJECTED' | 'HOLD';
 
 /** Map the QA Manager's binding decision to the resulting inspection status (spec §8). */
-export function qaDecisionToStatus(decision: QaDecisionValue): InspectionDecisionStatus {
+export function qaDecisionToStatus(
+  decision: QaDecisionValue,
+): InspectionDecisionStatus {
   if (decision === 'PASS') return 'APPROVED';
   if (decision === 'FAIL') return 'REJECTED';
   return 'HOLD';

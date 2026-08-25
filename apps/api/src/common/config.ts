@@ -20,6 +20,8 @@ export function inviteTtlMs(): number {
  */
 export function clampGuestTtlDays(requested?: number): number {
   const fallback = positiveIntEnv('GUEST_TTL_DAYS', 30);
-  const value = Number.isFinite(requested as number) ? (requested as number) : fallback;
+  const value = Number.isFinite(requested as number)
+    ? (requested as number)
+    : fallback;
   return Math.min(Math.max(Math.trunc(value), 1), 365);
 }

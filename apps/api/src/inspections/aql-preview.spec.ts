@@ -3,7 +3,11 @@ import { InspectionsService } from './inspections.service';
 
 describe('InspectionsService.aqlPreview', () => {
   // aqlPreview is pure (no Prisma/audit/mail access) — pass null clients.
-  const svc = new InspectionsService(null as never, null as never, null as never);
+  const svc = new InspectionsService(
+    null as never,
+    null as never,
+    null as never,
+  );
 
   it('returns the computed plan for an in-band lot (1000 -> code J, n 80)', () => {
     const out = svc.aqlPreview(1000, {});
@@ -15,7 +19,9 @@ describe('InspectionsService.aqlPreview', () => {
   });
 
   it('throws BadRequestException for an AQL outside the verified band', () => {
-    expect(() => svc.aqlPreview(1000, { major: 3 })).toThrow(BadRequestException);
+    expect(() => svc.aqlPreview(1000, { major: 3 })).toThrow(
+      BadRequestException,
+    );
   });
 
   it('throws BadRequestException for a lot size below 2', () => {

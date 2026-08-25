@@ -27,7 +27,9 @@ export class OrgsService {
   ) {}
 
   list() {
-    return this.prisma.organization.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.prisma.organization.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async create(actorUserId: string, input: CreateOrgInput) {
@@ -37,7 +39,8 @@ export class OrgsService {
     if (!(ORG_TYPES as readonly string[]).includes(input.type)) {
       throw new BadRequestException(`type must be ${ORG_TYPES.join(' or ')}`);
     }
-    if (!input?.ownerEmail?.trim()) throw new BadRequestException('ownerEmail is required');
+    if (!input?.ownerEmail?.trim())
+      throw new BadRequestException('ownerEmail is required');
     const ownerEmail = input.ownerEmail.trim().toLowerCase();
     const name = input.name.trim();
 
@@ -50,7 +53,9 @@ export class OrgsService {
       select: { id: true, name: true },
     });
     if (duplicate) {
-      throw new ConflictException(`An organization named "${duplicate.name}" already exists`);
+      throw new ConflictException(
+        `An organization named "${duplicate.name}" already exists`,
+      );
     }
 
     // Don't onboard an owner whose email already has an account — accepting the
@@ -63,7 +68,12 @@ export class OrgsService {
       throw new ForbiddenException('An account already exists for this email');
     }
 
-    const result = await this.runCreate(name, input.type, ownerEmail, actorUserId);
+    const result = await this.runCreate(
+      name,
+      input.type,
+      ownerEmail,
+      actorUserId,
+    );
     // Email the first Org Owner after the transaction commits. MailService
     // never throws, so a failed send cannot roll back or fail org creation.
     // `emailSent` lets the console distinguish "emailed" from "copy this link".
@@ -89,10 +99,17 @@ export class OrgsService {
     actorUserId: string,
   ) {
     try {
-      return await this.createInTransaction(name, type, ownerEmail, actorUserId);
+      return await this.createInTransaction(
+        name,
+        type,
+        ownerEmail,
+        actorUserId,
+      );
     } catch (e) {
       if ((e as { code?: string }).code === 'P2002') {
-        throw new ConflictException(`An organization named "${name}" already exists`);
+        throw new ConflictException(
+          `An organization named "${name}" already exists`,
+        );
       }
       throw e;
     }

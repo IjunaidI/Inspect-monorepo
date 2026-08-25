@@ -1,4 +1,11 @@
-import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService, TokenPair } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,7 +22,10 @@ import { authRateLimit } from '../common/throttler.config';
  * ConfigModule has loaded the repo-root .env into process.env.
  */
 const authThrottle = {
-  public: { ttl: () => authRateLimit().ttl, limit: () => authRateLimit().limit },
+  public: {
+    ttl: () => authRateLimit().ttl,
+    limit: () => authRateLimit().limit,
+  },
 };
 
 interface LoginBody {
@@ -56,7 +66,9 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(@CurrentUser() user: AuthUser): Promise<AuthUser & { orgName: string | null }> {
+  async me(
+    @CurrentUser() user: AuthUser,
+  ): Promise<AuthUser & { orgName: string | null }> {
     // The console shell shows the real workspace name (null for the cross-tenant
     // Platform Admin, which the web renders as "Platform").
     const org = user.orgId

@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import {
   PurchaseOrdersService,
   CreatePurchaseOrderInput,
@@ -25,7 +33,10 @@ export class PurchaseOrdersController {
   }
 
   @Post()
-  create(@CurrentUser() user: AuthUser, @Body() body: CreatePurchaseOrderInput) {
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() body: CreatePurchaseOrderInput,
+  ) {
     return this.purchaseOrders.create(requireOrgId(user), user, body);
   }
 

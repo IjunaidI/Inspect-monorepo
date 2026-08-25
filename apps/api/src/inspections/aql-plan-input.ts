@@ -13,7 +13,11 @@
 import { ACCEPTANCE_NUMBERS, DEFAULT_AQL } from '../aql/aql-tables';
 import { AqlPlanInput, DefectClass } from '../aql/aql.types';
 
-export const AQL_CLASSES: readonly DefectClass[] = ['critical', 'major', 'minor'];
+export const AQL_CLASSES: readonly DefectClass[] = [
+  'critical',
+  'major',
+  'minor',
+];
 
 /** Raw per-class input as it arrives off the wire (JSON body / query string). */
 export type RawAqlPlanInput = Partial<Record<DefectClass, unknown>>;
@@ -33,7 +37,9 @@ export const ALLOWED_AQL_VALUES: readonly number[] = [
 
 /** "0, 1.0, 1.5, 2.5, 4.0, 6.5" — for error messages the UI can show verbatim. */
 export function formatAllowedAqlValues(): string {
-  return ALLOWED_AQL_VALUES.map((v) => (v !== 0 && Number.isInteger(v) ? v.toFixed(1) : String(v))).join(', ');
+  return ALLOWED_AQL_VALUES.map((v) =>
+    v !== 0 && Number.isInteger(v) ? v.toFixed(1) : String(v),
+  ).join(', ');
 }
 
 /** Thrown for an out-of-band AQL value; the service maps it to a 400. */
@@ -52,7 +58,9 @@ export class InvalidAqlPlanError extends Error {
  * the plan is explicit and self-describing: re-deriving the sampling at submit
  * can never drift because a code-level default changed after creation.
  */
-export function resolveAqlPlan(input?: RawAqlPlanInput | AqlPlanInput | null): Required<AqlPlanInput> {
+export function resolveAqlPlan(
+  input?: RawAqlPlanInput | AqlPlanInput | null,
+): Required<AqlPlanInput> {
   const resolved: Required<AqlPlanInput> = { ...DEFAULT_AQL };
   if (!input) return resolved;
   for (const cls of AQL_CLASSES) {

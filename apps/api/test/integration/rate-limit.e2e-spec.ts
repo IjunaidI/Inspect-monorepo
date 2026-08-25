@@ -15,7 +15,13 @@
  * --runInBand, so every spec file shares one process and one process.env.
  */
 import { INestApplication } from '@nestjs/common';
-import { adminCreds, ApiClient, apiClient, bootApp, loginAdmin } from './support';
+import {
+  adminCreds,
+  ApiClient,
+  apiClient,
+  bootApp,
+  loginAdmin,
+} from './support';
 
 const OVERRIDES: Record<string, string> = {
   RATE_LIMIT_AUTH_LIMIT: '2',
@@ -67,7 +73,11 @@ describe('Public-route rate limiting (INS-047)', () => {
       // Five hits at limit=2: every one must get its normal 400, never a 429.
       for (let i = 0; i < 5; i += 1) {
         const res = await client.post('/invitations/accept', {
-          body: { token: 'definitely-not-a-token', password: 'Whatever!123', name: 'X' },
+          body: {
+            token: 'definitely-not-a-token',
+            password: 'Whatever!123',
+            name: 'X',
+          },
         });
         expect(res.status).toBe(400);
       }
@@ -82,7 +92,9 @@ describe('Public-route rate limiting (INS-047)', () => {
     const { email, password } = adminCreds();
 
     // 1st: a genuine login still succeeds.
-    const first = await client.post('/auth/login', { body: { email, password } });
+    const first = await client.post('/auth/login', {
+      body: { email, password },
+    });
     expect(first.status).toBeLessThan(400);
     expect(first.body.accessToken).toBeTruthy();
 
@@ -94,27 +106,41 @@ describe('Public-route rate limiting (INS-047)', () => {
     expect(second.status).toBe(401);
 
     // 3rd: over budget — refused before the handler (and before any DB work).
-    const third = await client.post('/auth/login', { body: { email, password } });
+    const third = await client.post('/auth/login', {
+      body: { email, password },
+    });
     expect(third.status).toBe(429);
     expect(third.body.accessToken).toBeUndefined();
 
     // Still blocked on a subsequent attempt within the window.
-    const fourth = await client.post('/auth/login', { body: { email, password } });
+    const fourth = await client.post('/auth/login', {
+      body: { email, password },
+    });
     expect(fourth.status).toBe(429);
   });
 
   it('gives POST /auth/refresh its own budget (per-handler keys)', async () => {
     // /auth/login is exhausted by the previous test; refresh must be unaffected.
-    const first = await client.post('/auth/refresh', { body: { refreshToken: 'garbage' } });
+    const first = await client.post('/auth/refresh', {
+      body: { refreshToken: 'garbage' },
+    });
     expect(first.status).toBe(401);
-    const second = await client.post('/auth/refresh', { body: { refreshToken: 'garbage' } });
+    const second = await client.post('/auth/refresh', {
+      body: { refreshToken: 'garbage' },
+    });
     expect(second.status).toBe(401);
-    const third = await client.post('/auth/refresh', { body: { refreshToken: 'garbage' } });
+    const third = await client.post('/auth/refresh', {
+      body: { refreshToken: 'garbage' },
+    });
     expect(third.status).toBe(429);
   });
 
   it('throttles rapid POST /invitations/accept — 3rd hit is 429 (INS-037)', async () => {
-    const body = { token: 'definitely-not-a-token', password: 'Whatever!123', name: 'X' };
+    const body = {
+      token: 'definitely-not-a-token',
+      password: 'Whatever!123',
+      name: 'X',
+    };
     const first = await client.post('/invitations/accept', { body });
     expect(first.status).toBe(400);
     const second = await client.post('/invitations/accept', { body });
@@ -134,11 +160,17 @@ describe('Public-route rate limiting (INS-047)', () => {
   });
 
   it('throttles the guest portal reads', async () => {
-    const first = await client.get('/guest/reports?token=definitely-not-a-token');
+    const first = await client.get(
+      '/guest/reports?token=definitely-not-a-token',
+    );
     expect(first.status).toBe(401);
-    const second = await client.get('/guest/reports?token=definitely-not-a-token');
+    const second = await client.get(
+      '/guest/reports?token=definitely-not-a-token',
+    );
     expect(second.status).toBe(401);
-    const third = await client.get('/guest/reports?token=definitely-not-a-token');
+    const third = await client.get(
+      '/guest/reports?token=definitely-not-a-token',
+    );
     expect(third.status).toBe(429);
   });
 
@@ -158,7 +190,9 @@ describe('Public-route rate limiting (INS-047)', () => {
   it('leaves un-throttled @Public routes alone (only the attack surface opted in)', async () => {
     for (let i = 0; i < 5; i += 1) {
       expect((await client.get('/health')).status).toBe(200);
-      expect((await client.get('/reports/verify/definitely-not-a-token')).status).toBe(200);
+      expect(
+        (await client.get('/reports/verify/definitely-not-a-token')).status,
+      ).toBe(200);
     }
   });
 });

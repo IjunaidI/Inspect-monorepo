@@ -26,7 +26,9 @@ function scalar(value: unknown): string | undefined {
 
 export function parseListQuery(raw: RawListQuery): ListQuery {
   const takeParsed = parseInt(scalar(raw.take) ?? '', 10);
-  const take = Number.isNaN(takeParsed) ? 50 : Math.min(Math.max(takeParsed, 1), 100);
+  const take = Number.isNaN(takeParsed)
+    ? 50
+    : Math.min(Math.max(takeParsed, 1), 100);
   const skipParsed = parseInt(scalar(raw.skip) ?? '', 10);
   const skip = Number.isNaN(skipParsed) ? 0 : Math.max(skipParsed, 0);
   const q = scalar(raw.q)?.trim().slice(0, 200) || undefined;

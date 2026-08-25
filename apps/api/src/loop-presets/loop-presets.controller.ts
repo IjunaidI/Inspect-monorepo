@@ -1,5 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
-import { LoopPresetsService, CreateLoopPresetInput } from './loop-presets.service';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  LoopPresetsService,
+  CreateLoopPresetInput,
+} from './loop-presets.service';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthUser } from '../auth/auth-user';
@@ -16,7 +27,10 @@ export class LoopPresetsController {
   ) {}
 
   @Get()
-  list(@CurrentUser() user: AuthUser, @Query() query: RawListQuery & { includeArchived?: string }) {
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: RawListQuery & { includeArchived?: string },
+  ) {
     return this.presets.list(requireOrgId(user), {
       ...parseListQuery(query),
       includeArchived: query.includeArchived === '1',
@@ -44,12 +58,24 @@ export class LoopPresetsController {
       items: preset.items?.map((item) => {
         const key = item.referenceImageUrl;
         if (typeof key !== 'string' || !key.startsWith(refPrefix)) {
-          return { ...item, referenceImage: null as { key: string; viewUrl: string | null } | null };
+          return {
+            ...item,
+            referenceImage: null as {
+              key: string;
+              viewUrl: string | null;
+            } | null,
+          };
         }
         try {
-          return { ...item, referenceImage: { key, viewUrl: this.storage.presignDownload(key) } };
+          return {
+            ...item,
+            referenceImage: { key, viewUrl: this.storage.presignDownload(key) },
+          };
         } catch {
-          return { ...item, referenceImage: { key, viewUrl: null as string | null } };
+          return {
+            ...item,
+            referenceImage: { key, viewUrl: null as string | null },
+          };
         }
       }),
     };

@@ -17,7 +17,14 @@
  *
  * Pure: no NestJS, no Prisma, no I/O. Unit-tested in report-pdf.spec.ts.
  */
-import { PDFDocument, PDFFont, PDFPage, PageSizes, StandardFonts, rgb } from 'pdf-lib';
+import {
+  PDFDocument,
+  PDFFont,
+  PDFPage,
+  PageSizes,
+  StandardFonts,
+  rgb,
+} from 'pdf-lib';
 
 // ─────────────────────────── snapshot shapes ───────────────────────────
 // Structural, all-optional views of the signed payload. The snapshot is frozen
@@ -158,9 +165,9 @@ const SEVERITY_LABEL: Record<SeverityKey, string> = {
  * to an ASCII stand-in.
  */
 const CP1252_EXTRAS = new Set([
-  0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
-  0x2039, 0x0152, 0x017d, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014,
-  0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
+  0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030,
+  0x0160, 0x2039, 0x0152, 0x017d, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
+  0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
 ]);
 
 export function winAnsiSafe(value: unknown): string {
@@ -273,7 +280,12 @@ class Painter {
     return lines.flatMap((line) => this.hardBreak(line, size, font, maxWidth));
   }
 
-  private hardBreak(line: string, size: number, font: PDFFont, maxWidth: number): string[] {
+  private hardBreak(
+    line: string,
+    size: number,
+    font: PDFFont,
+    maxWidth: number,
+  ): string[] {
     if (this.width(line, size, font) <= maxWidth) return [line];
     const out: string[] = [];
     let current = '';
@@ -307,9 +319,15 @@ class Painter {
     const text = winAnsiSafe(value);
     const x = opts.x ?? MARGIN;
     const y = opts.y ?? this.y;
-    const drawX =
-      opts.align === 'right' ? x - this.width(text, size, font) : x;
-    this.page.drawText(text, { x: drawX, y, size, font, color, maxWidth: opts.maxWidth });
+    const drawX = opts.align === 'right' ? x - this.width(text, size, font) : x;
+    this.page.drawText(text, {
+      x: drawX,
+      y,
+      size,
+      font,
+      color,
+      maxWidth: opts.maxWidth,
+    });
   }
 
   /** Draw a wrapped paragraph starting at the cursor; advances y. */
@@ -336,11 +354,23 @@ class Painter {
     }
   }
 
-  rect(x: number, y: number, w: number, h: number, color: ReturnType<typeof rgb>): void {
+  rect(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    color: ReturnType<typeof rgb>,
+  ): void {
     this.page.drawRectangle({ x, y, width: w, height: h, color });
   }
 
-  hairline(y: number, color = LINE, x = MARGIN, w = CONTENT_W, thickness = 0.7): void {
+  hairline(
+    y: number,
+    color = LINE,
+    x = MARGIN,
+    w = CONTENT_W,
+    thickness = 0.7,
+  ): void {
     this.page.drawRectangle({ x, y, width: w, height: thickness, color });
   }
 
@@ -383,7 +413,9 @@ class Painter {
 
 // ─────────────────────────── the renderer ───────────────────────────
 
-export async function renderReportPdf(input: ReportPdfInput): Promise<Uint8Array> {
+export async function renderReportPdf(
+  input: ReportPdfInput,
+): Promise<Uint8Array> {
   const snap: ReportCanonicalSnapshot =
     input.canonicalSnapshot && typeof input.canonicalSnapshot === 'object'
       ? (input.canonicalSnapshot as ReportCanonicalSnapshot)
@@ -499,7 +531,11 @@ export function conclusionOf(decision: string | null | undefined): Conclusion {
   return 'pending';
 }
 
-function drawConclusionBand(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
+function drawConclusionBand(
+  p: Painter,
+  fonts: Fonts,
+  snap: ReportCanonicalSnapshot,
+): void {
   const conclusion = conclusionOf(snap.aqlResult?.qaDecision);
   const label =
     conclusion === 'pending'
@@ -539,14 +575,28 @@ function drawConclusionBand(p: Painter, fonts: Fonts, snap: ReportCanonicalSnaps
     font: fonts.bold,
     color: fg,
   });
-  p.text(label, { x: MARGIN + 36, y: bandY + 15, size: 16, font: fonts.bold, color: fg });
+  p.text(label, {
+    x: MARGIN + 36,
+    y: bandY + 15,
+    size: 16,
+    font: fonts.bold,
+    color: fg,
+  });
 
   const remarks = (snap.aqlResult?.qaRemarks ?? '').trim();
   if (remarks) {
-    const lines = p.wrap(winAnsiSafe(remarks), 9, fonts.regular, 220).slice(0, 3);
+    const lines = p
+      .wrap(winAnsiSafe(remarks), 9, fonts.regular, 220)
+      .slice(0, 3);
     let ry = bandY + 34;
     for (const line of lines) {
-      p.text(line, { x: MARGIN + CONTENT_W, y: ry, size: 9, color: SUB, align: 'right' });
+      p.text(line, {
+        x: MARGIN + CONTENT_W,
+        y: ry,
+        size: 9,
+        color: SUB,
+        align: 'right',
+      });
       ry -= 11;
     }
   }
@@ -572,7 +622,11 @@ function drawMetaGrid(
 ): void {
   const pairs: Array<[string, string, boolean]> = [
     ['Purchase order', snap.poNumber || '—', true],
-    ['Product', snap.product?.description || snap.product?.styleNumber || '—', false],
+    [
+      'Product',
+      snap.product?.description || snap.product?.styleNumber || '—',
+      false,
+    ],
     ['Style / SKU', snap.product?.styleNumber || '—', true],
     ['Supplier', snap.supplier?.name || '—', false],
     ['Inspection type', humanizeEnum(snap.inspectionType), false],
@@ -600,7 +654,11 @@ function drawMetaGrid(
   }
 }
 
-function drawSamplingPlan(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
+function drawSamplingPlan(
+  p: Painter,
+  fonts: Fonts,
+  snap: ReportCanonicalSnapshot,
+): void {
   p.section(1, 'Sampling plan (AQL)', 'ANSI/ASQ Z1.4 - single, normal');
 
   const cs = snap.computedSampling;
@@ -612,7 +670,12 @@ function drawSamplingPlan(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsho
     ['Level', snap.aqlLevel || (cs ? 'II' : '—')],
     ['Code letter', cs?.sampleSizeCodeLetter || '—'],
     ['Lot size', num(snap.lotSize)],
-    ['Units / sample', completed != null ? `${completed} / ${num(cs?.sampleSize)}` : num(cs?.sampleSize)],
+    [
+      'Units / sample',
+      completed != null
+        ? `${completed} / ${num(cs?.sampleSize)}`
+        : num(cs?.sampleSize),
+    ],
   ];
   p.ensure(46);
   const boxY = p.y - 36;
@@ -622,22 +685,58 @@ function drawSamplingPlan(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsho
     p.rect(x, boxY, boxW, 36, FILL);
     p.hairline(boxY, LINE, x, boxW, 0.6);
     p.hairline(boxY + 36, LINE, x, boxW, 0.6);
-    p.text(k.toUpperCase(), { x: x + 8, y: boxY + 23, size: 7.5, color: FAINT });
-    p.text(v, { x: x + 8, y: boxY + 8, size: 13, font: fonts.mono, color: INK });
+    p.text(k.toUpperCase(), {
+      x: x + 8,
+      y: boxY + 23,
+      size: 7.5,
+      color: FAINT,
+    });
+    p.text(v, {
+      x: x + 8,
+      y: boxY + 8,
+      size: 13,
+      font: fonts.mono,
+      color: INK,
+    });
   });
   p.y = boxY - 16;
 
   // Class | AQL | Found | Ac | Re | Result
-  const cols = [MARGIN, MARGIN + 150, MARGIN + 225, MARGIN + 295, MARGIN + 355, MARGIN + CONTENT_W];
+  const cols = [
+    MARGIN,
+    MARGIN + 150,
+    MARGIN + 225,
+    MARGIN + 295,
+    MARGIN + 355,
+    MARGIN + CONTENT_W,
+  ];
   p.ensure(24);
   p.rect(MARGIN, p.y - 6, CONTENT_W, 20, FILL);
   const headY = p.y;
   p.text('CLASS', { x: cols[0] + 6, y: headY, size: 7.5, color: SUB });
-  p.text('AQL', { x: cols[1], y: headY, size: 7.5, color: SUB, align: 'right' });
-  p.text('FOUND', { x: cols[2], y: headY, size: 7.5, color: SUB, align: 'right' });
+  p.text('AQL', {
+    x: cols[1],
+    y: headY,
+    size: 7.5,
+    color: SUB,
+    align: 'right',
+  });
+  p.text('FOUND', {
+    x: cols[2],
+    y: headY,
+    size: 7.5,
+    color: SUB,
+    align: 'right',
+  });
   p.text('AC', { x: cols[3], y: headY, size: 7.5, color: SUB, align: 'right' });
   p.text('RE', { x: cols[4], y: headY, size: 7.5, color: SUB, align: 'right' });
-  p.text('RESULT', { x: cols[5], y: headY, size: 7.5, color: SUB, align: 'right' });
+  p.text('RESULT', {
+    x: cols[5],
+    y: headY,
+    size: 7.5,
+    color: SUB,
+    align: 'right',
+  });
   p.y -= 20;
 
   for (const sev of SEVERITIES) {
@@ -650,7 +749,13 @@ function drawSamplingPlan(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsho
     const ac = result?.ac ?? plan?.ac ?? null;
     const re = result?.re ?? plan?.re ?? null;
     const rejected = re != null ? found >= re : false;
-    p.text(SEVERITY_LABEL[sev], { x: cols[0] + 6, y: p.y, size: 10, font: fonts.bold, color: INK });
+    p.text(SEVERITY_LABEL[sev], {
+      x: cols[0] + 6,
+      y: p.y,
+      size: 10,
+      font: fonts.bold,
+      color: INK,
+    });
     p.text(plan?.aql != null ? String(plan.aql) : '—', {
       x: cols[1],
       y: p.y,
@@ -667,8 +772,22 @@ function drawSamplingPlan(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsho
       color: rejected ? CRITICAL : INK,
       align: 'right',
     });
-    p.text(num(ac), { x: cols[3], y: p.y, size: 9.5, font: fonts.mono, color: SUB, align: 'right' });
-    p.text(num(re), { x: cols[4], y: p.y, size: 9.5, font: fonts.mono, color: SUB, align: 'right' });
+    p.text(num(ac), {
+      x: cols[3],
+      y: p.y,
+      size: 9.5,
+      font: fonts.mono,
+      color: SUB,
+      align: 'right',
+    });
+    p.text(num(re), {
+      x: cols[4],
+      y: p.y,
+      size: 9.5,
+      font: fonts.mono,
+      color: SUB,
+      align: 'right',
+    });
     p.text(result?.outcome === 'FAIL' || rejected ? 'Reject' : 'Accept', {
       x: cols[5],
       y: p.y,
@@ -681,13 +800,23 @@ function drawSamplingPlan(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsho
   }
 }
 
-function drawQuantityCheck(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
+function drawQuantityCheck(
+  p: Painter,
+  fonts: Fonts,
+  snap: ReportCanonicalSnapshot,
+): void {
   p.section(2, 'Quantity & carton check');
   const q = snap.quantity ?? {};
   const rows: Array<[string, string]> = [
     ['Lot size (declared)', snap.lotSize != null ? `${snap.lotSize} pcs` : '—'],
-    ['Quantity presented', q.quantityPresented != null ? `${q.quantityPresented} pcs` : '—'],
-    ['Quantity shortfall', q.quantityShortfall != null ? `${q.quantityShortfall} pcs` : '—'],
+    [
+      'Quantity presented',
+      q.quantityPresented != null ? `${q.quantityPresented} pcs` : '—',
+    ],
+    [
+      'Quantity shortfall',
+      q.quantityShortfall != null ? `${q.quantityShortfall} pcs` : '—',
+    ],
     ['Cartons total', num(q.cartonsTotal)],
     ['Cartons inspected', num(q.cartonsInspected)],
   ];
@@ -708,8 +837,14 @@ function drawQuantityCheck(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsh
   }
 }
 
-function defectCounts(snap: ReportCanonicalSnapshot): Record<SeverityKey, number> {
-  const counts: Record<SeverityKey, number> = { critical: 0, major: 0, minor: 0 };
+function defectCounts(
+  snap: ReportCanonicalSnapshot,
+): Record<SeverityKey, number> {
+  const counts: Record<SeverityKey, number> = {
+    critical: 0,
+    major: 0,
+    minor: 0,
+  };
   for (const d of snap.defects ?? []) {
     const sev = (d.severity ?? '').toLowerCase() as SeverityKey;
     if (sev in counts) counts[sev] += 1;
@@ -717,14 +852,24 @@ function defectCounts(snap: ReportCanonicalSnapshot): Record<SeverityKey, number
   return counts;
 }
 
-function drawDefectSummary(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
+function drawDefectSummary(
+  p: Painter,
+  fonts: Fonts,
+  snap: ReportCanonicalSnapshot,
+): void {
   p.section(3, 'Defect summary');
   const counts = defectCounts(snap);
   for (const sev of SEVERITIES) {
     const result = snap.aqlResult?.perClass?.[sev];
     const found = result?.found ?? counts[sev];
     p.ensure(18);
-    p.text(SEVERITY_LABEL[sev], { x: MARGIN, y: p.y, size: 10, font: fonts.bold, color: INK });
+    p.text(SEVERITY_LABEL[sev], {
+      x: MARGIN,
+      y: p.y,
+      size: 10,
+      font: fonts.bold,
+      color: INK,
+    });
     p.text(String(found), {
       x: MARGIN + CONTENT_W,
       y: p.y,
@@ -738,15 +883,27 @@ function drawDefectSummary(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsh
     p.y -= 8;
   }
   p.ensure(14);
-  p.text('Defects found within the sample.', { x: MARGIN, y: p.y, size: 8.5, color: FAINT });
+  p.text('Defects found within the sample.', {
+    x: MARGIN,
+    y: p.y,
+    size: 8.5,
+    color: FAINT,
+  });
   p.y -= 12;
 }
 
-function drawDefectNarrative(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
+function drawDefectNarrative(
+  p: Painter,
+  fonts: Fonts,
+  snap: ReportCanonicalSnapshot,
+): void {
   const defects = snap.defects ?? [];
   p.section(4, 'Defect detail', `${defects.length} recorded`);
   if (defects.length === 0) {
-    p.paragraph('No defects were recorded during this inspection.', { size: 9.5, color: SUB });
+    p.paragraph('No defects were recorded during this inspection.', {
+      size: 9.5,
+      color: SUB,
+    });
     return;
   }
   // INS-081: the defect carries its slot — (item position, cycle) — and items[]
@@ -760,8 +917,14 @@ function drawDefectNarrative(p: Painter, fonts: Fonts, snap: ReportCanonicalSnap
       itemNameByPosition.set(position, item.itemName || `Item ${position}`);
     }
   });
-  const slotLabel = (d: { itemPosition?: number | null; cycleIndex?: number | null }): string => {
-    const item = d.itemPosition != null ? itemNameByPosition.get(d.itemPosition) : undefined;
+  const slotLabel = (d: {
+    itemPosition?: number | null;
+    cycleIndex?: number | null;
+  }): string => {
+    const item =
+      d.itemPosition != null
+        ? itemNameByPosition.get(d.itemPosition)
+        : undefined;
     const unit = d.cycleIndex != null ? `Unit ${d.cycleIndex + 1}` : null;
     return [unit, item].filter(Boolean).join(' · ');
   };
@@ -772,7 +935,9 @@ function drawDefectNarrative(p: Painter, fonts: Fonts, snap: ReportCanonicalSnap
     // narrative names custom text verbatim and falls back to the catalog id.
     const title =
       (d.customText ?? '').trim() ||
-      (d.defectCatalogId ? `Catalog defect ${d.defectCatalogId}` : 'Unspecified defect');
+      (d.defectCatalogId
+        ? `Catalog defect ${d.defectCatalogId}`
+        : 'Unspecified defect');
     p.ensure(26);
     p.text(String(i + 1).padStart(2, '0'), {
       x: MARGIN,
@@ -815,11 +980,18 @@ function drawDefectNarrative(p: Painter, fonts: Fonts, snap: ReportCanonicalSnap
   });
 }
 
-function drawPhotoEvidence(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
+function drawPhotoEvidence(
+  p: Painter,
+  fonts: Fonts,
+  snap: ReportCanonicalSnapshot,
+): void {
   const hashes = snap.photoHashes ?? [];
   p.section(5, 'Photo evidence', `${hashes.length} photo(s)`);
   if (hashes.length === 0) {
-    p.paragraph('No photo evidence was captured for this inspection.', { size: 9.5, color: SUB });
+    p.paragraph('No photo evidence was captured for this inspection.', {
+      size: 9.5,
+      color: SUB,
+    });
     return;
   }
   p.paragraph(
@@ -837,12 +1009,22 @@ function drawPhotoEvidence(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapsh
       font: fonts.mono,
       color: FAINT,
     });
-    p.text(winAnsiSafe(h), { x: MARGIN + 26, y: p.y, size: 8.5, font: fonts.mono, color: SUB });
+    p.text(winAnsiSafe(h), {
+      x: MARGIN + 26,
+      y: p.y,
+      size: 8.5,
+      font: fonts.mono,
+      color: SUB,
+    });
     p.y -= 12;
   });
 }
 
-function drawMeasurementSheet(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
+function drawMeasurementSheet(
+  p: Painter,
+  fonts: Fonts,
+  snap: ReportCanonicalSnapshot,
+): void {
   const rows = snap.measurements ?? [];
   if (rows.length === 0) return;
 
@@ -859,8 +1041,20 @@ function drawMeasurementSheet(p: Painter, fonts: Fonts, snap: ReportCanonicalSna
   p.ensure(20);
   p.rect(MARGIN, p.y - 6, CONTENT_W, 20, FILL);
   p.text('POINT', { x: MARGIN + 6, y: p.y, size: 7.5, color: SUB });
-  p.text('RECORDED', { x: MARGIN + CONTENT_W - 90, y: p.y, size: 7.5, color: SUB, align: 'right' });
-  p.text('UNIT', { x: MARGIN + CONTENT_W, y: p.y, size: 7.5, color: SUB, align: 'right' });
+  p.text('RECORDED', {
+    x: MARGIN + CONTENT_W - 90,
+    y: p.y,
+    size: 7.5,
+    color: SUB,
+    align: 'right',
+  });
+  p.text('UNIT', {
+    x: MARGIN + CONTENT_W,
+    y: p.y,
+    size: 7.5,
+    color: SUB,
+    align: 'right',
+  });
   p.y -= 20;
 
   for (const cycleIndex of cycles) {
@@ -898,7 +1092,11 @@ function drawMeasurementSheet(p: Painter, fonts: Fonts, snap: ReportCanonicalSna
   }
 }
 
-function drawNotes(p: Painter, fonts: Fonts, snap: ReportCanonicalSnapshot): void {
+function drawNotes(
+  p: Painter,
+  fonts: Fonts,
+  snap: ReportCanonicalSnapshot,
+): void {
   const workmanship = (snap.workmanshipNotes ?? '').trim();
   const packaging = (snap.packagingNotes ?? '').trim();
   const remarks = (snap.aqlResult?.qaRemarks ?? '').trim();
@@ -935,7 +1133,13 @@ function drawTamperProofFooter(
   p.hairline(boxTop, LINE, MARGIN, CONTENT_W, 0.8);
 
   let y = boxTop - 18;
-  p.text('TAMPER-PROOF RECORD', { x: MARGIN + 14, y, size: 8.5, font: fonts.bold, color: SUB });
+  p.text('TAMPER-PROOF RECORD', {
+    x: MARGIN + 14,
+    y,
+    size: 8.5,
+    font: fonts.bold,
+    color: SUB,
+  });
   p.text('Immutable - v1', {
     x: MARGIN + CONTENT_W - 14,
     y,
@@ -945,20 +1149,46 @@ function drawTamperProofFooter(
     align: 'right',
   });
   y -= 16;
-  p.text('Content hash (SHA-256)', { x: MARGIN + 14, y, size: 7.5, color: FAINT });
+  p.text('Content hash (SHA-256)', {
+    x: MARGIN + 14,
+    y,
+    size: 7.5,
+    color: FAINT,
+  });
   y -= 11;
-  p.text(input.contentHash, { x: MARGIN + 14, y, size: 8, font: fonts.mono, color: INK });
+  p.text(input.contentHash, {
+    x: MARGIN + 14,
+    y,
+    size: 8,
+    font: fonts.mono,
+    color: INK,
+  });
   y -= 15;
-  p.text('Signature (Ed25519, base64)', { x: MARGIN + 14, y, size: 7.5, color: FAINT });
+  p.text('Signature (Ed25519, base64)', {
+    x: MARGIN + 14,
+    y,
+    size: 7.5,
+    color: FAINT,
+  });
   y -= 11;
-  const sigLines = p.wrap(winAnsiSafe(input.signature), 8, fonts.mono, CONTENT_W - 28);
+  const sigLines = p.wrap(
+    winAnsiSafe(input.signature),
+    8,
+    fonts.mono,
+    CONTENT_W - 28,
+  );
   for (const line of sigLines.slice(0, 2)) {
     p.text(line, { x: MARGIN + 14, y, size: 8, font: fonts.mono, color: INK });
     y -= 10;
   }
   y -= 3;
   if (input.verificationUrl) {
-    p.text('Verify independently at', { x: MARGIN + 14, y, size: 7.5, color: FAINT });
+    p.text('Verify independently at', {
+      x: MARGIN + 14,
+      y,
+      size: 7.5,
+      color: FAINT,
+    });
     p.text(input.verificationUrl, {
       x: MARGIN + 120,
       y,
@@ -984,12 +1214,15 @@ function drawTamperProofFooter(
 function drawPageNumbers(p: Painter, fonts: Fonts, reportId: string): void {
   const pages = p.allPages();
   pages.forEach((page, i) => {
-    page.drawText(winAnsiSafe(`${reportNo(reportId)}  -  page ${i + 1} of ${pages.length}`), {
-      x: MARGIN,
-      y: 26,
-      size: 7.5,
-      font: fonts.mono,
-      color: FAINT,
-    });
+    page.drawText(
+      winAnsiSafe(`${reportNo(reportId)}  -  page ${i + 1} of ${pages.length}`),
+      {
+        x: MARGIN,
+        y: 26,
+        size: 7.5,
+        font: fonts.mono,
+        color: FAINT,
+      },
+    );
   });
 }

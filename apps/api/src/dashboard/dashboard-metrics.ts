@@ -27,7 +27,12 @@ export type QaDecisionKey = QaDecision | 'PENDING';
 /** Every key is always present (0 by default) so the console never reads `undefined`. */
 export type QaDecisionCounts = Record<QaDecisionKey, number>;
 
-export const QA_DECISION_KEYS: readonly QaDecisionKey[] = ['PASS', 'FAIL', 'HOLD', 'PENDING'];
+export const QA_DECISION_KEYS: readonly QaDecisionKey[] = [
+  'PASS',
+  'FAIL',
+  'HOLD',
+  'PENDING',
+];
 
 export interface QualityMetrics {
   /** Decided AQL results that actually contributed to DPHU (had a usable sampleSize). */
@@ -70,7 +75,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /** A finite, non-negative count; anything else folds to 0 rather than poisoning a sum with NaN. */
 function safeCount(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : 0;
 }
 
 export function emptyQaDecisionCounts(): QaDecisionCounts {
@@ -139,7 +146,8 @@ export function computeQualityMetrics(
     decidedInspections,
     sampledUnits,
     defectsFound,
-    dphu: sampledUnits > 0 ? round((100 * defectsFound) / sampledUnits, 2) : null,
+    dphu:
+      sampledUnits > 0 ? round((100 * defectsFound) / sampledUnits, 2) : null,
     passRate: verdicts > 0 ? round((100 * counts.PASS) / verdicts, 1) : null,
     verdicts,
     truncated: rows.length >= scanLimit,

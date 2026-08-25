@@ -12,7 +12,10 @@ import { guestRateLimit } from '../common/throttler.config';
  * before ConfigModule has loaded the repo-root .env into process.env.
  */
 const guestThrottle = {
-  public: { ttl: () => guestRateLimit().ttl, limit: () => guestRateLimit().limit },
+  public: {
+    ttl: () => guestRateLimit().ttl,
+    limit: () => guestRateLimit().limit,
+  },
 };
 
 interface RequestLike {

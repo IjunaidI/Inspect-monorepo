@@ -23,7 +23,10 @@ describe('normalizeGps (INS-071)', () => {
   });
 
   it('accepts the boundary values', () => {
-    expect(normalizeGps({ lat: -90, lng: -180 })).toEqual({ lat: -90, lng: -180 });
+    expect(normalizeGps({ lat: -90, lng: -180 })).toEqual({
+      lat: -90,
+      lng: -180,
+    });
     expect(normalizeGps({ lat: 90, lng: 180 })).toEqual({ lat: 90, lng: 180 });
   });
 
@@ -51,41 +54,70 @@ describe('normalizeGps (INS-071)', () => {
   });
 
   it('rejects out-of-range coordinates', () => {
-    expect(() => normalizeGps({ lat: 999, lng: 0 })).toThrow(BadRequestException);
-    expect(() => normalizeGps({ lat: -90.1, lng: 0 })).toThrow(BadRequestException);
-    expect(() => normalizeGps({ lat: 0, lng: 180.5 })).toThrow(BadRequestException);
-    expect(() => normalizeGps({ lat: 0, lng: -200 })).toThrow(BadRequestException);
+    expect(() => normalizeGps({ lat: 999, lng: 0 })).toThrow(
+      BadRequestException,
+    );
+    expect(() => normalizeGps({ lat: -90.1, lng: 0 })).toThrow(
+      BadRequestException,
+    );
+    expect(() => normalizeGps({ lat: 0, lng: 180.5 })).toThrow(
+      BadRequestException,
+    );
+    expect(() => normalizeGps({ lat: 0, lng: -200 })).toThrow(
+      BadRequestException,
+    );
   });
 });
 
 describe('SuppliersService gps write path (INS-071)', () => {
-  const ACTOR = { userId: 'u1', orgId: 'orgA', role: 'ORG_OWNER' } as unknown as AuthUser;
+  const ACTOR = {
+    userId: 'u1',
+    orgId: 'orgA',
+    role: 'ORG_OWNER',
+  } as unknown as AuthUser;
 
   function makeService() {
-    const create = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 's1', ...data }));
-    const update = jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 's1', ...data }));
+    const create = jest.fn(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 's1',
+        ...data,
+      }),
+    );
+    const update = jest.fn(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        id: 's1',
+        ...data,
+      }),
+    );
     const prisma = {
-      supplier: { findFirst: jest.fn(async () => ({ id: 's1', orgId: 'orgA' })), create, update },
+      supplier: {
+        findFirst: jest.fn(async () => ({ id: 's1', orgId: 'orgA' })),
+        create,
+        update,
+      },
       // INS-006: writes audit inside their own transaction.
       $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
     };
     const audit = { append: jest.fn(async () => ({})) };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const service = new SuppliersService(prisma as any, audit as any);
     return { service, create, update, audit };
   }
-  const dataOf = (mock: jest.Mock) => mock.mock.calls[0][0].data as Record<string, unknown>;
+  const dataOf = (mock: jest.Mock) =>
+    mock.mock.calls[0][0].data as Record<string, unknown>;
 
   it('create persists canonical coordinates', async () => {
     const { service, create } = makeService();
-    await service.create('orgA', ACTOR, { name: 'Mill', gps: { lat: 11.1085, lng: 77.3411 } });
+    await service.create('orgA', ACTOR, {
+      name: 'Mill',
+      gps: { lat: 11.1085, lng: 77.3411 },
+    });
     expect(dataOf(create).gps).toEqual({ lat: 11.1085, lng: 77.3411 });
   });
 
   it('create rejects bad input instead of silently dropping it', async () => {
     const { service, create } = makeService();
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       service.create('orgA', ACTOR, { name: 'Mill', gps: { foo: 1 } as any }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(create).not.toHaveBeenCalled();

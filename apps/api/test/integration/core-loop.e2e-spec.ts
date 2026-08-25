@@ -104,23 +104,29 @@ describe('Core inspection loop (integration)', () => {
 
   it('populates as the cross-tenant Platform Admin: presign, register into a slot, tag, measure', async () => {
     const presign = expect2xx(
-      await client.post(`/inspections/${inspectionId}/populate/photos/presign`, {
-        token: adminToken,
-        body: { ext: 'jpg' },
-      }),
+      await client.post(
+        `/inspections/${inspectionId}/populate/photos/presign`,
+        {
+          token: adminToken,
+          body: { ext: 'jpg' },
+        },
+      ),
       'populate presign',
     );
     expect(presign.storageKey).toBeTruthy();
     expect(presign.uploadUrl).toBeTruthy();
 
-    const contentHash = createHash('sha256').update(`e2e-photo-${tag}`).digest('hex');
+    const contentHash = createHash('sha256')
+      .update(`e2e-photo-${tag}`)
+      .digest('hex');
     const photo = expect2xx(
       await client.post(`/inspections/${inspectionId}/populate/photos`, {
         token: adminToken,
         body: {
           storageKey: presign.storageKey,
           contentHash,
-          inspectionLoopItemId: loopId, cycleIndex: 0,
+          inspectionLoopItemId: loopId,
+          cycleIndex: 0,
           clientRequestId: `photo-${tag}`,
         },
       }),
@@ -136,7 +142,8 @@ describe('Core inspection loop (integration)', () => {
       ...(ws.minorDefectId
         ? { defectCatalogId: ws.minorDefectId, notes: 'e2e' }
         : { customText: 'Loose thread (e2e)', severity: 'MINOR' }),
-      inspectionLoopItemId: loopId, cycleIndex: 0,
+      inspectionLoopItemId: loopId,
+      cycleIndex: 0,
       photoIds: [photoId],
       clientRequestId: `defect-${tag}`,
     };
@@ -163,7 +170,12 @@ describe('Core inspection loop (integration)', () => {
     const measurement = expect2xx(
       await client.post(`/inspections/${inspectionId}/populate/measurements`, {
         token: adminToken,
-        body: { cycleIndex: 0, label: 'Length', recordedValue: '42.0', unit: 'cm' },
+        body: {
+          cycleIndex: 0,
+          label: 'Length',
+          recordedValue: '42.0',
+          unit: 'cm',
+        },
       }),
       'populate record measurement',
     );
@@ -172,17 +184,24 @@ describe('Core inspection loop (integration)', () => {
 
   it('inspection detail returns the loop evidence on reload (photos/defects/measurements)', async () => {
     const detail = expect2xx(
-      await client.get(`/inspections/${inspectionId}`, { token: org.ownerToken }),
+      await client.get(`/inspections/${inspectionId}`, {
+        token: org.ownerToken,
+      }),
       'GET /inspections/:id (evidence includes)',
     );
     const loop = detail.items?.find((l: { id: string }) => l.id === loopId);
     expect(loop).toBeTruthy();
-    expect(loop.photos?.some((p: { id: string }) => p.id === photoId)).toBe(true);
+    expect(loop.photos?.some((p: { id: string }) => p.id === photoId)).toBe(
+      true,
+    );
     // Exactly one: the INS-044 replay above must not have created a duplicate.
     expect(loop.defects?.length).toBe(1);
     // INS-081: measurements are per-CYCLE and hang off the inspection, not the item.
     expect(
-      detail.measurements?.some((m: { label: string; cycleIndex: number }) => m.label === 'Length' && m.cycleIndex === 0),
+      detail.measurements?.some(
+        (m: { label: string; cycleIndex: number }) =>
+          m.label === 'Length' && m.cycleIndex === 0,
+      ),
     ).toBe(true);
   });
 
@@ -199,10 +218,13 @@ describe('Core inspection loop (integration)', () => {
   });
 
   it('rejects populate writes once the inspection is locked (immutability)', async () => {
-    const res = await client.post(`/inspections/${inspectionId}/populate/measurements`, {
-      token: adminToken,
-      body: { cycleIndex: 0, label: 'Late', recordedValue: '1', unit: 'cm' },
-    });
+    const res = await client.post(
+      `/inspections/${inspectionId}/populate/measurements`,
+      {
+        token: adminToken,
+        body: { cycleIndex: 0, label: 'Late', recordedValue: '1', unit: 'cm' },
+      },
+    );
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.status).toBeLessThan(500);
   });
@@ -220,7 +242,9 @@ describe('Core inspection loop (integration)', () => {
 
   it('generates the Ed25519-signed report, idempotently', async () => {
     const report = expect2xx(
-      await client.post(`/inspections/${inspectionId}/report`, { token: org.ownerToken }),
+      await client.post(`/inspections/${inspectionId}/report`, {
+        token: org.ownerToken,
+      }),
       'POST /inspections/:id/report',
     );
     reportId = report.id;
@@ -230,7 +254,9 @@ describe('Core inspection loop (integration)', () => {
     expect(report.signature).toBeTruthy();
 
     const again = expect2xx(
-      await client.post(`/inspections/${inspectionId}/report`, { token: org.ownerToken }),
+      await client.post(`/inspections/${inspectionId}/report`, {
+        token: org.ownerToken,
+      }),
       'POST /inspections/:id/report (regenerate)',
     );
     expect(again.id).toBe(reportId);
@@ -297,8 +323,14 @@ describe('Core inspection loop (integration)', () => {
     );
     expect(fetched.id).toBe(reportId);
 
-    const foreignOrg = await createOrgWithOwner(client, adminToken, `${tag}-foreign`);
-    const res = await client.get(`/reports/${reportId}`, { token: foreignOrg.ownerToken });
+    const foreignOrg = await createOrgWithOwner(
+      client,
+      adminToken,
+      `${tag}-foreign`,
+    );
+    const res = await client.get(`/reports/${reportId}`, {
+      token: foreignOrg.ownerToken,
+    });
     expect(res.status).toBe(404);
   });
 
@@ -313,7 +345,9 @@ describe('Core inspection loop (integration)', () => {
     expect(guestRes.token).toBeTruthy();
 
     const guestReports = expect2xx(
-      await client.get(`/guest/reports?token=${encodeURIComponent(guestRes.token)}`),
+      await client.get(
+        `/guest/reports?token=${encodeURIComponent(guestRes.token)}`,
+      ),
       'GET /guest/reports (public magic link)',
     );
     expect(Array.isArray(guestReports)).toBe(true);

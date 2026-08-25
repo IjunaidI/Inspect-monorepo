@@ -11,7 +11,7 @@
     "start": "node dist/main",
     "start:prod": "node dist/main",
     "start:debug": "nest start --debug --watch",
-    "lint": "eslint \"{src,test}/**/*.ts\" --fix",
+    "lint": "eslint \"{src,test}/**/*.ts\"",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -24,7 +24,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "lint:fix": "eslint \"{src,test}/**/*.ts\" --fix"
   },
   "dependencies": {
     "@inspect/shared-types": "workspace:^",
