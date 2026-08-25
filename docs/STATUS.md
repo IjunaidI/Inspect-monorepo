@@ -1,6 +1,34 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-08-26 (RN migration designed + scaffolded; Phase 0 started — [INS-082](future/BACKLOG.md) DONE:
+> **Last verified: 2026-08-26 (RN migration designed + scaffolded; **Phase 0 substantially complete — 7 of 9
+> items closed**).** Approach A is specified ([INS-086](future/BACKLOG.md)) and Phase 0 — the hardening that makes
+> the platform safe to refactor — is done except for one user-side item and one deliberately deferred epic.
+> **Closed this session:** [INS-082](future/BACKLOG.md) the console's first test suite (Vitest, 32 tests, each
+> behaviour mutation-verified); **INS-010/011/014/015/018/046** — the DB-level invariants proved live, and the
+> backlog's "Needs a human" note claiming the migration was unapplied had been **stale for three weeks** (it went in
+> during INS-081); the genuinely-missing `organization_name_unique` migration applied after renaming an empty
+> duplicate "Polo" org, so **all 5 migrations are now applied**; [INS-008](future/BACKLOG.md) the shared-types
+> contract, swept in two passes (enums, then the counterparty DTOs the INS-055 gate names) with all 17 enum tuples
+> first diffed against the Prisma enums so the sweep could not change a value; [INS-083](future/BACKLOG.md) populate
+> opened to `INSPECTOR` with row-level scoping; [INS-048](future/BACKLOG.md) ESLint 9 flat configs for both apps and
+> lint is now a **CI gate**; [INS-084](future/BACKLOG.md) a committed OpenAPI contract carrying every route's role
+> floor; [INS-034](future/BACKLOG.md) reduced to `guest` alone. [INS-055](future/BACKLOG.md)'s **plan Phase 0 gate is
+> met** (P1–P8 signed off, INS-008 verified real, baseline measured) with Phases 1–9 deliberately unstarted.
+> **Two findings worth carrying forward:** populate was `@Roles('PLATFORM_ADMIN')` on the *whole* controller, so an
+> app with no admin mode could not have captured a single photo — and the fix was not the role floor but the bare
+> `findUnique(id)` behind it, which had no tenant filter at all and was safe only while its one caller was
+> cross-tenant by design; and [INS-085](future/BACKLOG.md)'s Windows Jest exit-134 **did not reproduce** across four
+> consecutive runs on Node 24, so it is annotated rather than closed. The OpenAPI contract independently confirms the
+> RBAC re-grade: all 7 populate routes now read `INSPECTOR`, and the **only** `PLATFORM_ADMIN` operations left in the
+> entire API are `GET`/`POST /admin/orgs` — exactly the surface the mobile app excludes by design, which means the
+> app can now reach everything it needs.
+> **Verified end-to-end at close:** `pnpm lint` 0 errors · `pnpm type-check` 4/4 · `pnpm test` 3/3 (**api 597 / 41
+> suites**, web 32 / 2) · `pnpm build` 3/3 · **integration 139 passing / 15 suites, exit 0** against the live
+> Postgres + Redis + S3, with **zero SKIP lines** so the DB-invariant assertions are real rather than vacuous.
+> **Still open in Phase 0:** [INS-002](future/BACKLOG.md) credential rotation (user-side — needs the Railway
+> account) and [INS-055](future/BACKLOG.md) Phases 1–9 (multi-session; two irreversible steps and a security phase).
+>
+> Prior entry: **2026-08-26 (RN migration designed + scaffolded; Phase 0 started — [INS-082](future/BACKLOG.md) DONE:
 > `apps/web` has a test suite for the first time).** **Phase 0 progress:** [INS-082](future/BACKLOG.md) landed —
 > Vitest in `apps/web` (`pnpm web test`, picked up by root `pnpm test`) with **32 characterization tests across 2
 > files** covering the behaviours Phase 1's extraction puts at risk: the additive role hierarchy and its
@@ -76,8 +104,13 @@
   join, non-JSON error bodies, no-auth-header on public helpers, the `X-Org-Id` PLATFORM_ADMIN-only rule, `__Secure-`
   cookie-name detection, `loadOrFallback`'s six branches, and token refresh incl. the stale-token fallback). Run with
   `pnpm web test`; included in root `pnpm test`. **Every behaviour verified by mutation** — see the INS-082 entry.
-- **API (Jest, unit): 569 passing across 39 suites** (re-measured 2026-08-26; the 565 recorded on 2026-08-13 had
-  drifted — suite count unchanged at 39). New in INS-081: `cycle-state.spec.ts` (the pure completeness rule — partial cycles, ordering by item position, gap-tolerant next-slot allocation), plus reshaped submit-gate, preset, populate (slot addressing, retake, discard, per-cycle measurements) and report-snapshot specs. Note: `pnpm api test` exits 134 on Windows from a Jest **parallel-worker teardown** crash *after* all tests report green; `jest --runInBand` exits 0.
+- **API (Jest, unit): 597 passing across 41 suites** (measured 2026-08-26 at Phase 0 close). Grew from 569/39 with
+  the INS-083 scoping tests (7, written RED first) and the INS-034 specs for `defect-catalog` (10) and
+  `purchase-orders` (11). Note the 565 recorded on 2026-08-13 had already drifted to 569 before this session.
+- **Integration (Jest, real DB): 139 passing across 15 suites, exit 0** (measured 2026-08-26). New:
+  `populate-rbac.e2e-spec.ts` (10 — the INS-083 boundary proved live). `db-invariants.e2e-spec.ts` ran with **zero
+  SKIP lines**, so its assertions are real; two pre-existing tests were deliberately superseded and annotated in
+  place rather than silently changed (see INS-083). New in INS-081: `cycle-state.spec.ts` (the pure completeness rule — partial cycles, ordering by item position, gap-tolerant next-slot allocation), plus reshaped submit-gate, preset, populate (slot addressing, retake, discard, per-cycle measurements) and report-snapshot specs. Note: `pnpm api test` exits 134 on Windows from a Jest **parallel-worker teardown** crash *after* all tests report green; `jest --runInBand` exits 0.
 - **Integration (Jest, real DB): 129 passing across 14 suites** (measured 2026-08-13). New in INS-081: `populate-cycles.e2e-spec.ts` — submit blocked mid-cycle naming the unit and its missing item, unblocked by either finishing or discarding the unit, 409 on a filled slot pointing at retake, retake-in-place, per-unit measurement idempotency, and the LOCKED guard covering retake + discard.
 - **Superseded baseline — API (Jest, unit): 533 passing across 38 suites** (measured 2026-08-01, all pure-unit, no DB). Grew from 204/26 in the backlog-clearing pass with: `audit.service.spec.ts` (INS-013 — sequence assignment, prevEntryHash linkage, the advisory lock, P2002 retry), `populate.service.spec.ts` (INS-007 — the LOCKED set, catalog-XOR-custom, the cross-tenant orgId derivation, replay/conflict), `reports.service.spec.ts` + `report-pdf.spec.ts` (INS-019/003), `storage.service.spec.ts` (INS-060 placeholder-credential guard), `throttler.config.spec.ts` (INS-047, incl. right-to-left X-Forwarded-For resolution), `dashboard-metrics.spec.ts` (INS-068 DPHU/passRate), `aql-plan-input.spec.ts` (INS-063), `suppliers.service.spec.ts` (INS-071), `products.service.spec.ts` (INS-074), `buyers.controller.spec.ts`, an extended `inspections.service.spec.ts` (INS-021 create/submit/decision lifecycle), and audit-on-write assertions in the buyers + populate specs (INS-006).
 - **Superseded baseline — API (Jest, unit): 204 passing** across 26 suites — all pure-unit, **no DB**. Exact per-suite counts, measured 2026-08-01: (AQL 39 + aql-preview 3, auth 26 [rbac 5 / jwt 6 / password 5 / auth.service 10], tamper-proof 14 [canonicalize 5 / content-hash 5 / signature 4], audit-chain 7, storage/sigv4 8, inspection-mapping 6, inspections.service 12, app 1; invitations 10, buyers 10 — security review + sweep; mail 9 + mail-inspection 2, users 16, orgs 4, buyer-guests 4 — INS-004; list-query 5, config 5, loop-presets 10 — 2026-07-12 sweep; **2026-07-18 (meeting batch 1):** `mail-inspection.spec.ts` (status-change email templates) + extended `inspections.service.spec.ts` (submit-evidence gate), `users.service.spec.ts` (self-guards/reactivate/direct-add), `buyers.service.spec.ts` (restore/idempotent re-archive); **new 2026-07-25 (INS-079):** `jwt-auth.guard.spec.ts` (11 cases — the `X-Org-Id` tenant boundary: honored only for a verified PLATFORM_ADMIN, ignored for each org role, absent header leaves orgId null) + `audit/actor-type.spec.ts` (`actorTypeFor` helper) + extended `auth.service.spec.ts`/`buyers.service.spec.ts`/`inspections.service.spec.ts`/`users.service.spec.ts` (actor-attribution at the real call sites).)
