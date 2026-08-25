@@ -371,8 +371,14 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(loop.photos.length).toBe(1);
       expect(loop.photos[0].id).toBe(photoId);
 
+      // INS-083 deliberately supersedes the original assertion here (403). While
+      // populate carried a PLATFORM_ADMIN floor, org A's own owner was refused
+      // the read of org A's own inspection — a consequence of the floor, not a
+      // boundary anyone wanted. The floor is now INSPECTOR with a row-level
+      // scope, so the owner of the owning org gets 200 and the real boundary
+      // (other orgs, unassigned inspectors) is asserted in populate-rbac.e2e-spec.ts.
       const owner = await client.get(`/inspections/${insp.id}/populate`, { token: orgA.ownerToken });
-      expect(owner.status).toBe(403);
+      expect(owner.status).toBe(200);
     });
 
     it('I3: assigning a DEACTIVATED user via PATCH /inspections/:id is refused (400)', async () => {

@@ -163,12 +163,17 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       expect(res.status).toBe(403);
     });
 
-    it('ORG_OWNER cannot use the populate console (PLATFORM_ADMIN floor)', async () => {
+    it('ORG_OWNER reaches the populate console but is scoped to their own org (INS-083)', async () => {
+      // Was a 403 while populate carried a PLATFORM_ADMIN floor. INS-083 dropped
+      // that floor to INSPECTOR so the role that performs an inspection can
+      // capture evidence, and moved the boundary from the role check to a
+      // row-level scope. So the route is now REACHABLE for an org role and an
+      // unknown id resolves to 404 — never a 403, which would confirm existence.
       const res = await client.post('/inspections/any-id/populate/photos/presign', {
         token: orgA.ownerToken,
         body: { ext: 'jpg' },
       });
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(404);
     });
 
     it('the no-org PLATFORM_ADMIN is refused on org-scoped routes (tenant guard)', async () => {

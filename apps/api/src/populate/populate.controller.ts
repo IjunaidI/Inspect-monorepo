@@ -12,9 +12,20 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { AuthUser } from '../auth/auth-user';
 
 /**
- * The Admin populate console (spec §1/§4): in MVP the Platform Admin owns the
- * entire populate step. orgId is derived from the target inspection, not the
- * caller (the Platform Admin is cross-tenant, orgId=null).
+ * The populate console (spec §1/§4) — the evidence-capture step.
+ *
+ * INS-083: the floor is `INSPECTOR`, not `PLATFORM_ADMIN`. Capture is the one
+ * job that belongs to the person physically holding the garment, and the mobile
+ * app (INS-086) has no Platform Admin mode at all, so an admin-only populate
+ * would make the app pointless. Widening the floor is only half of it — the
+ * row-level scope lives in `PopulateService.scopeFor`, which confines an
+ * INSPECTOR to inspections assigned to them and any org role to its own org,
+ * while the Platform Admin stays cross-tenant. Without that scope this floor
+ * would be a cross-tenant hole, because the lookup used to be a bare
+ * `findUnique(id)` that was safe only while the sole caller was cross-tenant.
+ *
+ * orgId is still derived from the target inspection, never from the caller
+ * (the Platform Admin is cross-tenant, orgId=null).
  *
  * Idempotency (INS-016): `clientRequestId` on POST photos/defects is scoped to
  * ONE inspection. Replaying it against the same inspection returns the original
@@ -22,18 +33,22 @@ import { AuthUser } from '../auth/auth-user';
  * See `PopulateService.replayOrConflict` for the full contract.
  */
 @Controller('inspections/:inspectionId/populate')
-@Roles('PLATFORM_ADMIN')
+@Roles('INSPECTOR')
 export class PopulateController {
   constructor(private readonly populate: PopulateService) {}
 
   @Get()
-  load(@Param('inspectionId') inspectionId: string) {
-    return this.populate.loadForPopulate(inspectionId);
+  load(@CurrentUser() user: AuthUser, @Param('inspectionId') inspectionId: string) {
+    return this.populate.loadForPopulate(inspectionId, user);
   }
 
   @Post('photos/presign')
-  presign(@Param('inspectionId') inspectionId: string, @Body() body: PresignInput) {
-    return this.populate.presignPhotoUpload(inspectionId, body ?? {});
+  presign(
+    @CurrentUser() user: AuthUser,
+    @Param('inspectionId') inspectionId: string,
+    @Body() body: PresignInput,
+  ) {
+    return this.populate.presignPhotoUpload(inspectionId, user, body ?? {});
   }
 
   @Post('photos')

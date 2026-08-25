@@ -6,7 +6,8 @@
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
 > **Last updated: 2026-08-26** — ledger created. Nothing migrated yet; `apps/mobile` does not exist until
-> Phase 2.
+> Phase 2. The capture row is **no longer blocked**: [INS-083](../future/BACKLOG.md) dropped populate to an
+> `INSPECTOR` floor with row-level scoping, so the app's headline screen is reachable by the role that will use it.
 
 ## Status values
 
@@ -25,7 +26,7 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 |---|---|---|---|---|---|---|
 | `/login` | `/login` | `POST /auth/login`, `GET /auth/me` | public | 2 | not-started | INS-086 |
 | `/inspections` | `/inspections` | `GET /inspections` | `INSPECTOR` | 2 | not-started | INS-086 |
-| `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*` | ⚠ `PLATFORM_ADMIN` → `INSPECTOR` | 3 | **blocked** | [INS-083](../future/BACKLOG.md) |
+| `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*` | `INSPECTOR` ✅ | 3 | not-started | INS-086 |
 | `/dashboard` | `/dashboard` | `GET /dashboard/summary`, `GET /buyers`, `GET /suppliers` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/[id]/review` | `/inspections/[id]/review` | `POST /inspections/:id/decision` | `QA_MANAGER` | 4 | not-started | INS-086 |

@@ -23,7 +23,10 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
   // so an inspector can land here) — the API remains the RBAC authority on
   // POST /:id/decision, the populate screen, and POST /inspections.
   const canDecide = apiRoleAtLeast(role, 'QA_MANAGER');
-  const canPopulate = role === 'PLATFORM_ADMIN';
+  // INS-083: populate dropped from a PLATFORM_ADMIN floor to INSPECTOR, so the
+  // Populate link is offered to anyone who can capture. The API still decides
+  // whether this particular inspection is theirs to touch.
+  const canPopulate = apiRoleAtLeast(role, 'INSPECTOR');
 
   let inspection: ApiInspection | null = null;
   try {

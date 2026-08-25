@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -77,8 +78,39 @@ export class PopulateService {
     private readonly audit: AuditService,
   ) {}
 
-  private async loadOpenInspection(inspectionId: string) {
-    const insp = await this.prisma.inspection.findUnique({ where: { id: inspectionId } });
+  /**
+   * INS-083 — row-level scope for every populate route.
+   *
+   * Populate was `PLATFORM_ADMIN`-only, so the inspection lookup was a bare
+   * `findUnique(id)` with no tenant filter — correct for a principal that is
+   * cross-tenant by design, and a cross-tenant hole the moment an org role is
+   * let through. Now that the mobile app (INS-086) needs `INSPECTOR` to capture
+   * evidence, the scope has to travel with the actor:
+   *
+   *   PLATFORM_ADMIN → unscoped (unchanged; orgId is derived from the inspection)
+   *   QA_MANAGER / ORG_OWNER → their org
+   *   INSPECTOR → their org AND only inspections assigned to them
+   *
+   * Folded into the `where` rather than checked after the read, so a foreign id
+   * resolves to 404 instead of 403 — same rule as `InspectionsService`
+   * (INS-057): a 403 would confirm the row exists and turn the endpoint into an
+   * existence oracle for other people's work.
+   */
+  private scopeFor(actor: AuthUser): { orgId?: string; assignedInspectorId?: string } {
+    if (actor?.role === 'PLATFORM_ADMIN') return {};
+    if (!actor?.orgId) {
+      throw new ForbiddenException('No organization context');
+    }
+    return {
+      orgId: actor.orgId,
+      ...(actor.role === 'INSPECTOR' ? { assignedInspectorId: actor.userId } : {}),
+    };
+  }
+
+  private async loadOpenInspection(inspectionId: string, actor: AuthUser) {
+    const insp = await this.prisma.inspection.findFirst({
+      where: { id: inspectionId, ...this.scopeFor(actor) },
+    });
     if (!insp) {
       throw new NotFoundException('Inspection not found');
     }
@@ -165,14 +197,14 @@ export class PopulateService {
     }
   }
 
-  async presignPhotoUpload(inspectionId: string, input: PresignInput) {
-    const insp = await this.loadOpenInspection(inspectionId);
+  async presignPhotoUpload(inspectionId: string, actor: AuthUser, input: PresignInput) {
+    const insp = await this.loadOpenInspection(inspectionId, actor);
     const storageKey = this.storage.keyForPhoto(insp.orgId, insp.id, input?.ext ?? 'jpg');
     return { storageKey, uploadUrl: this.storage.presignUpload(storageKey), method: 'PUT' };
   }
 
   async registerPhoto(inspectionId: string, actor: AuthUser, input: RegisterPhotoInput) {
-    const insp = await this.loadOpenInspection(inspectionId);
+    const insp = await this.loadOpenInspection(inspectionId, actor);
     if (!input?.storageKey) throw new BadRequestException('storageKey is required');
     if (!input?.contentHash) throw new BadRequestException('contentHash is required');
     if (!input?.inspectionLoopItemId) {
@@ -277,7 +309,7 @@ export class PopulateService {
     photoId: string,
     input: RetakePhotoInput,
   ) {
-    const insp = await this.loadOpenInspection(inspectionId);
+    const insp = await this.loadOpenInspection(inspectionId, actor);
     if (!input?.storageKey) throw new BadRequestException('storageKey is required');
     if (!input?.contentHash) throw new BadRequestException('contentHash is required');
     const photo = await this.prisma.photo.findFirst({ where: { id: photoId, inspectionId } });
@@ -326,7 +358,7 @@ export class PopulateService {
    * NOT offered; that is what would create an unfinishable hole in history.
    */
   async discardCycle(inspectionId: string, actor: AuthUser, cycleIndex: number) {
-    const insp = await this.loadOpenInspection(inspectionId);
+    const insp = await this.loadOpenInspection(inspectionId, actor);
     this.assertCycleIndex(cycleIndex);
     return this.prisma.$transaction(async (tx) => {
       // Defects first: their DefectInstancePhoto junction rows must go with
@@ -365,7 +397,7 @@ export class PopulateService {
   }
 
   async addDefect(inspectionId: string, actor: AuthUser, input: AddDefectInput) {
-    const insp = await this.loadOpenInspection(inspectionId);
+    const insp = await this.loadOpenInspection(inspectionId, actor);
     // Idempotency (INS-044/INS-016): a replayed add-defect (double-click /
     // offline sync) returns the original row — a phantom duplicate could flip
     // the per-class AQL verdict on submit. Reusing the token against a
@@ -478,14 +510,15 @@ export class PopulateService {
    * cross-tenant (orgId=null), so the org-scoped `InspectionsService.get()`
    * (which runs `requireOrgId(user)`) 403s for them — the only role allowed
    * to populate could never load the workspace. This mirrors that read's
-   * include shape (spec §6) but looks the inspection up by id only, matching
-   * the write routes' established cross-tenant populate contract (see the
-   * controller's class doc comment). It deliberately skips the LOCKED guard
-   * so a submitted inspection can still be viewed read-only.
+   * include shape (spec §6) but resolves the inspection through `scopeFor`
+   * (INS-083) rather than the org-scoped read: the admin stays cross-tenant
+   * while an org role is confined to its own org, and an INSPECTOR to their own
+   * assignments. It deliberately skips the LOCKED guard so a submitted
+   * inspection can still be viewed read-only.
    */
-  async loadForPopulate(inspectionId: string) {
-    const inspection = await this.prisma.inspection.findUnique({
-      where: { id: inspectionId },
+  async loadForPopulate(inspectionId: string, actor: AuthUser) {
+    const inspection = await this.prisma.inspection.findFirst({
+      where: { id: inspectionId, ...this.scopeFor(actor) },
       include: {
         buyer: true,
         supplier: true,
@@ -549,7 +582,7 @@ export class PopulateService {
    * updates the row instead of duplicating the point.
    */
   async addMeasurement(inspectionId: string, actor: AuthUser, input: AddMeasurementInput) {
-    const insp = await this.loadOpenInspection(inspectionId);
+    const insp = await this.loadOpenInspection(inspectionId, actor);
     this.assertCycleIndex(input?.cycleIndex);
     if (!input?.label?.trim()) throw new BadRequestException('label is required');
     const label = input.label.trim();

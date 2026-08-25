@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PopulateService } from './populate.service';
 import { AuthUser } from '../auth/auth-user';
@@ -111,7 +116,14 @@ function makeService(opts: HarnessOpts = {}) {
 
   const prisma = {
     inspection: {
+      // INS-083: the service now resolves the inspection through a SCOPED
+      // findFirst. Both are stubbed to the same row so these tests keep
+      // exercising the cross-tenant Platform-Admin path they were written for
+      // (scopeFor returns {} for PLATFORM_ADMIN, so the where is id-only).
       findUnique: jest.fn(async () =>
+        inspectionExists ? { id: INSPECTION_ID, orgId: TENANT_ORG, status } : null,
+      ),
+      findFirst: jest.fn(async () =>
         inspectionExists ? { id: INSPECTION_ID, orgId: TENANT_ORG, status } : null,
       ),
     },
@@ -251,7 +263,7 @@ describe('PopulateService immutability guard (INS-007)', () => {
   it.each(LOCKED_STATUSES)('refuses every populate write when status is %s', async (status) => {
     const h = makeService({ status });
 
-    await expect(h.service.presignPhotoUpload(INSPECTION_ID, {})).rejects.toBeInstanceOf(
+    await expect(h.service.presignPhotoUpload(INSPECTION_ID, ADMIN_USER, {})).rejects.toBeInstanceOf(
       BadRequestException,
     );
     await expect(
@@ -310,7 +322,7 @@ describe('PopulateService immutability guard (INS-007)', () => {
     const h = makeService({ status: 'REPORT_ISSUED' });
     // Prisma include shape returns undefined relations from the bare mock row;
     // the point is that it resolves rather than throwing the LOCKED guard.
-    await expect(h.service.loadForPopulate(INSPECTION_ID)).resolves.toMatchObject({
+    await expect(h.service.loadForPopulate(INSPECTION_ID, ADMIN_USER)).resolves.toMatchObject({
       id: INSPECTION_ID,
     });
   });
@@ -640,7 +652,7 @@ describe('PopulateService cross-tenant Platform-Admin scoping (INS-007)', () => 
 
   it('derives the presigned upload key from the inspection’s org', async () => {
     const h = makeService();
-    const out = await h.service.presignPhotoUpload(INSPECTION_ID, { ext: 'png' });
+    const out = await h.service.presignPhotoUpload(INSPECTION_ID, ADMIN_USER, { ext: 'png' });
     expect(h.storage.keyForPhoto).toHaveBeenCalledWith(TENANT_ORG, INSPECTION_ID, 'png');
     expect(out.method).toBe('PUT');
     expect(out.uploadUrl).toBe('https://s3.example/put');
@@ -826,5 +838,117 @@ describe('PopulateService.addMeasurement — per-cycle sheet (INS-081)', () => {
       },
     });
     expect(args.update).toMatchObject({ recordedValue: '53' });
+  });
+});
+
+/**
+ * INS-083 — row-level scoping now that populate is no longer Platform-Admin-only.
+ *
+ * The mobile app (INS-086) has no PLATFORM_ADMIN mode, so the role that actually
+ * performs an inspection has to be able to capture evidence. Widening the
+ * controller's role floor is the easy half; the load-bearing half is that
+ * `loadOpenInspection` used a bare `findUnique(id)` with NO tenant filter — safe
+ * only because the single allowed caller was cross-tenant by design. Letting an
+ * org role through that lookup unscoped would be a cross-tenant read/write hole.
+ *
+ * These tests drive the lookup through a fake that really evaluates the `where`
+ * against a fixture row, so they assert on the outcome (found / not found) rather
+ * than on what was passed to a mock.
+ */
+describe('PopulateService — actor scoping (INS-083)', () => {
+  const ORG_A = 'org-a';
+  const ORG_B = 'org-b';
+  const ASSIGNEE = 'u-inspector-assigned';
+  const INSP = 'insp-scoped';
+
+  /** The one inspection that exists: org A, assigned to ASSIGNEE, still open. */
+  const ROW = {
+    id: INSP,
+    orgId: ORG_A,
+    status: 'IN_PROGRESS',
+    assignedInspectorId: ASSIGNEE,
+    items: [],
+    measurements: [],
+  };
+
+  /** Evaluates a Prisma-style equality `where` against ROW, like the database would. */
+  function matches(where: Record<string, unknown> = {}): boolean {
+    return Object.entries(where).every(([k, v]) => (ROW as Record<string, unknown>)[k] === v);
+  }
+
+  function scopedService() {
+    const findFirst = jest.fn(async (args?: { where?: Record<string, unknown> }) =>
+      matches(args?.where) ? ROW : null,
+    );
+    const prisma = {
+      inspection: { findFirst, findUnique: findFirst },
+      inspectionLoopItem: { findFirst: jest.fn(async () => ({ id: 'item-1' })) },
+      photo: { findFirst: jest.fn(async () => null), count: jest.fn(async () => 0) },
+    } as unknown as ConstructorParameters<typeof PopulateService>[0];
+    const storage = {
+      keyForPhoto: () => 'storage-key',
+      presignUpload: () => 'https://example.invalid/upload',
+    } as unknown as ConstructorParameters<typeof PopulateService>[1];
+    const audit = { append: jest.fn() } as unknown as ConstructorParameters<typeof PopulateService>[2];
+    return new PopulateService(prisma, storage, audit);
+  }
+
+  const actor = (role: string, over: Partial<AuthUser> = {}): AuthUser =>
+    ({ userId: 'u-actor', orgId: ORG_A, role, actingAsOrgId: null, ...over }) as AuthUser;
+
+  it('lets the assigned INSPECTOR load the inspection', async () => {
+    const svc = scopedService();
+    await expect(
+      svc.loadForPopulate(INSP, actor('INSPECTOR', { userId: ASSIGNEE })),
+    ).resolves.toMatchObject({ id: INSP });
+  });
+
+  it('hides the inspection from an INSPECTOR it is not assigned to — 404, never 403', async () => {
+    const svc = scopedService();
+    // 404 not 403: a 403 would confirm the row exists, turning the endpoint into
+    // an existence oracle for other inspectors' work (the INS-057 rule).
+    await expect(
+      svc.loadForPopulate(INSP, actor('INSPECTOR', { userId: 'u-someone-else' })),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('lets a QA_MANAGER in the owning org load it without being the assignee', async () => {
+    const svc = scopedService();
+    await expect(svc.loadForPopulate(INSP, actor('QA_MANAGER'))).resolves.toMatchObject({ id: INSP });
+  });
+
+  it('hides the inspection from a QA_MANAGER in another org', async () => {
+    const svc = scopedService();
+    await expect(
+      svc.loadForPopulate(INSP, actor('QA_MANAGER', { orgId: ORG_B })),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('keeps the PLATFORM_ADMIN cross-tenant, as before', async () => {
+    const svc = scopedService();
+    // Unchanged behaviour: orgId is null and the admin still reaches any org's
+    // inspection, which is what the whole cross-tenant populate path relies on.
+    await expect(
+      svc.loadForPopulate(INSP, actor('PLATFORM_ADMIN', { orgId: null })),
+    ).resolves.toMatchObject({ id: INSP });
+  });
+
+  it('refuses an org role that somehow carries no org context', async () => {
+    const svc = scopedService();
+    await expect(
+      svc.loadForPopulate(INSP, actor('QA_MANAGER', { orgId: null })),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('scopes the write path too, not just the read', async () => {
+    const svc = scopedService();
+    // presign is the first step of capture; if it were unscoped an inspector
+    // could mint an upload URL against another org's inspection.
+    await expect(
+      svc.presignPhotoUpload(INSP, actor('INSPECTOR', { userId: 'u-someone-else' }), {}),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      svc.presignPhotoUpload(INSP, actor('INSPECTOR', { userId: ASSIGNEE }), {}),
+    ).resolves.toMatchObject({ storageKey: expect.any(String) });
   });
 });
