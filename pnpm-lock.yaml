@@ -20,6 +20,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@inspect/domain':
+        specifier: workspace:^
+        version: link:../../packages/domain
       '@inspect/shared-types':
         specifier: workspace:^
         version: link:../../packages/shared-types

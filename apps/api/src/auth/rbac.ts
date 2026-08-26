@@ -1,9 +1,17 @@
+import { ROLE_RANK } from '@inspect/domain';
 import type { UserRole } from '@inspect/shared-types';
 
 /**
  * Additive role hierarchy (spec §4): each higher role inherits everything below.
  *
  * INSPECTOR < QA_MANAGER < ORG_OWNER < PLATFORM_ADMIN.
+ *
+ * INS-086 Phase 1: the rank table itself now lives in `@inspect/domain`, shared
+ * with the console and the mobile app, so the hierarchy is declared exactly once
+ * (spec §4.4 — every migration must reduce total logic). This module stays the
+ * API's authority: it is what `RolesGuard` calls, and it keeps the strict
+ * `Role`-typed signature that ~40 call sites depend on, where the shared helper
+ * deliberately takes a loose `string | undefined` for client-side session data.
  *
  * Pure logic — used by RolesGuard. `Role` is an alias of `UserRole` from
  * `@inspect/shared-types` (INS-008), which is the single source of truth for the
@@ -13,12 +21,7 @@ import type { UserRole } from '@inspect/shared-types';
  */
 export type Role = UserRole;
 
-export const ROLE_RANK: Readonly<Record<Role, number>> = {
-  INSPECTOR: 1,
-  QA_MANAGER: 2,
-  ORG_OWNER: 3,
-  PLATFORM_ADMIN: 4,
-};
+export { ROLE_RANK };
 
 /** True if `userRole` meets or exceeds `requiredRole` in the additive hierarchy. */
 export function hasAtLeast(userRole: Role, requiredRole: Role): boolean {

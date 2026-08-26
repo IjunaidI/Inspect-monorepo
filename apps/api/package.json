@@ -29,6 +29,7 @@
     "openapi:generate": "ts-node --transpile-only scripts/generate-openapi.ts"
   },
   "dependencies": {
+    "@inspect/domain": "workspace:^",
     "@inspect/shared-types": "workspace:^",
     "@keyv/redis": "^5.1.6",
     "@nestjs/cache-manager": "^3.1.2",
