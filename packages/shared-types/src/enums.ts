@@ -83,7 +83,7 @@ export type ReportAccessAction = (typeof REPORT_ACCESS_ACTIONS)[number];
 export const AUDIT_ACTOR_TYPES = [
   'USER',
   'PLATFORM_ADMIN',
-  'BUYER_GUEST',
+  'COMPANY_GUEST',
   'SYSTEM',
 ] as const;
 export type AuditActorType = (typeof AUDIT_ACTOR_TYPES)[number];
@@ -101,3 +101,14 @@ export const AQL_CODE_LETTERS = [
   'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R',
 ] as const;
 export type AqlCodeLetter = (typeof AQL_CODE_LETTERS)[number];
+
+/**
+ * Company OWNERSHIP, not trade role (INS-055 spec §2.1). Whether a company acts
+ * as the client or the factory is a property of the PurchaseOrder / Inspection /
+ * Report edge, never of the row — the same company can be a client on one PO and
+ * the factory on another. There is deliberately no `role` and no
+ * `canBeClient` / `canBeFactory` flag (spec §0 P3): flags would re-encode the
+ * Buyer/Supplier split this model exists to remove.
+ */
+export const COMPANY_KINDS = ['INTERNAL', 'THIRD_PARTY'] as const;
+export type CompanyKind = (typeof COMPANY_KINDS)[number];
