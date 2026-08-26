@@ -8,6 +8,29 @@ runs an ISO 2859-1 / Z1.4 acceptance-sampling calc, a QA Manager makes the bindi
 per-buyer-branded PDF report is generated and **Ed25519-signed** so the buyer can verify it independently.
 MVP is **web-first** (admin/QA console + API); mobile camera capture is a deliberate Phase-2 follow-up.
 
+> ## ⚠️ TEMPORARY — pre-production: the database holds nothing of value
+>
+> **This project is in development and has no production deployment.** The Railway database is a scratch
+> dev database. **No data in it is important**, and no decision should be shaped by a wish to preserve it.
+>
+> Concretely, you do **not** need to weigh, hedge, or ask permission before:
+> - dropping, recreating, truncating or reseeding any table;
+> - writing destructive or irreversible migrations — including the `Company` model's merge and
+>   table-drop phases ([INS-055](docs/future/BACKLOG.md) Phases 2 and 8);
+> - `prisma migrate reset`, or a clean-break migration that abandons existing rows;
+> - changing the schema freely, including renaming or removing columns and models.
+>
+> Pick the **correct end-state design** and migrate to it directly. Do not carry backfills, compatibility
+> shims or lineage columns that exist only to protect dev rows — they are cost with no benefit here.
+>
+> What this does **not** relax: the domain invariants below, tenant isolation, and the tamper-proof/audit
+> guarantees. Those are correctness properties of the code, not of the data, and every one of them still
+> has to hold — and stay tested — after any reset. Signed-artifact rules (a report's canonical snapshot is
+> frozen, verification must still pass) apply to reports the code produces *after* the change, even when
+> every historical row is thrown away.
+>
+> **Remove this block before any real deployment or first real customer data.**
+
 > **Start every session at [docs/STATUS.md](docs/STATUS.md)** — the source-of-truth dashboard. Open work is
 > [docs/future/BACKLOG.md](docs/future/BACKLOG.md) (`INS-NNN` ids). Requirements (frozen v1.0):
 > [docs/done/specs/2026-06-06-inspect-mvp-requirements-design.md](docs/done/specs/2026-06-06-inspect-mvp-requirements-design.md).

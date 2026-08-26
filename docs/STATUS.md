@@ -26,7 +26,14 @@
 > suites**, web 32 / 2) · `pnpm build` 3/3 · **integration 139 passing / 15 suites, exit 0** against the live
 > Postgres + Redis + S3, with **zero SKIP lines** so the DB-invariant assertions are real rather than vacuous.
 > **Still open in Phase 0:** [INS-002](future/BACKLOG.md) credential rotation (user-side — needs the Railway
-> account) and [INS-055](future/BACKLOG.md) Phases 1–9 (multi-session; two irreversible steps and a security phase).
+> account). [INS-055](future/BACKLOG.md) is the remaining critical-path work and is **now materially smaller**: a
+> ⚠️ TEMPORARY policy block was added to the repo-root `CLAUDE.md` on 2026-08-26 declaring this a pre-production
+> project whose database holds **nothing of value**, so destructive migrations, clean breaks, resets and free schema
+> changes need no hedging. Most of the Company plan's 10 phases exist purely to preserve rows and can be collapsed —
+> see the next-session block below. The invariants, tenant isolation and tamper-proof guarantees are unaffected:
+> they are properties of the code, not the data, and must still hold and stay tested after any reset.
+> **CI is deliberately unverified this session** — 11 commits sit unpushed on `main` and the two new gates (lint,
+> OpenAPI staleness) have never run on Linux.
 >
 > Prior entry: **2026-08-26 (RN migration designed + scaffolded; Phase 0 started — [INS-082](future/BACKLOG.md) DONE:
 > `apps/web` has a test suite for the first time).** **Phase 0 progress:** [INS-082](future/BACKLOG.md) landed —
@@ -142,6 +149,46 @@
 | Infra & CI | working-with-gaps | Stack **boots and drives the full loop green** against the Railway managed Postgres+Redis (2026-06-20, 25-step smoke; `/health` db+redis up); `.env.example` scrubbed (INS-002, live-cred rotation pending). **2026-07-11: 36-test integration suite green vs the live DB + GitHub Actions CI (containerized Postgres/Redis/MinIO) — INS-009 done; INS-001 closed.** Still: `@inspect/shared-types` built but **unlinked** (INS-008), lint broken repo-wide so not CI-gated (INS-048), local MinIO needs Docker. | [reference/inspect-build-index.md](reference/inspect-build-index.md) | INS-002, INS-008, INS-048 |
 
 ## Active work
+
+### ▶️ NEXT SESSION STARTS HERE — INS-055, and read this first
+
+**Phase 0 of the RN programme is closed except for [INS-002](future/BACKLOG.md) (user-side credential
+rotation). The critical path is now [INS-055](future/BACKLOG.md), the Company model** — decision D5 put it
+*before* the shared contract is frozen, so RN Phase 1 (extraction into
+`@inspect/{api-client,domain,design-tokens}`) waits on it.
+
+**⚠️ Re-scope the plan before executing it.** [The authored plan](in-progress/plans/2026-08-01-inspect-company-model.md)
+is 10 phases, and most of that structure exists to **preserve existing rows** — a 1:1 backfill, lineage
+columns, a human-adjudicated dedupe, a staged table drop. The repo-root `CLAUDE.md` now states that this is a
+pre-production project whose database holds nothing of value, which removes that entire constraint. Under
+that rule the epic collapses to roughly:
+
+1. Write the **correct final schema** — `Company` with `kind`, the two role FKs (`clientCompanyId` +
+   `factoryCompanyId`) on PO/Inspection/Report, `CompanyGuest` — with **no** `Buyer`/`Supplier` tables and
+   **no** lineage columns.
+2. Clean-break migration + `prisma migrate reset` + reseed. No backfill, no dedupe phase, no staged drop.
+3. Repoint the API, the console and `@inspect/shared-types` at it in one pass.
+
+The plan's phases 1, 2 and 8 largely evaporate; **its §2 role model, §4 guest-visibility predicate and §5
+canonical v1/v2 versioning still stand and are still binding** — those are correctness decisions about the
+code, not migration bookkeeping. Canonical **v2 is still needed**: `verifyByToken` must keep verifying any
+v1 report the code produced, and the presentation readers must handle both shapes. Do not skip that because
+the dev rows are disposable — the requirement is about the *format*, not the data.
+
+**Do first, in one command:** re-read the P1–P8 sign-off in
+[the spec's §0](in-progress/specs/2026-08-01-inspect-company-model-design.md) (all eight defaults confirmed
+2026-08-26, no overrides; P1 stands, so two role FKs), then write the new schema.
+
+**Baseline to beat, measured 2026-08-26:** unit **597 / 41 suites**, integration **139 / 15, exit 0**,
+`pnpm type-check` 4/4, `pnpm lint` 0 errors, `pnpm build` 3/3.
+
+**Known-unverified, deliberately deferred:** the 11 commits on `main` are **unpushed**, and CI has never run
+the two gates added this session — `pnpm lint` (new ESLint 9 flat configs) and the OpenAPI staleness check
+(`pnpm api openapi:generate` + `git diff --exit-code`, which boots the real Nest container and so needs the
+Postgres/Redis service containers up at that step). Everything was verified locally on Windows; Linux CI is
+unproven. Watch line endings — `.prettierrc` now sets `endOfLine: auto` to suppress ~15,800 false CRLF
+errors on Windows, which should be inert on Linux.
+
 - **🚧 React Native migration — design + scaffolding done, Phase 0 next (2026-08-26, [INS-086](future/BACKLOG.md)).**
   Approach A (shared logic core, UI per platform) is specified and the `.claude/` machinery to execute it
   screen-by-screen exists. **Phase 0 is the immediate work and it is platform hardening, not mobile code:**
