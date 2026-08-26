@@ -17,7 +17,7 @@
 > **A follow-up drift pass found three more live bugs of ONE shape, and closed the hole they came through.**
 > `apiGet<T>(path)` **asserts** a response shape rather than checking one, so a wire DTO that disagrees with
 > the API is invisible to `tsc`, to `next build` and to every suite. Cross-checking every DTO field against
-> its Prisma model surfaced four phantoms, three of them user-visible:
+> its Prisma model surfaced **five** phantoms, three of them user-visible:
 > **(a)** `DefectCatalogItemDto.severity` where `GET /defect-catalog` sends `defaultSeverity` — the populate
 > screen groups its defect chips with `catalog.filter(c => c.severity === …)`, so **all three severity groups
 > were empty and an inspector could not tag a single catalog defect** on the product's headline screen. It
@@ -27,11 +27,18 @@
 > properly; the phantom is removed so nothing reads it again). **(c)** `InspectionDto.inspectorId`, dead and
 > dangerous: the only `inspectorId` in the schema lives *inside* `tamperProof` and means the ACTUAL
 > submitter, which the schema comment explicitly distinguishes from the assigned inspector.
+> **(d)** `GuestReportPhotoDto.inspectionLoopId` — a name **INS-081** retired when loops became loop *items*,
+> while `guest.service` selects `inspectionLoopItemId`. It was itself unmapped by the guard's first version,
+> which is why the guard now also asserts that **every** DTO is either mapped to a model or explicitly
+> declared computed: escaping by omission is the quiet way a guard stops guarding.
 > **The hole is now closed permanently:** `apps/api/src/common/wire-contract.spec.ts` asserts every wire DTO
 > field exists on the model it describes, with an explicit allowlist for genuine decorations (presigned
 > `viewUrl`, `_count`, server-computed `cycleState`). It lives in `apps/api` because the API is the producer
 > and `schema.prisma` is its source of truth. Mutation-verified: reintroducing `buyer` fails it. It carries a
 > non-vacuity guard too, since a regex that silently matches nothing would make it worse than no test at all.
+> It also states what it does **not** catch — nested object shapes, a field the service's `select` omits, and
+> types — so a green run is not mistaken for a verified wire. Closing those needs response schemas in
+> `openapi.json`, which [INS-084](future/BACKLOG.md) deliberately left out (routes and role floors only).
 > **Also fixed in that pass:** [INS-088](future/BACKLOG.md) — `login`/`me`/`refresh` moved into
 > `@inspect/api-client`, so `lib/auth.ts` now holds no raw `fetch`, no `Buffer` and no hand-assembled
 > `Authorization` header, and Phase 2 cannot implement the exchange a second time. `decodeJwtExp` was rebuilt
@@ -72,7 +79,7 @@
 > duplication to remove and no reason to make the API depend on a package it does not need.
 > **Verified:** `pnpm type-check` **10/10 clean** · `pnpm lint` **0 errors** (1 pre-existing font warning) ·
 > `pnpm build` **6/6** · **web 38 passing / 3 files** (32 unchanged + 6 new token assertions) ·
-> **api unit 654 / 42 suites, exit 0** (634 at the extraction, +20 from the new wire-contract guard) ·
+> **api unit 656 / 42 suites, exit 0** (634 at the extraction, +22 from the new wire-contract guard) ·
 > new package suites **`@inspect/domain` 11/2** and **`@inspect/api-client` 29/2**.
 > **Integration: not green, and not this branch's doing.** Two full `--runInBand` runs took **805s** and
 > **849s** and reported **129/147** then **146/147** — with NO overlap in which suites failed. The
@@ -267,14 +274,22 @@
   Phase 1 extraction and passed unchanged through all of it** — a red one there is a real regression, never a
   test to update. The 6 new ones assert the composed `ui.font` / `mono` strings verbatim, because a mangled
   font stack fails no build. Run with `pnpm web test`; included in root `pnpm test`.
+- **API wire-contract guard: 22 assertions** in `apps/api/src/common/wire-contract.spec.ts`
+  ([INS-086](future/BACKLOG.md)) — every DTO field must exist on the Prisma model it describes, every DTO
+  must be mapped or explicitly declared computed, and both parsers must have matched something. This is the
+  test that would have caught all five phantom fields; it is mutation-verified (reintroducing `buyer` fails
+  it) and it documents what it cannot see (nested shapes, omitted `select`s, types).
 - **`@inspect/domain` (Vitest): 11 passing across 2 suites** ([INS-086](future/BACKLOG.md) Phase 1) —
   `roles.test.ts` (6: the additive hierarchy, the fail-closed branch for an unknown or missing role, and the
   shape of the single `ROLE_RANK` table both the API and the console now read) and `text.test.ts` (5).
-- **`@inspect/api-client` (Vitest): 13 passing across 1 suite** ([INS-086](future/BACKLOG.md) Phase 1) —
+- **`@inspect/api-client` (Vitest): 29 passing across 2 suites** ([INS-086](future/BACKLOG.md) Phase 1) —
   proves the client works with **zero framework mocks**: injected bearer + `X-Org-Id`, **no auth headers ever
   on the public helpers**, `ApiError` carrying status/path/body, validation-array joining, the non-JSON
   fallback message, and 204/empty decoding. The contrast with `apps/web/lib/api.test.ts`'s mock preamble is
-  the coupling this package removed.
+  the coupling this package removed. `auth.test.ts` (16, [INS-088](future/BACKLOG.md)) covers the credential
+  exchange: login sending no bearer even with a provider configured, `me` using the token it is GIVEN rather
+  than the provider's, refresh returning null rather than throwing on every failure path, and `decodeJwtExp`
+  on non-ASCII payloads and unpadded base64url — the two cases a naive `atob` gets wrong.
 - **API (Jest, unit): 634 passing across 41 suites, exit 0** (measured 2026-08-26 at INS-055 close). Net of
   INS-055: **+20** `reports/canonical.spec.ts` (the pure v1/v2 readers, incl. hostile-marker and spoofed-key
   cases), **+68** `companies/*.spec.ts` (the merged Buyers+Suppliers suites plus `kind` validation and the
@@ -347,7 +362,7 @@ duplicate React in the workspace. Pin React once at the root and have CI assert 
 **Still open and user-side:** [INS-002](future/BACKLOG.md) credential rotation — it needs the Railway
 account, and unlike the extraction, Phase 2 **does** depend on it for EAS/app-store credentials.
 
-**Baseline to preserve, measured 2026-08-27:** api unit **654 / 42 exit 0**, web **38 / 3**,
+**Baseline to preserve, measured 2026-08-27:** api unit **656 / 42 exit 0**, web **38 / 3**,
 `@inspect/domain` **11 / 2**, `@inspect/api-client` **29 / 2**, `pnpm type-check` **10/10**, `pnpm lint`
 **0 errors**, `pnpm build` **6/6**.
 
@@ -357,7 +372,7 @@ account, and unlike the extraction, Phase 2 **does** depend on it for EAS/app-st
    `buyer` while the API sends `clientCompany`. Nothing else on those screens has been looked at. The dev DB
    has **no curated workspace** — all 104 orgs are `E2E Org …` fixtures — so create an org + two companies +
    a PO first, or the console shows only test noise.
-2. **Push and let CI run.** **18 commits** now sit unpushed on `main` + this branch. Linux has never run
+2. **Push and let CI run.** **20 commits** now sit unpushed on `main` + this branch. Linux has never run
    `pnpm lint`, the OpenAPI staleness gate, or the three INS-055 migrations replaying from scratch — and
    that replay is the one to watch, because migration B breaks the INS-014 triggers and migration C repairs
    them. CI will also be the first honest read on the integration flakiness below, since it runs against

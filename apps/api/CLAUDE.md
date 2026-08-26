@@ -69,3 +69,8 @@ do not create one.
 - Integration specs live in `test/integration/` as `*.e2e-spec.ts` and run against real Postgres + Redis.
 - New domain logic is TDD. A DB-bound change is not verified until the integration suite says so —
   "compiles" is not "works".
+- **`src/common/wire-contract.spec.ts` guards the shapes this API sends.** Every DTO in
+  `@inspect/shared-types/src/api-dtos.ts` must name fields that exist on the Prisma model it describes. If it
+  fails, either the DTO is wrong (a client has been reading `undefined` from that field) or you added a real
+  decoration — put it in `DECORATIONS` with a reason. Renaming a column without renaming its DTO field fails
+  here, which is the point: `apiGet<T>` asserts shapes rather than checking them, so nothing else catches it.
