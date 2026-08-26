@@ -33,6 +33,15 @@ vi.mock('./admin-org', () => ({ getAssumedOrgId: () => getAssumedOrgId() }));
 
 const fetchMock = vi.fn();
 
+/**
+ * A FRESH Response per call. `mockResolvedValue(new Response(...))` hands the
+ * same object to every call, and a Response body can only be read once — so a
+ * test making two requests fails with "Body has already been read". Use this
+ * whenever a test issues more than one.
+ */
+const replyWith = (body: BodyInit | null, init?: ResponseInit) =>
+  fetchMock.mockImplementation(() => Promise.resolve(new Response(body, init)));
+
 /** A live session JWT, far from expiry so the refresh path stays out of the way. */
 function activeSession(role: string) {
   return {
@@ -72,12 +81,18 @@ describe('apiGetPublic', () => {
 
   test('throws ApiError carrying the HTTP status so callers can branch on it', async () => {
     const { apiGetPublic, ApiError } = await import('./api');
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ message: 'Gone' }), { status: 410 }));
+    // Two calls, so each needs its own Response — see `replyWith`. With a
+    // shared one the second call's body read fails and the assertion below
+    // passes only because the generated fallback message still carries 410.
+    replyWith(JSON.stringify({ message: 'Gone' }), { status: 410 });
 
     // 404 (unknown invite) vs 410 (consumed/expired) drive different UI — the
     // status must survive, not collapse into a generic Error.
     await expect(apiGetPublic('/invitations/abc')).rejects.toBeInstanceOf(ApiError);
-    await expect(apiGetPublic('/invitations/abc')).rejects.toMatchObject({ status: 410 });
+    await expect(apiGetPublic('/invitations/abc')).rejects.toMatchObject({
+      status: 410,
+      message: 'Gone',
+    });
   });
 
   test('surfaces the API message, including a validation array', async () => {

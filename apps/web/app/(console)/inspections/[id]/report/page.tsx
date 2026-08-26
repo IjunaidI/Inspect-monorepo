@@ -24,7 +24,7 @@ function formatInspectionType(type?: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Supplier GPS is a JSON column — render "lat, lng" only when both keys exist. */
+/** Factory GPS is a JSON column — render "lat, lng" only when both keys exist. */
 function formatGps(gps: unknown): string | null {
   if (gps && typeof gps === 'object' && 'lat' in gps && 'lng' in gps) {
     const { lat, lng } = gps as { lat: unknown; lng: unknown };

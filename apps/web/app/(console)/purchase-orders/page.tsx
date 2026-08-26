@@ -20,7 +20,7 @@ export default async function PurchaseOrdersPage() {
     <div style={{ padding: '28px 32px' }}>
       <PageHead
         title="Purchase Orders"
-        sub="Each PO links a buyer, supplier, and product. Inspections are created against a PO."
+        sub="Each PO names two parties — the client it is for and the factory producing it — plus the product. Inspections are created against a PO."
         actions={<Btn kind="primary" icon={<Plus size={15} />} href="/purchase-orders/new">Add PO</Btn>}
       />
 

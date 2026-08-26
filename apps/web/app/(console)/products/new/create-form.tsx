@@ -44,7 +44,7 @@ export function CreateProductForm() {
             id="product-description"
             name="description"
             rows={7}
-            placeholder="Materials, construction, finish, buyer notes — as much detail as the inspector needs."
+            placeholder="Materials, construction, finish, client notes — as much detail as the inspector needs."
             style={textarea}
           />
           <div style={{ fontSize: 11.5, color: ui.faint, marginTop: 6, lineHeight: 1.45 }}>
