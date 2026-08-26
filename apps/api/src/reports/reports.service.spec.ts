@@ -35,8 +35,8 @@ function approvedInspection(overrides: Record<string, unknown> = {}) {
   return {
     id: 'insp1',
     orgId: 'org1',
-    buyerId: 'buy1',
-    supplierId: 'sup1',
+    clientCompanyId: 'buy1',
+    factoryCompanyId: 'sup1',
     productId: 'prod1',
     status: 'APPROVED',
     inspectionType: 'PRE_SHIPMENT',
@@ -55,7 +55,7 @@ function approvedInspection(overrides: Record<string, unknown> = {}) {
     workmanshipNotes: 'Fine',
     packagingNotes: 'Fine',
     tamperProof: { deviceId: 'dev1' },
-    buyer: {
+    clientCompany: {
       id: 'buy1',
       name: 'Northwind Apparel',
       logoUrl: null,
@@ -617,7 +617,7 @@ describe('ReportsService.generate — PDF rendition (INS-003)', () => {
       verificationToken: 'tok-old',
       generatedAt: new Date('2026-07-01T00:00:00.000Z'),
       canonicalSnapshot: {
-        buyer: { name: 'Northwind Apparel' },
+        client: { companyId: 'buy1', name: 'Northwind Apparel' },
         poNumber: 'PO-1',
       },
       brandingSnapshot: { primaryColor: '#037BF4' },
@@ -726,11 +726,11 @@ describe('ReportsService.deliver (INS-020)', () => {
         ? {
             id: 'rep1',
             orgId: 'org1',
-            buyerId: 'buy1',
+            clientCompanyId: 'buy1',
             verificationToken: 'tok-verify',
             deliveredAt: null,
             status: 'GENERATED',
-            buyer: { id: 'buy1', name: 'Northwind Apparel' },
+            clientCompany: { id: 'buy1', name: 'Northwind Apparel' },
             inspection: { purchaseOrder: { poNumber: 'PO-1' } },
           }
         : opts.report;
@@ -772,7 +772,7 @@ describe('ReportsService.deliver (INS-020)', () => {
     };
     const prisma = {
       report: { findFirst: reportFindFirst },
-      buyerGuest: { findMany: guestFindMany },
+      companyGuest: { findMany: guestFindMany },
       reportDelivery: { createMany: deliveryCreateMany },
       $transaction: jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) =>
         fn(tx),
@@ -820,7 +820,7 @@ describe('ReportsService.deliver (INS-020)', () => {
         token: 'magic-1',
         reportId: 'rep1',
         poNumber: 'PO-1',
-        buyerName: 'Northwind Apparel',
+        companyName: 'Northwind Apparel',
         verificationToken: 'tok-verify',
       }),
     );
@@ -870,7 +870,7 @@ describe('ReportsService.deliver (INS-020)', () => {
     const where = guestFindMany.mock.calls[0][0].where;
     expect(where).toMatchObject({
       orgId: 'org1',
-      buyerId: 'buy1',
+      companyId: 'buy1',
       status: 'ACTIVE',
       token: { not: null },
     });
@@ -904,7 +904,7 @@ describe('ReportsService.deliver (INS-020)', () => {
         actorType: 'USER',
         actorUserId: 'u-owner',
         metadata: {
-          buyerId: 'buy1',
+          clientCompanyId: 'buy1',
           recipientCount: 1,
           recipients: ['buyer.qa@northwind.example'],
         },
@@ -1017,11 +1017,11 @@ describe('ReportsService.deliver (INS-020)', () => {
       report: {
         id: 'rep1',
         orgId: 'org1',
-        buyerId: 'buy1',
+        clientCompanyId: 'buy1',
         verificationToken: 'tok-verify',
         deliveredAt: firstDelivery,
         status: 'DELIVERED',
-        buyer: { id: 'buy1', name: 'Northwind Apparel' },
+        clientCompany: { id: 'buy1', name: 'Northwind Apparel' },
         inspection: { purchaseOrder: { poNumber: 'PO-1' } },
       },
     });
@@ -1049,11 +1049,11 @@ describe('ReportsService.deliver (INS-020)', () => {
       report: {
         id: 'rep1',
         orgId: 'org1',
-        buyerId: 'buy1',
+        clientCompanyId: 'buy1',
         verificationToken: 'tok-verify',
         deliveredAt: null,
         status: 'GENERATED',
-        buyer: { id: 'buy1', name: 'Northwind Apparel' },
+        clientCompany: { id: 'buy1', name: 'Northwind Apparel' },
         inspection: { purchaseOrder: null },
       },
     });

@@ -252,7 +252,7 @@ const NAV: {
   minRole: RoleKey; scope: 'org' | 'admin';
 }[] = [
   { key: 'orgs', label: 'Organizations', icon: Building2, href: '/admin/orgs', minRole: 'platform', scope: 'admin' },
-  { key: 'directory', label: 'Buyers & Suppliers', icon: Building2, href: '/dashboard', minRole: 'qa', scope: 'org' },
+  { key: 'directory', label: 'Companies', icon: Building2, href: '/dashboard', minRole: 'qa', scope: 'org' },
   { key: 'inspections', label: 'Inspections', icon: ClipboardList, href: '/inspections', minRole: 'inspector', scope: 'org' },
   { key: 'reports', label: 'Reports', icon: FileCheck2, href: '/reports', minRole: 'qa', scope: 'org' },
   { key: 'presets', label: 'Loop Presets', icon: Repeat, href: '/presets', minRole: 'qa', scope: 'org' },
@@ -446,7 +446,7 @@ function AssumptionBanner({ orgName }: { orgName: string }) {
 export function ConsoleShell({
   children,
   org = DEFAULT_ORG,
-  search = 'Search inspections, buyers, suppliers, POs…',
+  search = 'Search inspections, companies, POs…',
   userName,
   role,
   assumedOrgName = null,

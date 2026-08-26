@@ -34,7 +34,7 @@ function formatGps(gps: unknown): string | null {
 }
 
 function mapToReportData(inspection: ApiInspection, report: ApiReport | null): BrandedReportData {
-  const buyerName = inspection.buyer?.name ?? '—';
+  const clientName = inspection.clientCompany?.name ?? '—';
   const r = inspection.aqlResult;
   const cs = inspection.computedSampling;
 
@@ -69,11 +69,11 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
     }));
 
   return {
-    buyer: {
-      name: buyerName,
-      initials: initials(buyerName),
-      // Real buyer brand color; the token is only the no-color fallback.
-      color: inspection.buyer?.primaryColor ?? '#1457A3',
+    client: {
+      name: clientName,
+      initials: initials(clientName),
+      // Real client brand colour; the token is only the no-colour fallback.
+      color: inspection.clientCompany?.primaryColor ?? '#1457A3',
       loc: null,
     },
     meta: {
@@ -81,13 +81,13 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
       reportNo: report ? `IR-${report.id.slice(0, 8).toUpperCase()}` : undefined,
       po: inspection.purchaseOrder?.poNumber ?? '—',
       product: inspection.product?.styleNumber ?? '—',
-      supplier: inspection.supplier?.name ?? '—',
+      factory: inspection.factoryCompany?.name ?? '—',
       type: formatInspectionType(inspection.inspectionType),
       date: report?.generatedAt
         ? new Date(report.generatedAt).toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10),
       inspector: inspection.assignedInspector?.name ?? null,
-      gps: formatGps(inspection.supplier?.gps),
+      gps: formatGps(inspection.factoryCompany?.gps),
     },
     conclusion: mapConclusion(r?.qaDecision),
     qaRemarks: r?.qaRemarks,

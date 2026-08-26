@@ -3,16 +3,16 @@
  * (INS-008).
  *
  * These were declared only inside `apps/web/lib/api.ts`, which made them
- * invisible to the API and to any second client. That matters most for the
- * counterparty types below: [INS-055](../../../docs/future/BACKLOG.md) unifies
- * `Buyer` + `Supplier` into a single `Company`, and its plan gates Phase 1 on
- * these living here first — otherwise the `Company` DTO gets written twice on
- * day one, in files that have already drifted once.
+ * invisible to the API and to any second client. Landing them here first is what
+ * let [INS-055](../../../docs/future/BACKLOG.md) unify `Buyer` + `Supplier` into
+ * a single `Company` without writing the `Company` DTO twice, in two files that
+ * had already drifted once.
  *
  * No runtime dependencies: consumed by a NestJS server, a Next.js server and an
  * RN bundle alike.
  */
 import type { GpsPoint } from './json-contracts';
+import type { CompanyKind } from './enums';
 
 /** Relation counts decorating list rows (INS-005). Absent on detail reads. */
 export interface RelationCounts {
@@ -21,15 +21,37 @@ export interface RelationCounts {
   reports?: number;
 }
 
-export interface BuyerDto {
+
+export interface ProductDto {
+  id: string;
+  styleNumber: string;
+  description?: string | null;
+  archivedAt?: string | null;
+  updatedAt?: string;
+  _count?: RelationCounts;
+}
+
+// ── The unified counterparty (INS-055) ───────────────────────────────────────
+//
+// `Company` replaces `Buyer` + `Supplier`. Trade role is a property of the
+// PurchaseOrder / Inspection / Report EDGE (`clientCompanyId` /
+// `factoryCompanyId`), never of this row — the same company may be the client on
+// one PO and the factory on another. `kind` is the orthogonal OWNERSHIP axis.
+//
+// Deliberately absent: `role`, `canBeClient`, `canBeFactory` (spec §0 P3). Flags
+// would re-encode the split this model exists to remove.
+
+export interface CompanyDto {
   id: string;
   name: string;
+  kind: CompanyKind;
   /**
-   * DURABLE value (INS-072): either an object key in this org's buyer namespace
-   * (`orgs/{orgId}/buyers/<uuid>.<ext>`) or a legacy absolute `https://…` URL.
-   * Never a presigned URL — it freezes verbatim into the signed report's
-   * `brandingSnapshot`, so a ~900s URL here would rot the artifact permanently.
-   * Submit this value on write; render `logoViewUrl`.
+   * Client-role identity. DURABLE value (INS-072): either an object key in this
+   * org's company namespace (`orgs/{orgId}/companies/<uuid>.<ext>`) or a legacy
+   * absolute `https://…` URL. Never a presigned URL — it freezes verbatim into
+   * the signed report's `brandingSnapshot`, so a ~900s URL here would rot the
+   * tamper-proof artifact permanently. Submit this value on write; render
+   * `logoViewUrl`.
    */
   logoUrl?: string | null;
   /**
@@ -41,36 +63,41 @@ export interface BuyerDto {
   primaryColor?: string | null;
   branding?: Record<string, unknown> | null;
   defaultLoopPresetId?: string | null;
-  archivedAt?: string | null;
-  updatedAt?: string;
-  _count?: RelationCounts;
-}
-
-export interface SupplierDto {
-  id: string;
-  name: string;
+  /** Factory-role identity. */
   address?: string | null;
   gps?: GpsPoint | null;
   archivedAt?: string | null;
   updatedAt?: string;
+  /**
+   * Flattened by the API across BOTH role edges — `purchaseOrders` sums the
+   * client and factory sides. Flattening happens server-side on purpose so the
+   * console and a future mobile client cannot each invent their own arithmetic.
+   */
   _count?: RelationCounts;
 }
 
-export interface ProductDto {
-  id: string;
-  styleNumber: string;
-  description?: string | null;
-  archivedAt?: string | null;
-  updatedAt?: string;
-  _count?: RelationCounts;
+export interface CreateCompanyInput {
+  name: string;
+  /** Defaults to THIRD_PARTY when omitted. */
+  kind?: CompanyKind;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+  branding?: unknown;
+  defaultLoopPresetId?: string | null;
+  address?: string | null;
+  gps?: GpsPoint | null;
 }
+
+export type UpdateCompanyInput = Partial<CreateCompanyInput>;
 
 /**
- * A buyer-side guest holding a magic-link token. INS-055 Phase 6 renames this to
- * `CompanyGuest`; the visibility predicate it implies is a security boundary
- * (spec §4), never a field to widen casually.
+ * A guest holding a magic-link token, attached to a company acting in its
+ * CLIENT role only (spec §0 P7 — there is no factory-side portal). The
+ * visibility predicate this implies is a security boundary (spec §4.2): reports
+ * are matched on `clientCompanyId` AND `orgId`, never on a party-agnostic
+ * predicate that would hand a factory's guest the client's signed report.
  */
-export interface BuyerGuestDto {
+export interface CompanyGuestDto {
   id: string;
   email: string;
   status: string;

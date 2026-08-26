@@ -10,15 +10,15 @@ const msg = (e: unknown, fallback: string) =>
 export async function createPurchaseOrder(_prev: unknown, formData: FormData): Promise<{ error?: string }> {
   const poNumber = String(formData.get('poNumber') ?? '').trim();
   if (!poNumber) return { error: 'PO number is required' };
-  const buyerId = String(formData.get('buyerId') ?? '');
-  const supplierId = String(formData.get('supplierId') ?? '');
+  const clientCompanyId = String(formData.get('clientCompanyId') ?? '');
+  const factoryCompanyId = String(formData.get('factoryCompanyId') ?? '');
   const productId = String(formData.get('productId') ?? '');
   const qty = formData.get('totalQuantity');
   const totalQuantity = qty ? Number(qty) : undefined;
 
   let id: string;
   try {
-    const res = await apiPost<{ id: string }>('/purchase-orders', { poNumber, buyerId, supplierId, productId, totalQuantity });
+    const res = await apiPost<{ id: string }>('/purchase-orders', { poNumber, clientCompanyId, factoryCompanyId, productId, totalQuantity });
     id = res.id;
   } catch (e) {
     return { error: msg(e, 'Failed to create purchase order') };

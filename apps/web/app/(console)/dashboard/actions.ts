@@ -8,9 +8,16 @@ const msg = (e: unknown, fallback: string) =>
   e instanceof ApiError || e instanceof Error ? e.message : fallback;
 
 /**
- * The buyer logo field (INS-072). The form submits the DURABLE value — an object
- * key minted by POST /buyers/presign, or a legacy absolute URL carried through
- * untouched — never the short-lived presigned URL used for the preview.
+ * INS-055 — one set of company actions replaces the parallel buyer and supplier
+ * sets. A company carries BOTH the branding fields (meaningful when it acts as a
+ * client) and the address/GPS pair (meaningful when it acts as a factory);
+ * neither is a role declaration, so one form writes both.
+ */
+
+/**
+ * The company logo field (INS-072). The form submits the DURABLE value — an
+ * object key minted by POST /companies/presign, or a legacy absolute URL carried
+ * through untouched — never the short-lived presigned URL used for the preview.
  *   field absent  → undefined (leave as-is)
  *   present+empty → null      (explicit "remove logo")
  */
@@ -22,12 +29,12 @@ function readLogoUrl(formData: FormData): string | null | undefined {
 }
 
 /**
- * The supplier GPS pair (INS-071). Structured numeric inputs replace the old
+ * The company GPS pair (INS-071). Structured numeric inputs replace the old
  * hand-typed JSON blob, whose JSON.parse sat in an EMPTY catch — a typo saved the
- * supplier with no coordinates and no error. Only the "half a pair" case is
- * rejected here (the API cannot tell it from a deliberate clear); everything
- * else — non-numeric, out of range — is the API's call, and its 400 message is
- * what the caller surfaces.
+ * row with no coordinates and no error. Only the "half a pair" case is rejected
+ * here (the API cannot tell it from a deliberate clear); everything else —
+ * non-numeric, out of range — is the API's call, and its 400 message is what the
+ * caller surfaces.
  *   both blank → null (explicit clear)
  */
 function readGps(
@@ -47,28 +54,51 @@ function readGps(
   return { gps: { lat, lng } };
 }
 
-// ── Buyers ──────────────────────────────────────────────────────
+/** `kind` is sent verbatim; the API validates it against COMPANY_KINDS. */
+function readKind(formData: FormData): string | undefined {
+  return (formData.get('kind') as string) || undefined;
+}
 
-export async function createBuyer(_prev: unknown, formData: FormData): Promise<{ error?: string }> {
+// ── Companies ───────────────────────────────────────────────────
+
+export async function createCompany(
+  _prev: unknown,
+  formData: FormData,
+): Promise<{ error?: string }> {
   const name = String(formData.get('name') ?? '').trim();
   if (!name) return { error: 'Name is required' };
   const logoUrl = readLogoUrl(formData);
   // Sent verbatim: the API validates /^#[0-9a-fA-F]{6}$/ and normalises case
   // (INS-077). Its 400 is the message the form shows — do not pre-filter it away.
   const primaryColor = (formData.get('primaryColor') as string) || undefined;
-  const defaultLoopPresetId = (formData.get('defaultLoopPresetId') as string) || undefined;
+  const defaultLoopPresetId =
+    (formData.get('defaultLoopPresetId') as string) || undefined;
+  const address = (formData.get('address') as string) || undefined;
+  const parsed = readGps(formData);
+  if ('error' in parsed) return { error: parsed.error };
   let id: string;
   try {
-    const b = await apiPost<{ id: string }>('/buyers', { name, logoUrl, primaryColor, defaultLoopPresetId });
-    id = b.id;
+    const c = await apiPost<{ id: string }>('/companies', {
+      name,
+      kind: readKind(formData),
+      logoUrl,
+      primaryColor,
+      defaultLoopPresetId,
+      address,
+      gps: parsed.gps,
+    });
+    id = c.id;
   } catch (e) {
     return { error: msg(e, 'create failed') };
   }
   revalidatePath('/dashboard');
-  redirect(`/buyers/${id}`);
+  redirect(`/companies/${id}`);
 }
 
-export async function updateBuyer(_prev: unknown, formData: FormData): Promise<{ error?: string }> {
+export async function updateCompany(
+  _prev: unknown,
+  formData: FormData,
+): Promise<{ error?: string }> {
   const id = String(formData.get('id') ?? '');
   const name = String(formData.get('name') ?? '').trim();
   if (!name) return { error: 'Name is required' };
@@ -76,35 +106,52 @@ export async function updateBuyer(_prev: unknown, formData: FormData): Promise<{
   const primaryColor = (formData.get('primaryColor') as string) || undefined;
   const rawPreset = formData.get('defaultLoopPresetId') as string;
   const defaultLoopPresetId = rawPreset === '' ? null : rawPreset || undefined;
+  const address = (formData.get('address') as string) || undefined;
+  const parsed = readGps(formData);
+  if ('error' in parsed) return { error: parsed.error };
   try {
-    await apiPatch(`/buyers/${id}`, { name, logoUrl, primaryColor, defaultLoopPresetId });
+    await apiPatch(`/companies/${id}`, {
+      name,
+      kind: readKind(formData),
+      logoUrl,
+      primaryColor,
+      defaultLoopPresetId,
+      address,
+      gps: parsed.gps,
+    });
   } catch (e) {
     return { error: msg(e, 'update failed') };
   }
   revalidatePath('/dashboard');
-  revalidatePath(`/buyers/${id}`);
-  redirect(`/buyers/${id}`);
+  revalidatePath(`/companies/${id}`);
+  redirect(`/companies/${id}`);
 }
 
 /**
- * Presigned PUT for a buyer logo (INS-072), mirroring presignPresetImage.
+ * Presigned PUT for a company logo (INS-072), mirroring presignPresetImage.
  * The browser uploads the bytes straight to storage; only `storageKey` is ever
- * persisted on the buyer.
+ * persisted on the company.
  */
-export async function presignBuyerLogo(
+export async function presignCompanyLogo(
   ext?: string,
-): Promise<{ data?: { storageKey: string; uploadUrl: string }; error?: string }> {
+): Promise<{
+  data?: { storageKey: string; uploadUrl: string };
+  error?: string;
+}> {
   try {
-    const data = await apiPost<{ storageKey: string; uploadUrl: string }>('/buyers/presign', { ext });
+    const data = await apiPost<{ storageKey: string; uploadUrl: string }>(
+      '/companies/presign',
+      { ext },
+    );
     return { data };
   } catch (e) {
     return { error: msg(e, 'presign failed') };
   }
 }
 
-export async function archiveBuyer(id: string): Promise<{ error?: string }> {
+export async function archiveCompany(id: string): Promise<{ error?: string }> {
   try {
-    await apiDelete(`/buyers/${id}`);
+    await apiDelete(`/companies/${id}`);
   } catch (e) {
     return { error: msg(e, 'archive failed') };
   }
@@ -112,65 +159,9 @@ export async function archiveBuyer(id: string): Promise<{ error?: string }> {
   redirect('/dashboard');
 }
 
-// ── Suppliers ──────────────────────────────────────────────────
-
-export async function createSupplier(_prev: unknown, formData: FormData): Promise<{ error?: string }> {
-  const name = String(formData.get('name') ?? '').trim();
-  if (!name) return { error: 'Name is required' };
-  const address = (formData.get('address') as string) || undefined;
-  const parsed = readGps(formData);
-  if ('error' in parsed) return { error: parsed.error };
-  let id: string;
+export async function restoreCompany(id: string): Promise<{ error?: string }> {
   try {
-    const s = await apiPost<{ id: string }>('/suppliers', { name, address, gps: parsed.gps });
-    id = s.id;
-  } catch (e) {
-    return { error: msg(e, 'create failed') };
-  }
-  revalidatePath('/dashboard');
-  redirect(`/suppliers/${id}`);
-}
-
-export async function updateSupplier(_prev: unknown, formData: FormData): Promise<{ error?: string }> {
-  const id = String(formData.get('id') ?? '');
-  const name = String(formData.get('name') ?? '').trim();
-  if (!name) return { error: 'Name is required' };
-  const address = (formData.get('address') as string) || undefined;
-  const parsed = readGps(formData);
-  if ('error' in parsed) return { error: parsed.error };
-  try {
-    await apiPatch(`/suppliers/${id}`, { name, address, gps: parsed.gps });
-  } catch (e) {
-    return { error: msg(e, 'update failed') };
-  }
-  revalidatePath('/dashboard');
-  revalidatePath(`/suppliers/${id}`);
-  redirect(`/suppliers/${id}`);
-}
-
-export async function archiveSupplier(id: string): Promise<{ error?: string }> {
-  try {
-    await apiDelete(`/suppliers/${id}`);
-  } catch (e) {
-    return { error: msg(e, 'archive failed') };
-  }
-  revalidatePath('/dashboard');
-  redirect('/dashboard');
-}
-
-export async function restoreBuyer(id: string): Promise<{ error?: string }> {
-  try {
-    await apiPost(`/buyers/${id}/restore`);
-  } catch (e) {
-    return { error: msg(e, 'restore failed') };
-  }
-  revalidatePath('/dashboard');
-  return {};
-}
-
-export async function restoreSupplier(id: string): Promise<{ error?: string }> {
-  try {
-    await apiPost(`/suppliers/${id}/restore`);
+    await apiPost(`/companies/${id}/restore`);
   } catch (e) {
     return { error: msg(e, 'restore failed') };
   }

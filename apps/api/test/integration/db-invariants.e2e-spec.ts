@@ -221,11 +221,11 @@ describe('DB-level invariants (integration)', () => {
     });
     // A normal audited mutation through the API.
     expect2xx(
-      await client.post('/buyers', {
+      await client.post('/companies', {
         token: orgA.ownerToken,
         body: { name: `Append Check ${tag}` },
       }),
-      'POST /buyers',
+      'POST /companies',
     );
     const after = await prisma.auditLog.count({ where: { orgId: orgA.orgId } });
     expect(after).toBeGreaterThanOrEqual(before);

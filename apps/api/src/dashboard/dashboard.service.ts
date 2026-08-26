@@ -14,8 +14,8 @@ export interface DashboardSummary {
   qaDecisionCounts: QaDecisionCounts;
   /** INS-068: passRate (headline) + DPHU (secondary). See dashboard-metrics.ts. */
   quality: QualityMetrics;
-  buyers: number;
-  suppliers: number;
+  /** INS-055: one unified counterparty count (was `buyers` + `suppliers`). */
+  companies: number;
   products: number;
   purchaseOrders: number;
   reports: number;
@@ -47,10 +47,9 @@ export class DashboardService {
       orderBy: { qaDecision: 'asc' },
     });
 
-    const [buyers, suppliers, products, purchaseOrders, reports] =
+    const [companies, products, purchaseOrders, reports] =
       await this.prisma.$transaction([
-        this.prisma.buyer.count({ where: { orgId, archivedAt: null } }),
-        this.prisma.supplier.count({ where: { orgId, archivedAt: null } }),
+        this.prisma.company.count({ where: { orgId, archivedAt: null } }),
         this.prisma.product.count({ where: { orgId, archivedAt: null } }),
         this.prisma.purchaseOrder.count({ where: { orgId } }),
         this.prisma.report.count({ where: { orgId } }),
@@ -91,8 +90,7 @@ export class DashboardService {
       ),
       qaDecisionCounts,
       quality,
-      buyers,
-      suppliers,
+      companies,
       products,
       purchaseOrders,
       reports,

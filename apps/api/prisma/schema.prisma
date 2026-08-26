@@ -145,8 +145,15 @@ enum ReportAccessAction {
 enum AuditActorType {
   USER
   PLATFORM_ADMIN
-  BUYER_GUEST
+  COMPANY_GUEST
   SYSTEM
+}
+
+/// INS-055: company OWNERSHIP, orthogonal to trade role. Trade role lives on the
+/// PurchaseOrder / Inspection / Report edge, never on the Company row.
+enum CompanyKind {
+  INTERNAL
+  THIRD_PARTY
 }
 
 enum BillableEventKind {
@@ -174,9 +181,8 @@ model Organization {
 
   users           User[]
   invitations     Invitation[]
-  buyers          Buyer[]
-  buyerGuests     BuyerGuest[]
-  suppliers       Supplier[]
+  companies       Company[]
+  companyGuests   CompanyGuest[]
   products        Product[]
   purchaseOrders  PurchaseOrder[]
   loopPresets     LoopPreset[]
@@ -243,45 +249,67 @@ model Invitation {
 }
 
 // ─────────────────────────────────────────────
-// COUNTERPARTIES  (Buyer · BuyerGuest · Supplier · Product · PurchaseOrder)
+// COMPANY  (INS-055 — replaces Buyer + Supplier)
 // ─────────────────────────────────────────────
 
-/// The party a report is for. Branding here drives per-buyer report styling
-/// (spec §5). Managed by QA Manager and above.
-model Buyer {
-  id                  String    @id @default(cuid())
-  orgId               String
-  name                String
+/// A counterparty in one tenant (INS-055). Trade role (client / factory) is a
+/// property of the PurchaseOrder / Inspection / Report EDGE, not of this row —
+/// the same company may be the client on one PO and the factory on another.
+/// `kind` is the orthogonal OWNERSHIP axis: our own facility vs an external
+/// party. Deliberately NO `role` / `canBeClient` / `canBeFactory` (spec §0 P3):
+/// flags would re-encode the split this model exists to remove.
+model Company {
+  id    String      @id @default(cuid())
+  orgId String
+  name  String
+  kind  CompanyKind @default(THIRD_PARTY)
+
+  // Client-role identity (ex-Buyer). `logoUrl` is a DURABLE object key or a
+  // legacy absolute URL, never a presigned URL — it freezes verbatim into
+  // Report.brandingSnapshot at generate time and is never read live by a report.
   logoUrl             String?
   primaryColor        String?
   branding            Json?
   defaultLoopPresetId String?
-  createdByUserId     String?
-  archivedAt          DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+
+  // Factory-role identity (ex-Supplier).
+  address String?
+  gps     Json?
+
+  createdByUserId String?
+  archivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   organization      Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  defaultLoopPreset LoopPreset?  @relation("BuyerDefaultPreset", fields: [defaultLoopPresetId], references: [id], onDelete: SetNull)
+  defaultLoopPreset LoopPreset?  @relation("CompanyDefaultPreset", fields: [defaultLoopPresetId], references: [id], onDelete: SetNull)
 
-  guests         BuyerGuest[]
-  purchaseOrders PurchaseOrder[]
-  inspections    Inspection[]
-  reports        Report[]
+  guests        CompanyGuest[]
+  poAsClient    PurchaseOrder[] @relation("PurchaseOrderClient")
+  poAsFactory   PurchaseOrder[] @relation("PurchaseOrderFactory")
+  inspAsClient  Inspection[]    @relation("InspectionClient")
+  inspAsFactory Inspection[]    @relation("InspectionFactory")
+  reports       Report[]        @relation("ReportClient")
 
-  /// INS-010: composite parent key so org-scoped children (BuyerGuest) can carry a
-  /// tenant-aligned FK the DATABASE checks, not just the app layer.
+  /// INS-010: composite parent key so org-scoped children (CompanyGuest) can
+  /// carry a tenant-aligned FK the DATABASE checks, not just the app layer.
   @@unique([id, orgId])
-  @@unique([orgId, name])
+  /// NOT @@unique([orgId, name]) — the business key is a PARTIAL, case- and
+  /// whitespace-insensitive unique index over ACTIVE rows only (spec §6.6 / P5),
+  /// which Prisma's DSL cannot express. It is added by hand in the
+  /// 20260827000000_drop_buyer_supplier migration.
   @@index([orgId])
-  @@map("buyers")
+  @@index([orgId, name])
+  @@map("companies")
 }
 
-/// Read-only guest login scoped to ONE buyer's reports within ONE tenant
-/// (spec §5). Magic-link auth (token + expiry). Never visible across tenants.
-model BuyerGuest {
+/// Read-only guest login scoped to ONE company's CLIENT-role reports within ONE
+/// tenant (spec §4). Magic-link auth (token + expiry). Never visible across
+/// tenants, and never attached to a company in its factory role (spec §0 P7 —
+/// there is no factory-side portal).
+model CompanyGuest {
   id             String     @id @default(cuid())
-  buyerId        String
+  companyId      String
   orgId          String
   email          String
   status         UserStatus @default(INVITED)
@@ -290,37 +318,16 @@ model BuyerGuest {
   lastAccessAt   DateTime?
   createdAt      DateTime   @default(now())
 
-  // INS-010: tenant-aligned composite FK — a guest can only hang off a buyer in
-  // its OWN org, enforced by the database rather than by caller discipline.
-  buyer          Buyer          @relation(fields: [buyerId, orgId], references: [id, orgId], onDelete: Cascade)
+  // INS-010: tenant-aligned composite FK — a guest can only hang off a company
+  // in its OWN org, enforced by the database rather than by caller discipline.
+  company        Company        @relation(fields: [companyId, orgId], references: [id, orgId], onDelete: Cascade)
   organization   Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
   reportAccesses ReportAccess[]
 
-  @@unique([buyerId, email])
+  @@unique([companyId, email])
   @@index([orgId])
   @@index([token])
-  @@map("buyer_guests")
-}
-
-/// The production site being inspected (spec §5).
-model Supplier {
-  id              String    @id @default(cuid())
-  orgId           String
-  name            String
-  address         String?
-  gps             Json?
-  createdByUserId String?
-  archivedAt      DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  purchaseOrders PurchaseOrder[]
-  inspections    Inspection[]
-
-  @@unique([orgId, name])
-  @@index([orgId])
-  @@map("suppliers")
+  @@map("company_guests")
 }
 
 model Product {
@@ -342,29 +349,34 @@ model Product {
   @@map("products")
 }
 
-/// Links a buyer and a supplier for a product (spec §5).
+/// Links a CLIENT company and a FACTORY company for a product (spec §5, INS-055).
+/// Both parties are required: a PO with one party is not a PO.
 model PurchaseOrder {
-  id              String   @id @default(cuid())
-  orgId           String
-  poNumber        String
-  buyerId         String
-  supplierId      String
+  id       String @id @default(cuid())
+  orgId    String
+  poNumber String
+
+  // INS-055: the two-party trade edge. Both required in practice (tightened to
+  // NOT NULL by the drop migration); a PO with one party is not a PO.
+  clientCompanyId  String
+  factoryCompanyId String
+
   productId       String
   totalQuantity   Int?
   createdByUserId String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  buyer        Buyer        @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  supplier     Supplier     @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  product      Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
-  inspections  Inspection[]
+  organization   Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  clientCompany  Company      @relation("PurchaseOrderClient", fields: [clientCompanyId], references: [id], onDelete: Restrict)
+  factoryCompany Company      @relation("PurchaseOrderFactory", fields: [factoryCompanyId], references: [id], onDelete: Restrict)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  inspections    Inspection[]
 
   @@unique([orgId, poNumber])
   @@index([orgId])
-  @@index([buyerId])
-  @@index([supplierId])
+  @@index([clientCompanyId])
+  @@index([factoryCompanyId])
   @@index([productId])
   @@map("purchase_orders")
 }
@@ -386,13 +398,13 @@ model LoopPreset {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  organization      Organization             @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  createdBy         User?                    @relation("LoopPresetCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  items             PresetLoopItem[]
-  measurementFields PresetMeasurementField[]
-  allowedDefects    PresetAllowedDefect[]
-  inspections       Inspection[]
-  defaultForBuyers  Buyer[]                  @relation("BuyerDefaultPreset")
+  organization        Organization             @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  createdBy           User?                    @relation("LoopPresetCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  items               PresetLoopItem[]
+  measurementFields   PresetMeasurementField[]
+  allowedDefects      PresetAllowedDefect[]
+  inspections         Inspection[]
+  defaultForCompanies Company[]                @relation("CompanyDefaultPreset")
 
   @@unique([orgId, name, version])
   @@index([orgId])
@@ -485,10 +497,17 @@ model DefectCatalog {
 
 /// The core aggregate: one pre-shipment inspection of a lot.
 model Inspection {
-  id             String           @id @default(cuid())
-  orgId          String
-  buyerId        String
-  supplierId     String?
+  id    String @id @default(cuid())
+  orgId String
+
+  // INS-055: both parties are denormalized from the PO at create time. Trade
+  // role belongs to this edge, not to the Company row.
+
+  clientCompanyId  String
+  /// Stays OPTIONAL with SetNull — an inspection can
+  /// record no factory. Do not "tidy" this to required.
+  factoryCompanyId String?
+
   poId           String
   productId      String
   lotSize        Int?
@@ -533,8 +552,8 @@ model Inspection {
   updatedAt       DateTime @updatedAt
 
   organization      Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  buyer             Buyer         @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  supplier          Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  clientCompany     Company       @relation("InspectionClient", fields: [clientCompanyId], references: [id], onDelete: Restrict)
+  factoryCompany    Company?      @relation("InspectionFactory", fields: [factoryCompanyId], references: [id], onDelete: SetNull)
   purchaseOrder     PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Restrict)
   product           Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
   loopPreset        LoopPreset?   @relation(fields: [loopPresetId], references: [id], onDelete: SetNull)
@@ -561,7 +580,7 @@ model Inspection {
   @@index([orgId, status])
   @@index([orgId, createdAt(sort: Desc)])
   @@index([poId])
-  @@index([buyerId])
+  @@index([clientCompanyId])
   @@index([supersedesInspectionId])
   @@map("inspections")
 }
@@ -753,10 +772,17 @@ model AqlResult {
 /// contentHash + signature are the Ed25519 tamper-proof seal; verificationToken
 /// powers the public verification page (spec §9). No updatedAt — immutable.
 model Report {
-  id                String       @id @default(cuid())
-  inspectionId      String       @unique
-  orgId             String
-  buyerId           String
+  id           String @id @default(cuid())
+  inspectionId String @unique
+  orgId        String
+
+  /// INS-055: the client this signed artifact belongs to. This is the column the
+  /// guest-visibility predicate keys on (with orgId) — see spec §4.2. There is
+  /// deliberately NO factoryCompanyId: the factory identity that matters legally
+  /// is already frozen inside the signed canonical snapshot, and a live FK for it
+  /// would be a second, MUTABLE source of truth for a fact the signature covers.
+  clientCompanyId String
+
   pdfStorageKey     String?
   brandingSnapshot  Json
   // The exact canonicalized payload that was hashed + signed (inspection state +
@@ -769,19 +795,25 @@ model Report {
   canonicalSnapshot Json
   contentHash       String
   signature         String
+  /// INS-055 spec §5.3: an UNSIGNED mirror of the `canonicalVersion` marker that
+  /// lives INSIDE canonicalSnapshot, for indexing and operational reporting only.
+  /// NEVER the dispatch authority — canonicalVersionOf() reads the signed
+  /// payload. If this column and the payload disagree, the payload wins and the
+  /// row was edited. Default 1: every report signed before INS-055.
+  canonicalVersion  Int          @default(1)
   verificationToken String       @unique @default(cuid())
   status            ReportStatus @default(GENERATED)
   deliveredAt       DateTime?
   generatedAt       DateTime     @default(now())
 
-  inspection   Inspection       @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
-  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  buyer        Buyer            @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  deliveries   ReportDelivery[]
-  accesses     ReportAccess[]
+  inspection    Inspection       @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
+  organization  Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  clientCompany Company          @relation("ReportClient", fields: [clientCompanyId], references: [id], onDelete: Restrict)
+  deliveries    ReportDelivery[]
+  accesses      ReportAccess[]
 
   @@index([orgId])
-  @@index([buyerId])
+  @@index([clientCompanyId])
   @@index([verificationToken])
   @@map("reports")
 }
@@ -803,19 +835,20 @@ model ReportDelivery {
 /// One access (view/download) of a report — typically by a buyer guest. Gives
 /// the access audit a concrete principal (spec §11 guest portal).
 model ReportAccess {
-  id           String             @id @default(cuid())
-  reportId     String
-  buyerGuestId String?
-  action       ReportAccessAction
-  ipAddress    String?
-  userAgent    String?
-  accessedAt   DateTime           @default(now())
+  id             String             @id @default(cuid())
+  reportId       String
+  /// INS-055: LEGACY, dropped in 20260827000000_drop_buyer_supplier.
+  companyGuestId String?
+  action         ReportAccessAction
+  ipAddress      String?
+  userAgent      String?
+  accessedAt     DateTime           @default(now())
 
-  report     Report      @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  buyerGuest BuyerGuest? @relation(fields: [buyerGuestId], references: [id], onDelete: SetNull)
+  report       Report        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  companyGuest CompanyGuest? @relation(fields: [companyGuestId], references: [id], onDelete: SetNull)
 
   @@index([reportId])
-  @@index([buyerGuestId])
+  @@index([companyGuestId])
   @@map("report_accesses")
 }
 

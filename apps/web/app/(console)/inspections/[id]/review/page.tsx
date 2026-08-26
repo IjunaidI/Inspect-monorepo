@@ -56,7 +56,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 
       <PageHead
         title="Report review"
-        sub={`${inspection.buyer?.name ?? '—'} · ${inspection.product?.styleNumber ?? '—'} · status ${inspection.status}`}
+        sub={`${inspection.clientCompany?.name ?? '—'} · ${inspection.product?.styleNumber ?? '—'} · status ${inspection.status}`}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: 24, marginTop: 24, alignItems: 'start' }}>

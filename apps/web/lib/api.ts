@@ -5,8 +5,9 @@ import { refreshApiAccessToken } from './auth';
 import { getAssumedOrgId } from './admin-org';
 import type {
   AqlClassOutcome,
-  BuyerDto,
-  BuyerGuestDto,
+  CompanyDto,
+  CompanyGuestDto,
+  CompanyKind,
   DefectClass,
   DefectScope,
   DefectSeverity,
@@ -14,7 +15,6 @@ import type {
   OrgType,
   ProductDto,
   QaDecision,
-  SupplierDto,
   UserRole,
   UserStatus,
 } from '@inspect/shared-types';
@@ -282,23 +282,29 @@ export interface ApiDashboardSummary {
   inspectionsByStatus: Record<string, number>;
   qaDecisionCounts: ApiQaDecisionCounts;
   quality: ApiQualityMetrics;
-  buyers: number;
-  suppliers: number;
+  /** INS-055: one unified counterparty count (was `buyers` + `suppliers`). */
+  companies: number;
   products: number;
   purchaseOrders: number;
   reports: number;
 }
 /**
- * INS-008: these now live in `@inspect/shared-types` so the API, the console and
- * the mobile app share one declaration. The `Api*` names are kept as aliases —
+ * INS-008: these live in `@inspect/shared-types` so the API, the console and the
+ * mobile app share one declaration. The `Api*` names are kept as aliases —
  * dozens of call sites read them, and renaming is churn without benefit. What
- * matters is that the shape is declared exactly once. INS-055 replaces
- * Buyer/Supplier with `Company`; having them here first is that plan's Phase 1 gate.
+ * matters is that the shape is declared exactly once.
  */
-export type ApiBuyer = BuyerDto;
-export type ApiSupplier = SupplierDto;
 export type ApiProduct = ProductDto;
-export type ApiBuyerGuest = BuyerGuestDto;
+
+/**
+ * INS-055 — the unified counterparty, replacing ApiBuyer + ApiSupplier. One row
+ * that can act as the client on one PO and the factory on another, so it carries
+ * BOTH the ex-Buyer branding fields and the ex-Supplier address/GPS fields.
+ * Trade role is never read from here — it lives on the PO/Inspection/Report edge.
+ */
+export type ApiCompany = CompanyDto;
+export type ApiCompanyGuest = CompanyGuestDto;
+export type ApiCompanyKind = CompanyKind;
 
 export interface ApiLoopPreset {
   id: string;
@@ -309,7 +315,7 @@ export interface ApiLoopPreset {
   isArchived: boolean;
   updatedAt?: string;
   /** INS-005 list aggregates — present on GET /loop-presets rows. */
-  _count?: { items: number; inspections: number; defaultForBuyers: number };
+  _count?: { items: number; inspections: number; defaultForCompanies: number };
 }
 
 export interface ApiMeasurementField {
@@ -383,8 +389,13 @@ export interface ApiInspection {
   lotSize?: number | null;
   computedSampling?: { sampleSizeCodeLetter: string; sampleSize: number; perClass: Record<string, { aql: number; ac: number; re: number }> } | null;
   aqlResult?: ApiAqlResult | null;
-  buyer?: { id: string; name: string; primaryColor?: string | null } | null;
-  supplier?: { id: string; name: string; gps?: { lat: number; lng: number } | null } | null;
+  /**
+   * INS-055: trade role lives on this EDGE, not on the company row — the same
+   * company can be the client here and the factory on another inspection. The
+   * factory edge stays optional, exactly as `supplier` was.
+   */
+  clientCompany?: { id: string; name: string; primaryColor?: string | null } | null;
+  factoryCompany?: { id: string; name: string; gps?: { lat: number; lng: number } | null } | null;
   product?: { id: string; styleNumber: string } | null;
   purchaseOrder?: { id: string; poNumber: string } | null;
   /** Present on GET /inspections/:id (safe select: id/name/email). */
@@ -413,8 +424,9 @@ export interface ApiPurchaseOrder {
   id: string;
   poNumber: string;
   totalQuantity?: number | null;
-  buyer?: { id: string; name: string } | null;
-  supplier?: { id: string; name: string } | null;
+  /** INS-055: a PO is explicitly two-party. Both are required on create. */
+  clientCompany?: { id: string; name: string } | null;
+  factoryCompany?: { id: string; name: string } | null;
   product?: { id: string; styleNumber: string } | null;
 }
 export interface AqlPreview {

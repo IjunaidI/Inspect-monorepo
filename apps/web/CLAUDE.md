@@ -8,9 +8,11 @@ domain invariants in the repo-root `CLAUDE.md` are binding here — this file co
 `pnpm web dev` · `build` · `type-check`. Talks to the API at `INSPECT_API_URL`;
 falls back to demo data when the API is unreachable.
 
-> **No test runner yet** — the console is verified by `tsc` + `next build` only. Adding one is
-> [INS-082](../../docs/future/BACKLOG.md), and it is a **blocking prerequisite** for the shared-package
-> extraction, because `tsc` cannot catch a behaviour change in `lib/api.ts`.
+> **Vitest since [INS-082](../../docs/future/BACKLOG.md)** — `pnpm web test` (32 tests across
+> `lib/api.test.ts` + `lib/roles.test.ts`), picked up by root `pnpm test`. It exists because `tsc` cannot
+> catch a behaviour change in `lib/api.ts`, which made it a blocking prerequisite for the shared-package
+> extraction. If one of those tests goes red during a refactor, it has found a real regression in the
+> role gate or `loadOrFallback`'s branch table — it is not a test to update.
 
 ## Architecture
 

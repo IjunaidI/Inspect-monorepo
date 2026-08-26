@@ -9,8 +9,27 @@ import { presignReportPdf } from '../reports/reports.service';
 import { StorageService } from '../storage/storage.service';
 
 /**
- * Buyer guest portal (spec §11): read-only access scoped to ONE buyer's reports
- * within ONE tenant, authenticated by a magic-link token (not a User).
+ * Company guest portal (spec §11): read-only access scoped to ONE company's
+ * CLIENT-role reports within ONE tenant, authenticated by a magic-link token
+ * (not a User).
+ *
+ * ── THE SECURITY BOUNDARY (INS-055 spec §4.2) ──────────────────────────────
+ * Every report lookup below keys on `clientCompanyId` AND `orgId`. Three rules
+ * the implementation must not violate:
+ *
+ *  1. KEEP THE orgId CONJUNCT. It is the tenant boundary, not belt-and-braces.
+ *     "Simplifying" to clientCompanyId alone would rest the whole isolation
+ *     guarantee on company ids being unguessable.
+ *  2. KEY ON clientCompanyId ONLY — never a party-agnostic predicate. Now that
+ *     one model plays both trade roles, `OR: [{clientCompanyId}, {factoryCompanyId}]`
+ *     reads like a natural generalization. It would hand a FACTORY's guest the
+ *     CLIENT's signed report. That leak did not exist before this epic and must
+ *     not be introduced by it. Regression test: company-model.e2e-spec.ts,
+ *     'a factory-role guest sees no reports'.
+ *  3. LEAVE THE PHOTO QUERY'S REACHABILITY ALONE. getReport()'s photo fetch has
+ *     no orgId filter and is safe ONLY because it is reached through an
+ *     already-scoped report lookup. Keep that ordering: scoped report first,
+ *     photos second, never photos from a caller-supplied id.
  */
 @Injectable()
 export class GuestService {
@@ -25,7 +44,9 @@ export class GuestService {
     if (!token) {
       throw new UnauthorizedException('Missing guest token');
     }
-    const guest = await this.prisma.buyerGuest.findUnique({ where: { token } });
+    const guest = await this.prisma.companyGuest.findUnique({
+      where: { token },
+    });
     if (!guest || guest.status !== 'ACTIVE') {
       throw new UnauthorizedException('Invalid guest token');
     }
@@ -45,18 +66,18 @@ export class GuestService {
    */
   private async recordAccess(
     reportId: string,
-    buyerGuestId: string,
+    companyGuestId: string,
     action: 'VIEW' | 'DOWNLOAD',
     ipAddress?: string,
     userAgent?: string,
   ): Promise<void> {
     try {
       await this.prisma.reportAccess.create({
-        data: { reportId, buyerGuestId, action, ipAddress, userAgent },
+        data: { reportId, companyGuestId, action, ipAddress, userAgent },
       });
     } catch (err) {
       this.logger.error(
-        `Failed to record ${action} access to report ${reportId} by guest ${buyerGuestId}`,
+        `Failed to record ${action} access to report ${reportId} by guest ${companyGuestId}`,
         err instanceof Error ? err.stack : String(err),
       );
     }
@@ -64,12 +85,12 @@ export class GuestService {
 
   async listReports(token: string) {
     const guest = await this.guestByToken(token);
-    await this.prisma.buyerGuest.update({
+    await this.prisma.companyGuest.update({
       where: { id: guest.id },
       data: { lastAccessAt: new Date() },
     });
     return this.prisma.report.findMany({
-      where: { buyerId: guest.buyerId, orgId: guest.orgId },
+      where: { clientCompanyId: guest.companyId, orgId: guest.orgId },
       orderBy: { generatedAt: 'desc' },
     });
   }
@@ -82,7 +103,11 @@ export class GuestService {
   ) {
     const guest = await this.guestByToken(token);
     const report = await this.prisma.report.findFirst({
-      where: { id: reportId, buyerId: guest.buyerId, orgId: guest.orgId },
+      where: {
+        id: reportId,
+        clientCompanyId: guest.companyId,
+        orgId: guest.orgId,
+      },
     });
     if (!report) {
       throw new NotFoundException('Report not found');
@@ -132,7 +157,11 @@ export class GuestService {
   ) {
     const guest = await this.guestByToken(token);
     const report = await this.prisma.report.findFirst({
-      where: { id: reportId, buyerId: guest.buyerId, orgId: guest.orgId },
+      where: {
+        id: reportId,
+        clientCompanyId: guest.companyId,
+        orgId: guest.orgId,
+      },
       select: { id: true, pdfStorageKey: true },
     });
     if (!report) {

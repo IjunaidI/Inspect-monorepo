@@ -37,14 +37,14 @@ describe('Platform-Admin org assumption (INS-079)', () => {
     buyerAName = `Assume Buyer ${runTag('a')}`;
     buyerBName = `Assume Buyer ${runTag('b')}`;
     expect2xx(
-      await client.post('/buyers', {
+      await client.post('/companies', {
         token: orgA.ownerToken,
         body: { name: buyerAName },
       }),
       'POST /buyers (org A)',
     );
     expect2xx(
-      await client.post('/buyers', {
+      await client.post('/companies', {
         token: orgB.ownerToken,
         body: { name: buyerBName },
       }),
@@ -57,20 +57,20 @@ describe('Platform-Admin org assumption (INS-079)', () => {
   });
 
   it('still 403s an admin with no assumed org', async () => {
-    const res = await client.get('/buyers', { token: adminToken });
+    const res = await client.get('/companies', { token: adminToken });
     expect(res.status).toBe(403);
   });
 
   it('reads the assumed org and only the assumed org', async () => {
     const a = expect2xx(
-      await client.get('/buyers', { token: adminToken, orgId: orgA.orgId }),
-      'GET /buyers (assuming org A)',
+      await client.get('/companies', { token: adminToken, orgId: orgA.orgId }),
+      'GET /companies (assuming org A)',
     ) as { name: string }[];
     expect(a.some((b) => b.name === buyerAName)).toBe(true);
 
     const b = expect2xx(
-      await client.get('/buyers', { token: adminToken, orgId: orgB.orgId }),
-      'GET /buyers (assuming org B)',
+      await client.get('/companies', { token: adminToken, orgId: orgB.orgId }),
+      'GET /companies (assuming org B)',
     ) as { name: string }[];
     expect(b.some((x) => x.name === buyerAName)).toBe(false);
     // Positive control: org B's list must not simply be empty/irrelevant —
@@ -80,11 +80,11 @@ describe('Platform-Admin org assumption (INS-079)', () => {
 
   // The tenant boundary: the header must do nothing at all for a non-admin.
   it('ignores X-Org-Id from an ORG_OWNER — no leak, no error', async () => {
-    const res = await client.get('/buyers', {
+    const res = await client.get('/companies', {
       token: orgB.ownerToken,
       orgId: orgA.orgId,
     });
-    const rows = expect2xx(res, 'GET /buyers (owner B spoofing org A)') as {
+    const rows = expect2xx(res, 'GET /companies (owner B spoofing org A)') as {
       name: string;
     }[];
     expect(rows.some((x) => x.name === buyerAName)).toBe(false);
@@ -96,21 +96,21 @@ describe('Platform-Admin org assumption (INS-079)', () => {
 
   it('attributes an assumed-org write to PLATFORM_ADMIN with the real admin id', async () => {
     const created = expect2xx(
-      await client.post('/buyers', {
+      await client.post('/companies', {
         token: adminToken,
         orgId: orgA.orgId,
         body: { name: `Admin-made Buyer ${runTag('adm')}` },
       }),
       'POST /buyers (assuming org A)',
     );
-    // Archive is DELETE /buyers/:id (BuyersController), not a dedicated
+    // Archive is DELETE /buyers/:id (CompaniesController), not a dedicated
     // /:id/archive route.
     expect2xx(
-      await client.delete(`/buyers/${created.id}`, {
+      await client.delete(`/companies/${created.id}`, {
         token: adminToken,
         orgId: orgA.orgId,
       }),
-      'DELETE /buyers/:id (assuming org A)',
+      'DELETE /companies/:id (assuming org A)',
     );
 
     const me = expect2xx(
@@ -126,7 +126,7 @@ describe('Platform-Admin org assumption (INS-079)', () => {
       const row = await prisma.auditLog.findFirst({
         where: {
           orgId: orgA.orgId,
-          action: 'buyer.archived',
+          action: 'company.archived',
           entityId: created.id,
         },
       });
@@ -156,7 +156,7 @@ describe('Platform-Admin org assumption (INS-079)', () => {
       expect(
         rows.some(
           (r) =>
-            r.action === 'buyer.archived' && r.actorType === 'PLATFORM_ADMIN',
+            r.action === 'company.archived' && r.actorType === 'PLATFORM_ADMIN',
         ),
       ).toBe(true);
     } finally {

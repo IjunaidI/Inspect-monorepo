@@ -24,18 +24,22 @@ export interface InviteGuestInput {
   ttlDays?: number;
 }
 
-/** Invite-only buyer guests, scoped to one buyer in one tenant (spec §3/§11). */
+/**
+ * INS-055 — invite-only guests, attached to a company acting in its CLIENT role
+ * only (spec §0 P7: there is no factory-side portal). What a guest can then SEE
+ * is decided by GuestService, and that predicate is a security boundary.
+ */
 @Injectable()
-export class BuyerGuestsService {
+export class CompanyGuestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly audit: AuditService,
   ) {}
 
-  list(orgId: string, buyerId: string) {
-    return this.prisma.buyerGuest.findMany({
-      where: { orgId, buyerId },
+  list(orgId: string, companyId: string) {
+    return this.prisma.companyGuest.findMany({
+      where: { orgId, companyId },
       orderBy: { createdAt: 'asc' },
       select: SAFE_SELECT,
     });
@@ -45,15 +49,15 @@ export class BuyerGuestsService {
   async invite(
     orgId: string,
     actor: AuthUser,
-    buyerId: string,
+    companyId: string,
     input: InviteGuestInput,
   ) {
     if (!input?.email?.trim())
       throw new BadRequestException('email is required');
-    const buyer = await this.prisma.buyer.findFirst({
-      where: { id: buyerId, orgId },
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId, orgId },
     });
-    if (!buyer) throw new NotFoundException('Buyer not found');
+    if (!company) throw new NotFoundException('Company not found');
 
     const token = randomUUID();
     // Clamped (INS-053): callers can neither mint a permanent token nor a dead one.
@@ -62,16 +66,16 @@ export class BuyerGuestsService {
     );
     const email = input.email.trim().toLowerCase();
 
-    // INS-006: audit inside the business transaction. Granting a buyer guest a
+    // INS-006: audit inside the business transaction. Granting a company guest a
     // magic link widens who can read this tenant's signed reports, so it is a
     // security-relevant event — the token itself is deliberately NOT recorded.
     const guest = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.buyerGuest.upsert({
-        where: { buyerId_email: { buyerId, email } },
+      const row = await tx.companyGuest.upsert({
+        where: { companyId_email: { companyId, email } },
         update: { status: 'ACTIVE', token, tokenExpiresAt },
         create: {
           orgId,
-          buyerId,
+          companyId,
           email,
           status: 'ACTIVE',
           token,
@@ -84,11 +88,11 @@ export class BuyerGuestsService {
           orgId,
           actorType: actorTypeFor(actor),
           actorUserId: actor.userId,
-          action: 'buyerGuest.invited',
-          entityType: 'BuyerGuest',
+          action: 'companyGuest.invited',
+          entityType: 'CompanyGuest',
           entityId: row.id,
           metadata: {
-            buyerId,
+            companyId,
             email,
             tokenExpiresAt: tokenExpiresAt.toISOString(),
           },
@@ -100,21 +104,21 @@ export class BuyerGuestsService {
     // MailService never throws — a failed send is logged, and the magic link
     // is still returned to the inviter as a copyable fallback. `emailSent`
     // lets the console distinguish "emailed" from "copy this link".
-    const { sent } = await this.mail.sendBuyerGuestMagicLink({
+    const { sent } = await this.mail.sendCompanyGuestMagicLink({
       to: email,
       token,
-      buyerName: buyer.name,
+      companyName: company.name,
     });
     return { guest, token, emailSent: sent };
   }
 
   async revoke(orgId: string, actor: AuthUser, id: string) {
-    const guest = await this.prisma.buyerGuest.findFirst({
+    const guest = await this.prisma.companyGuest.findFirst({
       where: { id, orgId },
     });
     if (!guest) throw new NotFoundException('Guest not found');
     return this.prisma.$transaction(async (tx) => {
-      const revoked = await tx.buyerGuest.update({
+      const revoked = await tx.companyGuest.update({
         where: { id },
         data: { status: 'SUSPENDED', token: null },
         select: SAFE_SELECT,
@@ -124,10 +128,10 @@ export class BuyerGuestsService {
           orgId,
           actorType: actorTypeFor(actor),
           actorUserId: actor.userId,
-          action: 'buyerGuest.revoked',
-          entityType: 'BuyerGuest',
+          action: 'companyGuest.revoked',
+          entityType: 'CompanyGuest',
           entityId: id,
-          metadata: { buyerId: guest.buyerId, email: guest.email },
+          metadata: { companyId: guest.companyId, email: guest.email },
         },
         tx,
       );

@@ -335,7 +335,7 @@ export function PopulateWorkspace({
             {inspection.product?.styleNumber ?? '—'}
           </div>
           <div style={{ fontSize: 12, color: ui.sub, marginTop: 3 }}>
-            {inspection.buyer?.name ?? '—'} · {inspection.supplier?.name ?? '—'}
+            {inspection.clientCompany?.name ?? '—'} · {inspection.factoryCompany?.name ?? '—'}
           </div>
 
           <div style={{ marginTop: 16, padding: 12, background: ui.fill, border: `1px solid ${ui.line}`, borderRadius: 10 }}>

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { createPublicKey } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
+import { canonicalVersionOf, photoHashesOf } from '@inspect/shared-types';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -100,8 +101,8 @@ export class ReportsService {
     const inspection = await this.prisma.inspection.findFirst({
       where: { id: inspectionId, orgId },
       include: {
-        buyer: true,
-        supplier: true,
+        clientCompany: true,
+        factoryCompany: true,
         product: true,
         purchaseOrder: true,
         aqlResult: true,
@@ -156,14 +157,30 @@ export class ReportsService {
     // decision author/timestamp — otherwise those fields could be altered after
     // signing while public verification still returns valid:true.
     const rawCanonical = {
+      // INS-055 spec §5.3 — the version marker lives INSIDE the payload, so it
+      // is hashed and signed and cannot be spoofed by editing the mirrored
+      // `Report.canonicalVersion` column. Reports signed before INS-055 have no
+      // such key, which is exactly what makes them v1.
+      canonicalVersion: 2 as const,
       inspectionId: inspection.id,
       inspectionType: inspection.inspectionType,
       poNumber: inspection.purchaseOrder?.poNumber ?? null,
-      buyer: { id: inspection.buyerId, name: inspection.buyer?.name ?? null },
-      supplier: {
-        id: inspection.supplierId,
-        name: inspection.supplier?.name ?? null,
+      // No `buyer`/`supplier` aliases: duplicating the same fact under two keys
+      // inside a signed envelope doubles the surface where a later edit can
+      // desynchronize them, and a mismatch inside a signed document is far worse
+      // than a missing key.
+      client: {
+        companyId: inspection.clientCompanyId,
+        name: inspection.clientCompany?.name ?? null,
+        kind: inspection.clientCompany?.kind ?? null,
       },
+      factory: inspection.factoryCompanyId
+        ? {
+            companyId: inspection.factoryCompanyId,
+            name: inspection.factoryCompany?.name ?? null,
+            kind: inspection.factoryCompany?.kind ?? null,
+          }
+        : null,
       product: {
         id: inspection.productId,
         styleNumber: inspection.product?.styleNumber ?? null,
@@ -233,9 +250,9 @@ export class ReportsService {
     const hash = contentHash(canonical, orderedPhotoHashes);
     const signature = sign(hash, this.signingPrivateKey());
     const brandingSnapshot = {
-      logoUrl: inspection.buyer?.logoUrl ?? undefined,
-      primaryColor: inspection.buyer?.primaryColor ?? undefined,
-      branding: inspection.buyer?.branding ?? undefined,
+      logoUrl: inspection.clientCompany?.logoUrl ?? undefined,
+      primaryColor: inspection.clientCompany?.primaryColor ?? undefined,
+      branding: inspection.clientCompany?.branding ?? undefined,
     };
 
     try {
@@ -244,7 +261,8 @@ export class ReportsService {
           data: {
             inspectionId: inspection.id,
             orgId,
-            buyerId: inspection.buyerId,
+            clientCompanyId: inspection.clientCompanyId,
+            canonicalVersion: 2,
             brandingSnapshot:
               brandingSnapshot as unknown as Prisma.InputJsonValue,
             canonicalSnapshot: canonical as unknown as Prisma.InputJsonValue,
@@ -407,7 +425,7 @@ export class ReportsService {
     const report = await this.prisma.report.findFirst({
       where: { id: reportId, orgId },
       include: {
-        buyer: { select: { id: true, name: true } },
+        clientCompany: { select: { id: true, name: true } },
         inspection: {
           select: { purchaseOrder: { select: { poNumber: true } } },
         },
@@ -416,14 +434,14 @@ export class ReportsService {
     if (!report) throw new NotFoundException('Report not found');
 
     const now = new Date();
-    // Eligible = an ACTIVE guest of THIS report's buyer, in THIS tenant, holding
+    // Eligible = an ACTIVE guest of THIS report's CLIENT company, in THIS tenant, holding
     // a live magic-link token. A revoked (token: null) or expired guest gets
     // nothing: the email's only payload is that token, so mailing them would be
     // a dead link, and mailing a revoked guest would be an access-control bug.
-    const guests = await this.prisma.buyerGuest.findMany({
+    const guests = await this.prisma.companyGuest.findMany({
       where: {
         orgId,
-        buyerId: report.buyerId,
+        companyId: report.clientCompanyId as string,
         status: 'ACTIVE',
         token: { not: null },
         OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { gt: now } }],
@@ -431,7 +449,7 @@ export class ReportsService {
       select: { id: true, email: true, token: true },
       orderBy: { createdAt: 'asc' },
     });
-    // BuyerGuest is @@unique([buyerId, email]), so this only defends against
+    // CompanyGuest is @@unique([companyId, email]), so this only defends against
     // casing drift — but it is what guarantees "each recipient exactly once".
     // The canonical (trimmed, lower-cased) address becomes the recipient's
     // identity everywhere downstream — the send, the audit metadata and the
@@ -468,7 +486,7 @@ export class ReportsService {
           entityType: 'Report',
           entityId: report.id,
           metadata: {
-            buyerId: report.buyerId,
+            clientCompanyId: report.clientCompanyId,
             recipientCount: recipients.length,
             // Sorted so the hashed metadata is order-independent.
             recipients: recipients.map((g) => g.email).sort(),
@@ -490,7 +508,7 @@ export class ReportsService {
               token: guest.token as string,
               reportId: report.id,
               poNumber,
-              buyerName: report.buyer?.name ?? null,
+              companyName: report.clientCompany?.name ?? null,
               verificationToken: report.verificationToken,
             })
           ).sent,
@@ -518,9 +536,9 @@ export class ReportsService {
     if (recipients.length === 0) {
       // Not an error: the report is published to the portal and any guest invited
       // later sees it. Surfaced in the response so the console can prompt
-      // "invite a buyer guest" instead of implying an email went out.
+      // "invite a company guest" instead of implying an email went out.
       this.logger.warn(
-        `Report ${report.id} delivered with no eligible buyer guests for buyer ${report.buyerId} — nothing was emailed`,
+        `Report ${report.id} delivered with no eligible guests for client company ${report.clientCompanyId} — nothing was emailed`,
       );
     }
 
@@ -545,7 +563,7 @@ export class ReportsService {
           ? {
               OR: [
                 {
-                  buyer: {
+                  clientCompany: {
                     name: { contains: opts.q, mode: 'insensitive' as const },
                   },
                 },
@@ -574,7 +592,7 @@ export class ReportsService {
         contentHash: true,
         pdfStorageKey: true,
         verificationToken: true,
-        buyer: { select: { id: true, name: true } },
+        clientCompany: { select: { id: true, name: true } },
         inspection: {
           select: {
             status: true,
@@ -615,12 +633,14 @@ export class ReportsService {
       .export({ type: 'spki', format: 'pem' })
       .toString();
 
-    const snapshot = report.canonicalSnapshot as {
-      photoHashes?: string[];
-    } | null;
+    // INS-055 spec §5.4: the hash + signature check stays a byte-exact recompute
+    // over the STORED snapshot, with NO version branch. That is precisely what
+    // keeps every v1 report verifying forever — `canonicalize` sorts keys over
+    // whatever JSON it is given, so the only shape dependency is the top-level
+    // `photoHashes` key, which v2 deliberately did not move.
     const recomputed = contentHash(
       report.canonicalSnapshot,
-      snapshot?.photoHashes ?? [],
+      photoHashesOf(report.canonicalSnapshot),
     );
     const hashMatches = recomputed === report.contentHash;
     const signatureValid = verify(
@@ -633,6 +653,9 @@ export class ReportsService {
       valid: hashMatches && signatureValid,
       hashMatches,
       signatureValid,
+      // Read from the SIGNED payload, never from the mirrored column — a client
+      // verifying a signature should be told which shape it actually read.
+      canonicalVersion: canonicalVersionOf(report.canonicalSnapshot),
       reportId: report.id,
       inspectionId: report.inspectionId,
       generatedAt: report.generatedAt,

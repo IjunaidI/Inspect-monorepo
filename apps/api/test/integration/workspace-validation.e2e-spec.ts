@@ -4,14 +4,14 @@
  *
  * All three fields feed a tamper-proof artifact and used to be persisted
  * verbatim:
- *   - Buyer.primaryColor freezes into Report.brandingSnapshot, so "red" or ""
+ *   - Company.primaryColor freezes into Report.brandingSnapshot, so "red" or ""
  *     became permanent garbage in a signed report (INS-077).
- *   - Buyer.logoUrl freezes into the same snapshot, so it must hold a DURABLE
+ *   - Company.logoUrl freezes into the same snapshot, so it must hold a DURABLE
  *     object key (or a legacy absolute URL) and never a ~900s presigned URL that
  *     would rot the artifact (INS-072). Rendering re-signs the key at read time,
  *     behind an org-prefix guard so the decoration cannot become a signing oracle
  *     over another tenant's objects.
- *   - Supplier.gps was typed `unknown` and stored as-is, so the console's
+ *   - Company.gps was typed `unknown` and stored as-is, so the console's
  *     hand-typed JSON silently saved junk — or nothing at all (INS-071).
  *
  * The byte-path assertions follow the storage self-skip discipline of
@@ -106,9 +106,9 @@ describe('Workspace write validation (integration)', () => {
   });
 
   // ── INS-077: buyer primaryColor ─────────────────────────────────────────
-  describe('buyer primaryColor', () => {
+  describe('company primaryColor', () => {
     it('rejects a non-hex colour on create', async () => {
-      const res = await client.post('/buyers', {
+      const res = await client.post('/companies', {
         token: org.ownerToken,
         body: { name: `Colour reject ${tag}`, primaryColor: 'red' },
       });
@@ -118,57 +118,57 @@ describe('Workspace write validation (integration)', () => {
 
     it('accepts #1457A3 on create and normalises its case', async () => {
       const buyer = expect2xx(
-        await client.post('/buyers', {
+        await client.post('/companies', {
           token: org.ownerToken,
           body: { name: `Colour ok ${tag}`, primaryColor: '#1457A3' },
         }),
-        'POST /buyers (valid colour)',
+        'POST /companies (valid colour)',
       );
       // Case is normalised so #1457A3 and #1457a3 cannot produce two different
       // brandingSnapshots for what is the same colour.
       expect(buyer.primaryColor).toBe('#1457a3');
       const fetched = expect2xx(
-        await client.get(`/buyers/${buyer.id}`, { token: org.ownerToken }),
-        'GET /buyers/:id',
+        await client.get(`/companies/${buyer.id}`, { token: org.ownerToken }),
+        'GET /companies/:id',
       );
       expect(fetched.primaryColor).toBe('#1457a3');
     });
 
     it('rejects a non-hex colour on update and leaves the stored value untouched', async () => {
       const buyer = expect2xx(
-        await client.post('/buyers', {
+        await client.post('/companies', {
           token: org.ownerToken,
           body: { name: `Colour patch ${tag}`, primaryColor: '#1457A3' },
         }),
-        'POST /buyers (patch fixture)',
+        'POST /companies (patch fixture)',
       );
-      const res = await client.patch(`/buyers/${buyer.id}`, {
+      const res = await client.patch(`/companies/${buyer.id}`, {
         token: org.ownerToken,
         body: { primaryColor: 'red' },
       });
       expect(res.status).toBe(400);
       // The service validates BEFORE touching the DB, so nothing was written.
       const after = expect2xx(
-        await client.get(`/buyers/${buyer.id}`, { token: org.ownerToken }),
-        'GET /buyers/:id (after rejected patch)',
+        await client.get(`/companies/${buyer.id}`, { token: org.ownerToken }),
+        'GET /companies/:id (after rejected patch)',
       );
       expect(after.primaryColor).toBe('#1457a3');
 
       const ok = expect2xx(
-        await client.patch(`/buyers/${buyer.id}`, {
+        await client.patch(`/companies/${buyer.id}`, {
           token: org.ownerToken,
           body: { primaryColor: '#0B7D6B' },
         }),
-        'PATCH /buyers/:id (valid colour)',
+        'PATCH /companies/:id (valid colour)',
       );
       expect(ok.primaryColor).toBe('#0b7d6b');
     });
   });
 
   // ── INS-071: supplier gps ───────────────────────────────────────────────
-  describe('supplier gps', () => {
+  describe('company gps', () => {
     it('rejects a structurally wrong gps object', async () => {
-      const res = await client.post('/suppliers', {
+      const res = await client.post('/companies', {
         token: org.ownerToken,
         body: { name: `Gps shape ${tag}`, gps: { foo: 1 } },
       });
@@ -177,7 +177,7 @@ describe('Workspace write validation (integration)', () => {
     });
 
     it('rejects an out-of-range latitude', async () => {
-      const res = await client.post('/suppliers', {
+      const res = await client.post('/companies', {
         token: org.ownerToken,
         body: { name: `Gps range ${tag}`, gps: { lat: 999, lng: 90.4125 } },
       });
@@ -186,7 +186,7 @@ describe('Workspace write validation (integration)', () => {
     });
 
     it('rejects a non-object gps', async () => {
-      const res = await client.post('/suppliers', {
+      const res = await client.post('/companies', {
         token: org.ownerToken,
         body: { name: `Gps scalar ${tag}`, gps: '23.8103,90.4125' },
       });
@@ -195,7 +195,7 @@ describe('Workspace write validation (integration)', () => {
 
     it('round-trips a valid pair as exactly { lat, lng }', async () => {
       const created = expect2xx(
-        await client.post('/suppliers', {
+        await client.post('/companies', {
           token: org.ownerToken,
           // The extra key must be stripped: the column is canonical { lat, lng }.
           body: {
@@ -203,13 +203,13 @@ describe('Workspace write validation (integration)', () => {
             gps: { lat: 23.8103, lng: 90.4125, altitude: 5 },
           },
         }),
-        'POST /suppliers (valid gps)',
+        'POST /companies (valid gps)',
       );
       expect(created.gps).toEqual({ lat: 23.8103, lng: 90.4125 });
 
       const fetched = expect2xx(
-        await client.get(`/suppliers/${created.id}`, { token: org.ownerToken }),
-        'GET /suppliers/:id',
+        await client.get(`/companies/${created.id}`, { token: org.ownerToken }),
+        'GET /companies/:id',
       );
       expect(fetched.gps).toEqual({ lat: 23.8103, lng: 90.4125 });
       expect(Object.keys(fetched.gps).sort()).toEqual(['lat', 'lng']);
@@ -217,62 +217,62 @@ describe('Workspace write validation (integration)', () => {
 
     it('rejects a bad gps on update and leaves the stored pair intact', async () => {
       const created = expect2xx(
-        await client.post('/suppliers', {
+        await client.post('/companies', {
           token: org.ownerToken,
           body: {
             name: `Gps patch ${tag}`,
             gps: { lat: 11.1085, lng: 77.3411 },
           },
         }),
-        'POST /suppliers (patch fixture)',
+        'POST /companies (patch fixture)',
       );
-      const res = await client.patch(`/suppliers/${created.id}`, {
+      const res = await client.patch(`/companies/${created.id}`, {
         token: org.ownerToken,
         body: { gps: { lat: 'north', lng: 77.3411 } },
       });
       expect(res.status).toBe(400);
       const after = expect2xx(
-        await client.get(`/suppliers/${created.id}`, { token: org.ownerToken }),
-        'GET /suppliers/:id (after rejected patch)',
+        await client.get(`/companies/${created.id}`, { token: org.ownerToken }),
+        'GET /companies/:id (after rejected patch)',
       );
       expect(after.gps).toEqual({ lat: 11.1085, lng: 77.3411 });
     });
 
     it('clears the pin when gps is explicitly null', async () => {
       const created = expect2xx(
-        await client.post('/suppliers', {
+        await client.post('/companies', {
           token: org.ownerToken,
           body: {
             name: `Gps clear ${tag}`,
             gps: { lat: 21.0285, lng: 105.8542 },
           },
         }),
-        'POST /suppliers (clear fixture)',
+        'POST /companies (clear fixture)',
       );
       expect2xx(
-        await client.patch(`/suppliers/${created.id}`, {
+        await client.patch(`/companies/${created.id}`, {
           token: org.ownerToken,
           body: { gps: null },
         }),
-        'PATCH /suppliers/:id (clear gps)',
+        'PATCH /companies/:id (clear gps)',
       );
       const after = expect2xx(
-        await client.get(`/suppliers/${created.id}`, { token: org.ownerToken }),
-        'GET /suppliers/:id (after clear)',
+        await client.get(`/companies/${created.id}`, { token: org.ownerToken }),
+        'GET /companies/:id (after clear)',
       );
       expect(after.gps).toBeNull();
     });
   });
 
   // ── INS-072: buyer logo key + view-URL decoration ───────────────────────
-  describe('buyer logo', () => {
+  describe('company logo', () => {
     it('echoes a legacy absolute URL but nulls a crafted foreign-org key', async () => {
       const buyer = expect2xx(
-        await client.post('/buyers', {
+        await client.post('/companies', {
           token: org.ownerToken,
           body: { name: `Logo guard ${tag}` },
         }),
-        'POST /buyers (logo guard fixture)',
+        'POST /companies (logo guard fixture)',
       );
 
       // Control, and the no-migration guarantee: a pre-INS-072 absolute URL is
@@ -280,33 +280,33 @@ describe('Workspace write validation (integration)', () => {
       // asserted below is the org-prefix guard talking — not a blanket null.
       const legacy = `https://legacy.example.com/${tag}/logo.png`;
       expect2xx(
-        await client.patch(`/buyers/${buyer.id}`, {
+        await client.patch(`/companies/${buyer.id}`, {
           token: org.ownerToken,
           body: { logoUrl: legacy },
         }),
-        'PATCH /buyers/:id (legacy URL)',
+        'PATCH /companies/:id (legacy URL)',
       );
       const legacyRead = expect2xx(
-        await client.get(`/buyers/${buyer.id}`, { token: org.ownerToken }),
-        'GET /buyers/:id (legacy URL)',
+        await client.get(`/companies/${buyer.id}`, { token: org.ownerToken }),
+        'GET /companies/:id (legacy URL)',
       );
       expect(legacyRead.logoUrl).toBe(legacy);
       expect(legacyRead.logoViewUrl).toBe(legacy);
 
       // A key inside ANOTHER tenant's namespace must never be signed — otherwise
       // this endpoint is a signing oracle over that tenant's objects.
-      const foreignKey = `orgs/${foreignOrg.orgId}/buyers/${randomUUID()}.png`;
+      const foreignKey = `orgs/${foreignOrg.orgId}/companies/${randomUUID()}.png`;
       expect(foreignOrg.orgId).not.toBe(org.orgId);
       expect2xx(
-        await client.patch(`/buyers/${buyer.id}`, {
+        await client.patch(`/companies/${buyer.id}`, {
           token: org.ownerToken,
           body: { logoUrl: foreignKey },
         }),
-        'PATCH /buyers/:id (foreign key)',
+        'PATCH /companies/:id (foreign key)',
       );
       const foreignRead = expect2xx(
-        await client.get(`/buyers/${buyer.id}`, { token: org.ownerToken }),
-        'GET /buyers/:id (foreign key)',
+        await client.get(`/companies/${buyer.id}`, { token: org.ownerToken }),
+        'GET /companies/:id (foreign key)',
       );
       // The durable column still holds what was written — the null below comes
       // from the read-time guard, not from a rejected write.
@@ -318,24 +318,24 @@ describe('Workspace write validation (integration)', () => {
       if (!storageUp) return; // skipped — see beforeAll warning
 
       const buyer = expect2xx(
-        await client.post('/buyers', {
+        await client.post('/companies', {
           token: org.ownerToken,
           body: { name: `Logo bytes ${tag}` },
         }),
-        'POST /buyers (logo bytes fixture)',
+        'POST /companies (logo bytes fixture)',
       );
 
       const presign = expect2xx(
-        await client.post('/buyers/presign', {
+        await client.post('/companies/presign', {
           token: org.ownerToken,
           body: { ext: 'png' },
         }),
-        'POST /buyers/presign',
+        'POST /companies/presign',
       );
       // The key is namespaced to THIS org — that prefix is exactly what the
       // read-time guard re-checks.
       expect(presign.storageKey).toMatch(
-        new RegExp(`^orgs/${org.orgId}/buyers/`),
+        new RegExp(`^orgs/${org.orgId}/companies/`),
       );
       expect(presign.method).toBe('PUT');
       expect(presign.uploadUrl).toContain('X-Amz-Signature');
@@ -352,16 +352,16 @@ describe('Workspace write validation (integration)', () => {
       expect(put.status).toBeLessThan(300);
 
       expect2xx(
-        await client.patch(`/buyers/${buyer.id}`, {
+        await client.patch(`/companies/${buyer.id}`, {
           token: org.ownerToken,
           body: { logoUrl: presign.storageKey },
         }),
-        'PATCH /buyers/:id (store durable key)',
+        'PATCH /companies/:id (store durable key)',
       );
 
       const detail = expect2xx(
-        await client.get(`/buyers/${buyer.id}`, { token: org.ownerToken }),
-        'GET /buyers/:id (logo view url)',
+        await client.get(`/companies/${buyer.id}`, { token: org.ownerToken }),
+        'GET /companies/:id (logo view url)',
       );
       // THE contract: the column holds the durable key, and the presigned URL is
       // a separate render-time field. A presigned URL in `logoUrl` would freeze
@@ -375,12 +375,12 @@ describe('Workspace write validation (integration)', () => {
       // The list endpoint decorates too (the console renders logos from it).
       const list = expect2xx(
         await client.get(
-          `/buyers?q=${encodeURIComponent(`Logo bytes ${tag}`)}`,
+          `/companies?q=${encodeURIComponent(`Logo bytes ${tag}`)}`,
           {
             token: org.ownerToken,
           },
         ),
-        'GET /buyers (logo view url)',
+        'GET /companies (logo view url)',
       );
       const row = (
         list as Array<{
@@ -402,17 +402,17 @@ describe('Workspace write validation (integration)', () => {
 
       // Storage is demonstrably signable here, so the null a foreign-org key
       // yields is unambiguously the org-prefix guard.
-      const foreignKey = `orgs/${foreignOrg.orgId}/buyers/${randomUUID()}.png`;
+      const foreignKey = `orgs/${foreignOrg.orgId}/companies/${randomUUID()}.png`;
       expect2xx(
-        await client.patch(`/buyers/${buyer.id}`, {
+        await client.patch(`/companies/${buyer.id}`, {
           token: org.ownerToken,
           body: { logoUrl: foreignKey },
         }),
-        'PATCH /buyers/:id (foreign key, storage up)',
+        'PATCH /companies/:id (foreign key, storage up)',
       );
       const guarded = expect2xx(
-        await client.get(`/buyers/${buyer.id}`, { token: org.ownerToken }),
-        'GET /buyers/:id (foreign key, storage up)',
+        await client.get(`/companies/${buyer.id}`, { token: org.ownerToken }),
+        'GET /companies/:id (foreign key, storage up)',
       );
       expect(guarded.logoViewUrl).toBeNull();
     });

@@ -204,45 +204,47 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
   describe('INS-061 — archive -> restore round-trip', () => {
     it('restores an archived buyer; cross-org restore 404s', async () => {
       const buyer = expect2xx(
-        await client.post('/buyers', {
+        await client.post('/companies', {
           token: orgA.ownerToken,
           body: { name: `Restore Buyer ${tag}` },
         }),
         'POST /buyers (restore fixture)',
       );
       expect2xx(
-        await client.delete(`/buyers/${buyer.id}`, { token: orgA.ownerToken }),
+        await client.delete(`/companies/${buyer.id}`, {
+          token: orgA.ownerToken,
+        }),
         'archive buyer',
       );
 
       const active = expect2xx(
-        await client.get('/buyers', { token: orgA.ownerToken }),
-        'GET /buyers',
+        await client.get('/companies', { token: orgA.ownerToken }),
+        'GET /companies',
       );
       expect(active.some((b: { id: string }) => b.id === buyer.id)).toBe(false);
       const all = expect2xx(
-        await client.get('/buyers?includeArchived=1', {
+        await client.get('/companies?includeArchived=1', {
           token: orgA.ownerToken,
         }),
-        'GET /buyers?includeArchived=1',
+        'GET /companies?includeArchived=1',
       );
       expect(all.some((b: { id: string }) => b.id === buyer.id)).toBe(true);
 
-      const foreign = await client.post(`/buyers/${buyer.id}/restore`, {
+      const foreign = await client.post(`/companies/${buyer.id}/restore`, {
         token: orgB.ownerToken,
       });
       expect(foreign.status).toBe(404);
 
       const restored = expect2xx(
-        await client.post(`/buyers/${buyer.id}/restore`, {
+        await client.post(`/companies/${buyer.id}/restore`, {
           token: orgA.ownerToken,
         }),
         'restore buyer',
       );
       expect(restored.archivedAt).toBeNull();
       const back = expect2xx(
-        await client.get('/buyers', { token: orgA.ownerToken }),
-        'GET /buyers after restore',
+        await client.get('/companies', { token: orgA.ownerToken }),
+        'GET /companies after restore',
       );
       expect(back.some((b: { id: string }) => b.id === buyer.id)).toBe(true);
     });
@@ -337,7 +339,7 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(row).toBeTruthy();
       expect(row.canonicalSnapshot).toBeUndefined();
       expect(row.inspection.purchaseOrder.poNumber).toBe(`PO-${tag}`);
-      expect(row.buyer.name).toBe(`E2E Buyer ${tag}`);
+      expect(row.clientCompany.name).toBe(`E2E Client ${tag}`);
 
       const listB = expect2xx(
         await client.get('/reports', { token: orgB.ownerToken }),

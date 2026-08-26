@@ -1,11 +1,13 @@
-import { BuyersController, buyerLogoPrefix } from './buyers.controller';
+import { CompaniesController, companyLogoPrefix } from './companies.controller';
 
 /**
- * INS-072 — buyer logos are stored as DURABLE object keys and presigned at
- * render time. These specs pin the two properties that keep that safe:
+ * INS-072 (carried to INS-055) — company logos are stored as DURABLE object keys
+ * and presigned at RENDER time. These specs pin the two properties that keep
+ * that safe:
  *   1. the key handed to the client is always inside the caller's org namespace;
- *   2. `logoViewUrl` never signs a key outside that namespace (no signing oracle
- *      over another tenant's objects), while legacy absolute URLs keep working.
+ *   2. `logoViewUrl` never signs a key outside that namespace — otherwise the
+ *      decoration is a signing oracle over another tenant's objects — while
+ *      legacy absolute URLs keep rendering.
  */
 function makeController(
   overrides: Partial<
@@ -18,16 +20,16 @@ function makeController(
   const presignDownload =
     overrides.presignDownload ??
     jest.fn((key: string) => `https://s3.test/${key}?X-Amz-Signature=get`);
-  const buyers = {
+  const companies = {
     list: jest.fn(async () => [] as unknown[]),
-    get: jest.fn(async () => ({ id: 'b1', logoUrl: null as string | null })),
+    get: jest.fn(async () => ({ id: 'c1', logoUrl: null as string | null })),
   };
 
-  const controller = new BuyersController(
-    buyers as any,
+  const controller = new CompaniesController(
+    companies as any,
     { presignUpload, presignDownload } as any,
   );
-  return { controller, buyers, presignUpload, presignDownload };
+  return { controller, companies, presignUpload, presignDownload };
 }
 
 const USER = {
@@ -37,13 +39,15 @@ const USER = {
   actingAsOrgId: null,
 };
 
-describe('BuyersController logo presign (INS-072)', () => {
+describe('CompaniesController logo presign (INS-072)', () => {
   it('mints a key inside the caller org namespace and returns a PUT url', () => {
     const { controller, presignUpload } = makeController();
 
     const out = controller.presign(USER as any, { ext: 'PNG' });
-    expect(out.storageKey.startsWith(buyerLogoPrefix('orgA'))).toBe(true);
-    expect(out.storageKey).toMatch(/^orgs\/orgA\/buyers\/[0-9a-f-]{36}\.png$/);
+    expect(out.storageKey.startsWith(companyLogoPrefix('orgA'))).toBe(true);
+    expect(out.storageKey).toMatch(
+      /^orgs\/orgA\/companies\/[0-9a-f-]{36}\.png$/,
+    );
     expect(presignUpload).toHaveBeenCalledWith(out.storageKey);
     expect(out.uploadUrl).toContain(out.storageKey);
     expect(out.method).toBe('PUT');
@@ -53,21 +57,23 @@ describe('BuyersController logo presign (INS-072)', () => {
     const { controller } = makeController();
 
     const out = controller.presign(USER as any, { ext: '../../etc/passwd' });
-    expect(out.storageKey).toMatch(/^orgs\/orgA\/buyers\/[0-9a-f-]{36}\.png$/);
+    expect(out.storageKey).toMatch(
+      /^orgs\/orgA\/companies\/[0-9a-f-]{36}\.png$/,
+    );
   });
 });
 
-describe('BuyersController logoViewUrl decoration (INS-072)', () => {
+describe('CompaniesController logoViewUrl decoration (INS-072)', () => {
   async function getWithLogo(logoUrl: string | null, overrides = {}) {
     const ctx = makeController(overrides);
-    ctx.buyers.get = jest.fn(async () => ({ id: 'b1', logoUrl }));
+    ctx.companies.get = jest.fn(async () => ({ id: 'c1', logoUrl }));
 
-    const out: any = await ctx.controller.get(USER as any, 'b1');
+    const out: any = await ctx.controller.get(USER as any, 'c1');
     return { out, ...ctx };
   }
 
   it('presigns a key in this org namespace at read time', async () => {
-    const key = `${buyerLogoPrefix('orgA')}abc.png`;
+    const key = `${companyLogoPrefix('orgA')}abc.png`;
     const { out, presignDownload } = await getWithLogo(key);
     expect(presignDownload).toHaveBeenCalledWith(key);
     expect(out.logoViewUrl).toBe(`https://s3.test/${key}?X-Amz-Signature=get`);
@@ -77,13 +83,13 @@ describe('BuyersController logoViewUrl decoration (INS-072)', () => {
 
   it('never signs a crafted foreign-org key', async () => {
     const { out, presignDownload } = await getWithLogo(
-      'orgs/orgB/buyers/secret.png',
+      'orgs/orgB/companies/secret.png',
     );
     expect(out.logoViewUrl).toBeNull();
     expect(presignDownload).not.toHaveBeenCalled();
   });
 
-  it('never signs a key outside the buyers namespace', async () => {
+  it('never signs a key outside the companies namespace', async () => {
     const { out, presignDownload } = await getWithLogo(
       'orgs/orgA/inspections/x/photos/p.jpg',
     );
@@ -108,23 +114,23 @@ describe('BuyersController logoViewUrl decoration (INS-072)', () => {
     const presignDownload = jest.fn(() => {
       throw new Error('Object storage is not configured');
     });
-    const { out } = await getWithLogo(`${buyerLogoPrefix('orgA')}abc.png`, {
+    const { out } = await getWithLogo(`${companyLogoPrefix('orgA')}abc.png`, {
       presignDownload,
     });
     expect(out.logoViewUrl).toBeNull();
   });
 
   it('decorates every list row too (the directory renders from it)', async () => {
-    const { controller, buyers } = makeController();
-    buyers.list = jest.fn(async () => [
-      { id: 'b1', logoUrl: `${buyerLogoPrefix('orgA')}one.png` },
-      { id: 'b2', logoUrl: 'orgs/orgB/buyers/two.png' },
-      { id: 'b3', logoUrl: null },
+    const { controller, companies } = makeController();
+    companies.list = jest.fn(async () => [
+      { id: 'c1', logoUrl: `${companyLogoPrefix('orgA')}one.png` },
+      { id: 'c2', logoUrl: 'orgs/orgB/companies/two.png' },
+      { id: 'c3', logoUrl: null },
     ]);
 
     const rows: any[] = await controller.list(USER as any, {});
     expect(rows.map((r) => r.logoViewUrl)).toEqual([
-      `https://s3.test/${buyerLogoPrefix('orgA')}one.png?X-Amz-Signature=get`,
+      `https://s3.test/${companyLogoPrefix('orgA')}one.png?X-Amz-Signature=get`,
       null,
       null,
     ]);

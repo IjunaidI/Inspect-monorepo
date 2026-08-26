@@ -55,8 +55,8 @@ interface Summary {
     verdicts: number;
     truncated: boolean;
   };
-  buyers: number;
-  suppliers: number;
+  /** INS-055: one unified counterparty count (was `buyers` + `suppliers`). */
+  companies: number;
   products: number;
   purchaseOrders: number;
   reports: number;
@@ -250,7 +250,11 @@ describe('Dashboard KPIs (integration, INS-068)', () => {
     expect(z.quality.defectsFound).toBe(0);
     expect(z.quality.dphu).toBe(0); // a clean lot is 0, distinct from the null zero-state
     expect(z.quality.passRate).toBe(0);
-    expect(z.buyers).toBe(1);
+    // INS-055: createWorkspace makes TWO companies — the one that plays the
+    // client role and the one that plays the factory role — where it used to
+    // make one buyer and one supplier. The point of the assertion is unchanged:
+    // org Z's count is its own, and org A's rows never leak in.
+    expect(z.companies).toBe(2);
 
     // ...and org A is unchanged by org Z's activity.
     const a = await summaryFor(orgA.ownerToken);

@@ -3,11 +3,10 @@ import { redirect } from 'next/navigation';
 import {
   apiGet,
   loadOrFallback,
-  type ApiBuyer,
+  type ApiCompany,
   type ApiDashboardSummary,
   type ApiLoopPreset,
   type ApiQualityMetrics,
-  type ApiSupplier,
 } from '@/lib/api';
 import { auth } from '@/lib/auth';
 import { apiRoleAtLeast } from '@/lib/roles';
@@ -20,19 +19,22 @@ export const dynamic = 'force-dynamic';
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60 * 1000).toISOString();
 
-const DEMO_BUYERS: ApiBuyer[] = [
-  { id: 'demo-b1', name: 'Nordvik Retail Group', primaryColor: '#1457A3', updatedAt: daysAgo(1), _count: { purchaseOrders: 6, inspections: 9, reports: 4 } },
-  { id: 'demo-b2', name: 'Maison Adèle', primaryColor: '#0B7D6B', updatedAt: daysAgo(3), _count: { purchaseOrders: 3, inspections: 5, reports: 2 } },
-  { id: 'demo-b3', name: 'Beaumont Living', primaryColor: '#C2410C', updatedAt: daysAgo(6), _count: { purchaseOrders: 2, inspections: 2, reports: 1 } },
-  { id: 'demo-b4', name: 'Kestrel & Thorne', primaryColor: '#7C3AED', updatedAt: daysAgo(8), _count: { purchaseOrders: 4, inspections: 6, reports: 3 } },
-  { id: 'demo-b5', name: 'Hudson & Field', primaryColor: '#B5791A', updatedAt: daysAgo(12), _count: { purchaseOrders: 1, inspections: 1, reports: 0 } },
-  { id: 'demo-b6', name: 'Sundsvall Home', primaryColor: '#0B1220', updatedAt: daysAgo(20), _count: { purchaseOrders: 2, inspections: 3, reports: 2 } },
-];
-const DEMO_SUPPLIERS: ApiSupplier[] = [
-  { id: 'demo-s1', name: 'Tirupur Knits Unit-3', address: 'Tirupur, India', gps: { lat: 11.1085, lng: 77.3411 }, updatedAt: daysAgo(2), _count: { purchaseOrders: 7, inspections: 11 } },
-  { id: 'demo-s2', name: 'Dhaka Weave Ltd.', address: 'Dhaka, Bangladesh', gps: { lat: 23.8103, lng: 90.4125 }, updatedAt: daysAgo(4), _count: { purchaseOrders: 5, inspections: 8 } },
-  { id: 'demo-s3', name: 'Karachi Home Mills', address: 'Karachi, Pakistan', gps: null, updatedAt: daysAgo(9), _count: { purchaseOrders: 2, inspections: 3 } },
-  { id: 'demo-s4', name: 'Hanoi Apparel Co.', address: 'Hanoi, Vietnam', gps: { lat: 21.0285, lng: 105.8542 }, updatedAt: daysAgo(15), _count: { purchaseOrders: 4, inspections: 4 } },
+/**
+ * INS-055: one fallback fixture, mixing both ownership kinds so the directory's
+ * filter chips still have something to separate when the API is unreachable.
+ * The brand-carrying rows are the ones that used to be buyers; the addressed
+ * rows are the ones that used to be suppliers — but nothing here declares a
+ * trade role, because a row cannot have one.
+ */
+const DEMO_COMPANIES: ApiCompany[] = [
+  { id: 'demo-c1', name: 'Nordvik Retail Group', kind: 'THIRD_PARTY', primaryColor: '#1457A3', updatedAt: daysAgo(1), _count: { purchaseOrders: 6, inspections: 9, reports: 4 } },
+  { id: 'demo-c2', name: 'Maison Adèle', kind: 'THIRD_PARTY', primaryColor: '#0B7D6B', updatedAt: daysAgo(3), _count: { purchaseOrders: 3, inspections: 5, reports: 2 } },
+  { id: 'demo-c3', name: 'Beaumont Living', kind: 'THIRD_PARTY', primaryColor: '#C2410C', updatedAt: daysAgo(6), _count: { purchaseOrders: 2, inspections: 2, reports: 1 } },
+  { id: 'demo-c4', name: 'Kestrel & Thorne', kind: 'THIRD_PARTY', primaryColor: '#7C3AED', updatedAt: daysAgo(8), _count: { purchaseOrders: 4, inspections: 6, reports: 3 } },
+  { id: 'demo-c5', name: 'Tirupur Knits Unit-3', kind: 'INTERNAL', address: 'Tirupur, India', gps: { lat: 11.1085, lng: 77.3411 }, updatedAt: daysAgo(2), _count: { purchaseOrders: 7, inspections: 11, reports: 0 } },
+  { id: 'demo-c6', name: 'Dhaka Weave Ltd.', kind: 'THIRD_PARTY', address: 'Dhaka, Bangladesh', gps: { lat: 23.8103, lng: 90.4125 }, updatedAt: daysAgo(4), _count: { purchaseOrders: 5, inspections: 8, reports: 0 } },
+  { id: 'demo-c7', name: 'Karachi Home Mills', kind: 'THIRD_PARTY', address: 'Karachi, Pakistan', gps: null, updatedAt: daysAgo(9), _count: { purchaseOrders: 2, inspections: 3, reports: 0 } },
+  { id: 'demo-c8', name: 'Hanoi Apparel Co.', kind: 'INTERNAL', address: 'Hanoi, Vietnam', gps: { lat: 21.0285, lng: 105.8542 }, updatedAt: daysAgo(15), _count: { purchaseOrders: 4, inspections: 4, reports: 0 } },
 ];
 const DEMO_SUMMARY: ApiDashboardSummary = {
   // Demo and live must agree in SHAPE, and the demo numbers must be internally
@@ -59,8 +61,7 @@ const DEMO_SUMMARY: ApiDashboardSummary = {
     verdicts: 19,
     truncated: false,
   },
-  buyers: 6,
-  suppliers: 4,
+  companies: 8,
   products: 14,
   purchaseOrders: 18,
   reports: 12,
@@ -137,8 +138,7 @@ function StatTiles({ summary }: { summary: ApiDashboardSummary }) {
         <StatTile label="Pass rate" value={pct(quality.passRate)} hint={qualityHint} />
       </TileRow>
       <TileRow>
-        <StatTile label="Buyers" value={num(summary.buyers)} />
-        <StatTile label="Suppliers" value={num(summary.suppliers)} />
+        <StatTile label="Companies" value={num(summary.companies)} />
         <StatTile label="Products" value={num(summary.products)} />
         <StatTile label="Purchase orders" value={num(summary.purchaseOrders)} />
         <StatTile label="Reports" value={num(summary.reports)} />
@@ -152,9 +152,14 @@ const PAGE_SIZE = 50;
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ includeArchived?: string; q?: string; page?: string }>;
+  searchParams: Promise<{
+    includeArchived?: string;
+    q?: string;
+    page?: string;
+    kind?: string;
+  }>;
 }) {
-  // Every read below (/dashboard/summary, /buyers, /suppliers) floors at
+  // Every read below (/dashboard/summary, /companies) floors at
   // QA_MANAGER, and loadOrFallback deliberately RETHROWS 401/403 rather than
   // showing demo data to an authenticated user. An INSPECTOR therefore hit the
   // console error boundary here — and `/` redirects to this screen, so it was
@@ -163,36 +168,37 @@ export default async function DashboardPage({
   const session = (await auth()) as unknown as { role?: string } | null;
   if (!apiRoleAtLeast(session?.role, 'QA_MANAGER')) redirect('/inspections');
 
-  const { includeArchived, q, page } = await searchParams;
+  const { includeArchived, q, page, kind } = await searchParams;
   const pageNum = Math.max(parseInt(page ?? '1', 10) || 1, 1);
 
   // Default = active rows only (API default); ?includeArchived=1 shows everything.
   // Server-side search + pagination (INS-050): forward q/take/skip.
+  // INS-055: ?kind= narrows by ownership. An unrecognised value is ignored by
+  // the API rather than 400ing, so a stale bookmark still renders.
   const apiParams = new URLSearchParams();
   if (includeArchived === '1') apiParams.set('includeArchived', '1');
   if (q) apiParams.set('q', q);
+  if (kind) apiParams.set('kind', kind);
   apiParams.set('take', String(PAGE_SIZE));
   apiParams.set('skip', String((pageNum - 1) * PAGE_SIZE));
   const qs = `?${apiParams.toString()}`;
 
   const summaryRes = await loadOrFallback<ApiDashboardSummary>('/dashboard/summary', DEMO_SUMMARY);
-  const buyersRes = await loadOrFallback<ApiBuyer[]>(`/buyers${qs}`, DEMO_BUYERS);
-  const suppliersRes = await loadOrFallback<ApiSupplier[]>(`/suppliers${qs}`, DEMO_SUPPLIERS);
+  const companiesRes = await loadOrFallback<ApiCompany[]>(`/companies${qs}`, DEMO_COMPANIES);
   const presets = await apiGet<ApiLoopPreset[]>('/loop-presets').catch(() => [] as ApiLoopPreset[]);
 
   return (
     <div style={{ padding: '28px 32px' }}>
       <PageHead
-        title="Buyers & Suppliers"
-        sub="Buyers receive branded reports. Suppliers are the factories you inspect. Linked by POs and products."
+        title="Companies"
+        sub="Every counterparty you trade with. Whether a company is the client or the factory is decided per purchase order — the same company can be either."
       />
       <StatTiles summary={summaryRes.data} />
-      <ErrorBoundary label="The buyers & suppliers directory">
+      <ErrorBoundary label="The companies directory">
         <DirectoryClient
-          buyers={buyersRes.data}
-          suppliers={suppliersRes.data}
+          companies={companiesRes.data}
           presets={presets}
-          live={buyersRes.live}
+          live={companiesRes.live}
           page={pageNum}
           pageSize={PAGE_SIZE}
         />

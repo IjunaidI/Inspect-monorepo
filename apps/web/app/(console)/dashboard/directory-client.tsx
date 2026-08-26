@@ -11,11 +11,20 @@ import {
   Plus,
   Upload,
 } from 'lucide-react';
-import { Avatar, Btn, Mono } from '@/components/inspect/shell';
+import { Btn, Mono } from '@/components/inspect/shell';
 import { ConfirmDialog } from '@/components/inspect/confirm-dialog';
 import { mono as monoStyle, ui } from '@/components/inspect/tokens';
-import type { ApiBuyer, ApiLoopPreset, ApiSupplier } from '@/lib/api';
-import { archiveBuyer, archiveSupplier, createBuyer, createSupplier, presignBuyerLogo, restoreBuyer, restoreSupplier } from './actions';
+import type { ApiCompany, ApiCompanyKind, ApiLoopPreset } from '@/lib/api';
+import { archiveCompany, createCompany, presignCompanyLogo, restoreCompany } from './actions';
+
+/**
+ * INS-055 — ONE directory. The Buyers / Suppliers tabs are gone because trade
+ * role is a property of the PurchaseOrder / Inspection edge, not of the row: the
+ * same company can be the client on one PO and the factory on another, so a
+ * role-tabbed list could not place it. What replaces the tabs is a filter on
+ * `kind` — INTERNAL vs THIRD_PARTY — which is the orthogonal OWNERSHIP axis and
+ * genuinely is a property of the row.
+ */
 
 const th = {
   fontSize: 11,
@@ -58,6 +67,16 @@ function ArchivedBadge() {
   return (
     <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: '#EFF2F6', color: '#475467', textTransform: 'uppercase', letterSpacing: 0.4 }}>
       Archived
+    </span>
+  );
+}
+
+/** Ownership, not role — an INTERNAL company is our own site or own brand. */
+function KindBadge({ kind }: { kind: ApiCompanyKind }) {
+  const internal = kind === 'INTERNAL';
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: internal ? '#EAF4EC' : '#EEF2F7', color: internal ? '#0B7D6B' : '#475467', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+      {internal ? 'Internal' : 'Third-party'}
     </span>
   );
 }
@@ -113,12 +132,12 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 const isAbsoluteUrl = (v: string) => /^https?:\/\//i.test(v);
 /** Decimal degrees with trailing zeros dropped (INS-071): 23.810300 → 23.8103, 120.000000 → 120. */
 const coord = (n: number) => String(Number(n.toFixed(6)));
-/** Render source for a buyer logo: the API's short-lived presigned GET, or a legacy absolute URL. */
-const logoSrcOf = (b: ApiBuyer): string | null =>
-  b.logoViewUrl ?? (b.logoUrl && isAbsoluteUrl(b.logoUrl) ? b.logoUrl : null);
+/** Render source for a company logo: the API's short-lived presigned GET, or a legacy absolute URL. */
+const logoSrcOf = (c: ApiCompany): string | null =>
+  c.logoViewUrl ?? (c.logoUrl && isAbsoluteUrl(c.logoUrl) ? c.logoUrl : null);
 
 /**
- * Buyer logo upload (INS-072): presign → PUT the bytes straight to storage →
+ * Company logo upload (INS-072): presign → PUT the bytes straight to storage →
  * submit the DURABLE object key. The presigned URL is display-only and must never
  * be persisted — `logoUrl` freezes verbatim into the Ed25519-signed report
  * brandingSnapshot, so a ~900s URL there would rot permanently.
@@ -141,7 +160,7 @@ function LogoUploadField() {
     setUploading(true);
     try {
       const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-      const presign = await presignBuyerLogo(ext);
+      const presign = await presignCompanyLogo(ext);
       if (presign.error || !presign.data) {
         setError(presign.error ?? 'Could not prepare the upload.');
         return;
@@ -157,11 +176,11 @@ function LogoUploadField() {
           headers: { 'Content-Type': file.type || 'application/octet-stream' },
         });
       } catch {
-        setError('Could not reach object storage — the upload never left the browser (network or CORS). The buyer can still be created without a logo.');
+        setError('Could not reach object storage — the upload never left the browser (network or CORS). The company can still be created without a logo.');
         return;
       }
       if (!res.ok) {
-        setError(`Upload rejected by object storage (${res.status}). The buyer can still be created without a logo.`);
+        setError(`Upload rejected by object storage (${res.status}). The company can still be created without a logo.`);
         return;
       }
       setPreview(URL.createObjectURL(file));
@@ -260,9 +279,9 @@ function HexColorField({ defaultValue }: { defaultValue: string }) {
 }
 
 /**
- * Supplier GPS (INS-071): a structured numeric pair. Replaces a single hand-typed
- * JSON field whose JSON.parse sat in an EMPTY catch, so a mistyped brace saved the
- * supplier with no coordinates and no error. Range checks stay on the API.
+ * GPS (INS-071): a structured numeric pair. Replaces a single hand-typed JSON
+ * field whose JSON.parse sat in an EMPTY catch, so a mistyped brace saved the row
+ * with no coordinates and no error. Range checks stay on the API.
  */
 function GpsFields({ lat, lng }: { lat?: number; lng?: number }) {
   return (
@@ -291,7 +310,7 @@ function InlineForm({ title, onClose, children }: { title: string; onClose: () =
   );
 }
 
-function RowMenu({ id, type, archived, onClose }: { id: string; type: 'buyer' | 'supplier'; archived: boolean; onClose: () => void }) {
+function RowMenu({ id, archived, onClose }: { id: string; archived: boolean; onClose: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
@@ -322,16 +341,20 @@ function RowMenu({ id, type, archived, onClose }: { id: string; type: 'buyer' | 
 
   return (
     <div ref={ref} style={{ position: 'absolute', right: 0, top: 32, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 50, minWidth: 180, overflow: 'hidden' }}>
-      <button onClick={() => { router.push(`/${type === 'buyer' ? 'buyers' : 'suppliers'}/${id}`); onClose(); }} style={{ ...item(ui.ink), borderWidth: 0 }}>
+      <button onClick={() => { router.push(`/companies/${id}`); onClose(); }} style={{ ...item(ui.ink), borderWidth: 0 }}>
         Edit
       </button>
-      {type === 'buyer' && (
-        <button onClick={() => { router.push(`/buyers/${id}/guests`); onClose(); }} style={item(ui.ink)}>
-          Manage guests
-        </button>
-      )}
+      {/*
+        Offered for every company: a guest sees the reports where this company is
+        the CLIENT, so the affordance is about who may read, not about what the
+        company "is". A company that only ever plays the factory role simply has
+        no guests, and a guest of it would see nothing (spec §4.2).
+      */}
+      <button onClick={() => { router.push(`/companies/${id}/guests`); onClose(); }} style={item(ui.ink)}>
+        Manage guests
+      </button>
       {archived ? (
-        <button disabled={pending} onClick={() => runArchiveOrRestore(type === 'buyer' ? restoreBuyer : restoreSupplier)} style={item(ui.accent)}>
+        <button disabled={pending} onClick={() => runArchiveOrRestore(restoreCompany)} style={item(ui.accent)}>
           Restore
         </button>
       ) : (
@@ -341,11 +364,11 @@ function RowMenu({ id, type, archived, onClose }: { id: string; type: 'buyer' | 
       )}
       {confirming && (
         <ConfirmDialog
-          title={`Archive this ${type}?`}
-          body="Archived records leave the active views but stay recoverable from the Archived tab."
+          title="Archive this company?"
+          body="Archived records leave the active views but stay recoverable from the Archived filter."
           confirmLabel="Archive"
           danger
-          onConfirm={() => { setConfirming(false); runArchiveOrRestore(type === 'buyer' ? archiveBuyer : archiveSupplier); }}
+          onConfirm={() => { setConfirming(false); runArchiveOrRestore(archiveCompany); }}
           onCancel={() => { setConfirming(false); onClose(); }}
         />
       )}
@@ -354,15 +377,13 @@ function RowMenu({ id, type, archived, onClose }: { id: string; type: 'buyer' | 
 }
 
 export function DirectoryClient({
-  buyers: initialBuyers,
-  suppliers: initialSuppliers,
+  companies: initialCompanies,
   presets,
   live,
   page,
   pageSize,
 }: {
-  buyers: ApiBuyer[];
-  suppliers: ApiSupplier[];
+  companies: ApiCompany[];
   presets: ApiLoopPreset[];
   live: boolean;
   page: number;
@@ -377,21 +398,29 @@ export function DirectoryClient({
     searchParams.get('view') === 'archived' ? 'archived' : showArchived ? 'all' : 'active';
   /** The server-side search term currently applied (INS-050). */
   const serverQuery = searchParams.get('q') ?? '';
+  /** INS-055: ownership filter, served by the API's ?kind= param. */
+  const kindParam = searchParams.get('kind');
+  const kind: 'all' | ApiCompanyKind =
+    kindParam === 'INTERNAL' || kindParam === 'THIRD_PARTY' ? kindParam : 'all';
 
-  const [tab, setTab] = useState<'buyers' | 'suppliers'>('buyers');
   const [search, setSearch] = useState(serverQuery);
-  const [showAddBuyer, setShowAddBuyer] = useState(false);
-  const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
-  const [buyerState, buyerAction, buyerPending] = useActionState(createBuyer, {});
-  const [supplierState, supplierAction, supplierPending] = useActionState(createSupplier, {});
+  const [formState, formAction, formPending] = useActionState(createCompany, {});
 
-  function pushListParams(next: { q?: string; page?: number; view?: 'all' | 'active' | 'archived' }) {
+  function pushListParams(next: {
+    q?: string;
+    page?: number;
+    view?: 'all' | 'active' | 'archived';
+    kind?: 'all' | ApiCompanyKind;
+  }) {
     const sp = new URLSearchParams();
     const v = next.view ?? view;
     if (v !== 'active') sp.set('includeArchived', '1');
     if (v === 'archived') sp.set('view', 'archived');
+    const k = next.kind ?? kind;
+    if (k !== 'all') sp.set('kind', k);
     const q = next.q !== undefined ? next.q : serverQuery;
     if (q) sp.set('q', q);
     if (next.page && next.page > 1) sp.set('page', String(next.page));
@@ -400,58 +429,44 @@ export function DirectoryClient({
   }
 
   /**
-   * The buyers/suppliers tabs share one server ?page= param, so switching to a
-   * tab while paged past a smaller list would show it empty. Reset to page 1 on
-   * every tab switch so each tab always lands on its first page.
+   * Narrowing the kind shrinks the result set, so a page cursor past the end of
+   * the narrowed list would render empty. Reset to page 1 on every filter change
+   * — the same reason the old buyers/suppliers tab switch did.
    */
-  function switchTab(next: 'buyers' | 'suppliers') {
-    setTab(next);
-    if (page > 1) pushListParams({ page: 1 });
+  function switchKind(next: 'all' | ApiCompanyKind) {
+    pushListParams({ kind: next, page: 1 });
   }
 
-  const buyers = initialBuyers;
-  const suppliers = initialSuppliers;
+  const companies = initialCompanies;
 
-  const filteredBuyers = buyers.filter((b) =>
-    b.name.toLowerCase().includes(search.toLowerCase()),
+  const filtered = companies.filter(
+    (c) =>
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.address ?? '').toLowerCase().includes(search.toLowerCase()),
   );
-  const filteredSuppliers = suppliers.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    (s.address ?? '').toLowerCase().includes(search.toLowerCase()),
-  );
-
-  const visibleBuyers = view === 'archived' ? filteredBuyers.filter((b) => b.archivedAt) : filteredBuyers;
-  const visibleSuppliers = view === 'archived' ? filteredSuppliers.filter((s) => s.archivedAt) : filteredSuppliers;
+  const visible = view === 'archived' ? filtered.filter((c) => c.archivedAt) : filtered;
 
   /** Real Prev/Next (INS-050): next exists when the server returned a full page. */
   const hasPrev = page > 1;
-  const hasNext = (tab === 'buyers' ? buyers.length : suppliers.length) === pageSize;
+  const hasNext = companies.length === pageSize;
 
   return (
     <>
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 24, marginTop: 22, borderBottom: `1px solid ${ui.line}` }}>
-        {([['buyers', 'Buyers', buyers.length], ['suppliers', 'Suppliers / Factories', suppliers.length]] as const).map(([k, l, n]) => {
-          const on = tab === k;
-          return (
-            <button key={k} onClick={() => switchTab(k)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 2px 12px', marginBottom: -1, borderTopWidth: 0, borderLeftWidth: 0, borderRightWidth: 0, borderBottomWidth: 2, borderBottomStyle: 'solid', borderBottomColor: on ? ui.accent : 'transparent', color: on ? ui.ink : ui.sub, fontWeight: on ? 600 : 500, fontSize: 14, cursor: 'pointer', background: 'transparent', fontFamily: 'inherit' }}>
-              {l}
-              <span style={{ ...monoStyle, fontSize: 11, padding: '1px 7px', borderRadius: 999, background: on ? ui.accentSoft : ui.lineSoft, color: on ? ui.accent : ui.faint }}>{n}</span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* Search + filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '22px 0 16px', flexWrap: 'wrap' }}>
         <div style={{ position: 'relative' }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={ui.faint} strokeWidth="2" style={{ position: 'absolute', left: 12, top: 10.5 }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input value={search} onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') pushListParams({ q: search.trim() }); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') pushListParams({ q: search.trim(), page: 1 }); }}
             style={{ width: 340, height: 36, padding: '0 12px 0 36px', fontSize: 13, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', outline: 'none' }}
-            placeholder={tab === 'buyers' ? 'Search buyers by name… (Enter searches all)' : 'Search suppliers by name or city… (Enter searches all)'} />
+            placeholder="Search companies by name or city… (Enter searches all)" />
         </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button style={chip(kind === 'all')} onClick={() => switchKind('all')}>All</button>
+          <button style={chip(kind === 'THIRD_PARTY')} onClick={() => switchKind('THIRD_PARTY')}>Third-party</button>
+          <button style={chip(kind === 'INTERNAL')} onClick={() => switchKind('INTERNAL')}>Internal</button>
+        </div>
+        <span style={{ width: 1, height: 20, background: ui.line }} />
         <div style={{ display: 'flex', gap: 6 }}>
           <button style={chip(view === 'all')} onClick={() => pushListParams({ view: 'all' })}>All</button>
           <button style={chip(view === 'active')} onClick={() => pushListParams({ view: 'active' })}>Active</button>
@@ -459,196 +474,137 @@ export function DirectoryClient({
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11.5, color: ui.faint }}>{live ? 'Live · from API' : 'Demo data · API offline'}</span>
-          {tab === 'buyers' ? (
-            <Btn kind="primary" icon={<Plus size={15} />} onClick={() => { setShowAddBuyer(true); setShowAddSupplier(false); }}>Add Buyer</Btn>
-          ) : (
-            <Btn kind="ghost" icon={<Plus size={14} />} small onClick={() => { setShowAddSupplier(true); setShowAddBuyer(false); }}>Add Supplier</Btn>
-          )}
+          <Btn kind="primary" icon={<Plus size={15} />} onClick={() => setShowAdd(true)}>Add Company</Btn>
         </div>
       </div>
 
-      {/* Buyers tab */}
-      {tab === 'buyers' && (
-        <>
-          {showAddBuyer && (
-            <InlineForm title="Add Buyer" onClose={() => setShowAddBuyer(false)}>
-              <form action={buyerAction}>
-                {buyerState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: ui.danger }}>{buyerState.error}</div>}
-                <InputRow label="Name *" name="name" placeholder="Buyer company name" />
-                <LogoUploadField />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <HexColorField defaultValue={ui.accent} />
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>Default Preset</label>
-                    <select name="defaultLoopPresetId"
-                      style={{ width: '100%', height: 34, padding: '0 8px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8 }}>
-                      <option value="">None</option>
-                      {presets.map((p) => <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
-                  <Btn kind="ghost" onClick={() => setShowAddBuyer(false)}>Cancel</Btn>
-                  <Btn kind="primary" type="submit" style={{ opacity: buyerPending ? 0.65 : 1 }}>
-                    {buyerPending ? 'Creating…' : 'Create Buyer'}
-                  </Btn>
-                </div>
-              </form>
-            </InlineForm>
-          )}
-
-          <div style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...th, width: 56 }} />
-                  <th style={th}>Buyer</th>
-                  <th style={th}>Report branding</th>
-                  <th style={{ ...th, textAlign: 'right' }}>POs</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Inspections</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Reports</th>
-                  <th style={th}>Last activity</th>
-                  <th style={{ ...th, width: 48 }} />
-                </tr>
-              </thead>
-              <tbody>
-                {visibleBuyers.map((b, i) => {
-                  const color = b.primaryColor || BRANDS[i % BRANDS.length];
-                  const initials = initialsOf(b.name);
-                  // INS-072: render from the API's short-lived presigned GET (or a
-                  // legacy absolute URL). `logoUrl` itself is now an object key and
-                  // is NOT fetchable — using it directly would show a broken image.
-                  const logoSrc = logoSrcOf(b);
-                  return (
-                    <tr key={b.id} style={{ cursor: 'pointer', opacity: b.archivedAt ? 0.6 : 1 }} onClick={() => { if (!menuOpen) window.location.href = `/buyers/${b.id}`; }}>
-                      <td style={td}>
-                        {logoSrc ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={logoSrc} alt={b.name} style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain', border: `1px solid ${ui.lineSoft}` }} />
-                        ) : (
-                          <div style={{ width: 32, height: 32, borderRadius: 6, background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>{initials}</div>
-                        )}
-                      </td>
-                      <td style={td}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontWeight: 550 }}>{b.name}</span>
-                          {b.archivedAt && <ArchivedBadge />}
-                        </div>
-                      </td>
-                      <td style={td}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ width: 16, height: 16, borderRadius: 4, background: color, border: '1px solid rgba(0,0,0,0.08)' }} />
-                          <Mono style={{ fontSize: 12, color: ui.sub }}>{color.toUpperCase()}</Mono>
-                        </div>
-                      </td>
-                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{b._count?.purchaseOrders ?? '—'}</td>
-                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{b._count?.inspections ?? '—'}</td>
-                      <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{b._count?.reports ?? '—'}</td>
-                      <td style={{ ...td, color: ui.sub }}>{fmtDate(b.updatedAt)}</td>
-                      <td style={{ ...td, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ position: 'relative', display: 'inline-block' }}>
-                          <button onClick={() => setMenuOpen(menuOpen === b.id ? null : b.id)}
-                            style={{ width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                            <MoreVertical size={16} />
-                          </button>
-                          {menuOpen === b.id && <RowMenu id={b.id} type="buyer" archived={!!b.archivedAt} onClose={() => setMenuOpen(null)} />}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: `1px solid ${ui.lineSoft}`, color: ui.sub, fontSize: 12.5 }}>
-              <span>Showing <Mono>{visibleBuyers.length}</Mono> buyer{visibleBuyers.length === 1 ? '' : 's'}</span>
-              <Pager page={page} hasPrev={hasPrev} hasNext={hasNext} onPage={(n) => pushListParams({ page: n })} />
+      {showAdd && (
+        <InlineForm title="Add Company" onClose={() => setShowAdd(false)}>
+          <form action={formAction}>
+            {formState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: ui.danger }}>{formState.error}</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+              <InputRow label="Name *" name="name" placeholder="Company name" />
+              <div style={{ marginBottom: 12 }}>
+                <label style={fieldLabel}>Ownership</label>
+                <select name="kind" defaultValue="THIRD_PARTY" style={{ ...boxInput, padding: '0 8px' }}>
+                  <option value="THIRD_PARTY">Third-party</option>
+                  <option value="INTERNAL">Internal (our own site)</option>
+                </select>
+              </div>
             </div>
-          </div>
-        </>
+            <div style={{ fontSize: 11.5, color: ui.faint, margin: '-4px 0 14px', lineHeight: 1.5 }}>
+              Whether this company is the client or the factory is decided per purchase order — fill in
+              whichever details apply.
+            </div>
+            <LogoUploadField />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <HexColorField defaultValue={ui.accent} />
+              <div>
+                <label style={fieldLabel}>Default Preset</label>
+                <select name="defaultLoopPresetId" style={{ ...boxInput, padding: '0 8px' }}>
+                  <option value="">None</option>
+                  {presets.map((p) => <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={fieldLabel}>Address</label>
+              <textarea name="address" rows={2} placeholder="City, Country"
+                style={{ width: '100%', padding: '6px 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', resize: 'none', boxSizing: 'border-box' as const }} />
+            </div>
+            <GpsFields />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <Btn kind="ghost" onClick={() => setShowAdd(false)}>Cancel</Btn>
+              <Btn kind="primary" type="submit" style={{ opacity: formPending ? 0.65 : 1 }}>
+                {formPending ? 'Creating…' : 'Create Company'}
+              </Btn>
+            </div>
+          </form>
+        </InlineForm>
       )}
 
-      {/* Suppliers tab */}
-      {tab === 'suppliers' && (
-        <>
-          {showAddSupplier && (
-            <InlineForm title="Add Supplier" onClose={() => setShowAddSupplier(false)}>
-              <form action={supplierAction}>
-                {supplierState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: ui.danger }}>{supplierState.error}</div>}
-                <InputRow label="Name *" name="name" placeholder="Factory / supplier name" />
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>Address</label>
-                  <textarea name="address" rows={2} placeholder="City, Country"
-                    style={{ width: '100%', padding: '6px 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', resize: 'none', boxSizing: 'border-box' as const }} />
-                </div>
-                <GpsFields />
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-                  <Btn kind="ghost" onClick={() => setShowAddSupplier(false)}>Cancel</Btn>
-                  <Btn kind="primary" type="submit" style={{ opacity: supplierPending ? 0.65 : 1 }}>
-                    {supplierPending ? 'Creating…' : 'Create Supplier'}
-                  </Btn>
-                </div>
-              </form>
-            </InlineForm>
-          )}
-
-          <div style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...th, width: 56 }} />
-                  <th style={th}>Factory</th>
-                  <th style={th}>GPS</th>
-                  <th style={{ ...th, textAlign: 'right' }}>POs</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Inspections</th>
-                  <th style={th}>Last activity</th>
-                  <th style={{ ...th, width: 48 }} />
+      <div style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, width: 56 }} />
+              <th style={th}>Company</th>
+              <th style={th}>Branding</th>
+              <th style={th}>GPS</th>
+              <th style={{ ...th, textAlign: 'right' }}>POs</th>
+              <th style={{ ...th, textAlign: 'right' }}>Inspections</th>
+              <th style={{ ...th, textAlign: 'right' }}>Reports</th>
+              <th style={th}>Last activity</th>
+              <th style={{ ...th, width: 48 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((c, i) => {
+              const color = c.primaryColor || BRANDS[i % BRANDS.length];
+              const initials = initialsOf(c.name);
+              // INS-072: render from the API's short-lived presigned GET (or a
+              // legacy absolute URL). `logoUrl` itself is now an object key and
+              // is NOT fetchable — using it directly would show a broken image.
+              const logoSrc = logoSrcOf(c);
+              return (
+                <tr key={c.id} style={{ cursor: 'pointer', opacity: c.archivedAt ? 0.6 : 1 }} onClick={() => { if (!menuOpen) window.location.href = `/companies/${c.id}`; }}>
+                  <td style={td}>
+                    {logoSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={logoSrc} alt={c.name} style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain', border: `1px solid ${ui.lineSoft}` }} />
+                    ) : (
+                      <div style={{ width: 32, height: 32, borderRadius: 6, background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>{initials}</div>
+                    )}
+                  </td>
+                  <td style={td}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontWeight: 550 }}>{c.name}</span>
+                      <KindBadge kind={c.kind} />
+                      {c.archivedAt && <ArchivedBadge />}
+                    </div>
+                    <div style={{ color: ui.faint, fontSize: 12, marginTop: 2 }}>{c.address || '—'}</div>
+                  </td>
+                  <td style={td}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 16, height: 16, borderRadius: 4, background: color, border: '1px solid rgba(0,0,0,0.08)' }} />
+                      <Mono style={{ fontSize: 12, color: ui.sub }}>{color.toUpperCase()}</Mono>
+                    </div>
+                  </td>
+                  {/* INS-071: the real coordinates, not a "Pinned" badge that hid a wrong pin. */}
+                  <td style={td}>
+                    {c.gps ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <MapPin size={13} color={ui.accent} />
+                        <Mono style={{ fontSize: 12, color: ui.sub }}>{coord(c.gps.lat)}, {coord(c.gps.lng)}</Mono>
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: ui.faint }}>—</span>
+                    )}
+                  </td>
+                  {/* Both role edges, summed by the API (CompanyDto._count). */}
+                  <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{c._count?.purchaseOrders ?? '—'}</td>
+                  <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{c._count?.inspections ?? '—'}</td>
+                  <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{c._count?.reports ?? '—'}</td>
+                  <td style={{ ...td, color: ui.sub }}>{fmtDate(c.updatedAt)}</td>
+                  <td style={{ ...td, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <button onClick={() => setMenuOpen(menuOpen === c.id ? null : c.id)}
+                        style={{ width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                        <MoreVertical size={16} />
+                      </button>
+                      {menuOpen === c.id && <RowMenu id={c.id} archived={!!c.archivedAt} onClose={() => setMenuOpen(null)} />}
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {visibleSuppliers.map((s) => (
-                  <tr key={s.id} style={{ cursor: 'pointer', opacity: s.archivedAt ? 0.6 : 1 }} onClick={() => { if (!menuOpen) window.location.href = `/suppliers/${s.id}`; }}>
-                    <td style={td}><Avatar initials={initialsOf(s.name)} size={32} bg="#475467" /></td>
-                    <td style={td}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontWeight: 550 }}>{s.name}</span>
-                        {s.archivedAt && <ArchivedBadge />}
-                      </div>
-                      <div style={{ color: ui.faint, fontSize: 12, marginTop: 2 }}>{s.address || '—'}</div>
-                    </td>
-                    {/* INS-071: the real coordinates, not a "Pinned" badge that hid a wrong pin. */}
-                    <td style={td}>
-                      {s.gps ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                          <MapPin size={13} color={ui.accent} />
-                          <Mono style={{ fontSize: 12, color: ui.sub }}>{coord(s.gps.lat)}, {coord(s.gps.lng)}</Mono>
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 12, color: ui.faint }}>—</span>
-                      )}
-                    </td>
-                    <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{s._count?.purchaseOrders ?? '—'}</td>
-                    <td style={{ ...td, ...monoStyle, textAlign: 'right' }}>{s._count?.inspections ?? '—'}</td>
-                    <td style={{ ...td, color: ui.sub }}>{fmtDate(s.updatedAt)}</td>
-                    <td style={{ ...td, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                      <div style={{ position: 'relative', display: 'inline-block' }}>
-                        <button onClick={() => setMenuOpen(menuOpen === s.id ? null : s.id)}
-                          style={{ width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                          <MoreVertical size={16} />
-                        </button>
-                        {menuOpen === s.id && <RowMenu id={s.id} type="supplier" archived={!!s.archivedAt} onClose={() => setMenuOpen(null)} />}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: `1px solid ${ui.lineSoft}`, color: ui.sub, fontSize: 12.5 }}>
-              <span>Showing <Mono>{visibleSuppliers.length}</Mono> supplier{visibleSuppliers.length === 1 ? '' : 's'}</span>
-              <Pager page={page} hasPrev={hasPrev} hasNext={hasNext} onPage={(n) => pushListParams({ page: n })} />
-            </div>
-          </div>
-        </>
-      )}
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: `1px solid ${ui.lineSoft}`, color: ui.sub, fontSize: 12.5 }}>
+          <span>Showing <Mono>{visible.length}</Mono> compan{visible.length === 1 ? 'y' : 'ies'}</span>
+          <Pager page={page} hasPrev={hasPrev} hasNext={hasNext} onPage={(n) => pushListParams({ page: n })} />
+        </div>
+      </div>
     </>
   );
 }
