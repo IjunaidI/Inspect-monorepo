@@ -5,3 +5,4 @@
 export * from './enums';
 export * from './json-contracts';
 export * from './dtos';
+export * from './api-dtos';

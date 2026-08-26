@@ -54,7 +54,7 @@ export default async function ReportsPage({
                 <Mono style={{ fontWeight: 600, color: ui.accent }}>IR-{r.id.slice(0, 8).toUpperCase()}</Mono>
               </Link>
               <Mono>{r.inspection?.purchaseOrder?.poNumber ?? '—'}</Mono>
-              <span>{r.buyer?.name ?? '—'}</span>
+              <span>{r.clientCompany?.name ?? '—'}</span>
               <span>{r.inspection?.product?.styleNumber ?? '—'}</span>
               <Mono style={{ color: ui.sub, fontSize: 12 }}>{r.generatedAt ? new Date(r.generatedAt).toISOString().slice(0, 10) : '—'}</Mono>
               {r.verificationToken ? (
