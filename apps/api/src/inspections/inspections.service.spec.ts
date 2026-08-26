@@ -312,8 +312,8 @@ describe('InspectionsService.decide — audit attribution (INS-079)', () => {
 const PO = {
   id: 'po1',
   orgId: 'org1',
-  buyerId: 'b1',
-  supplierId: 's1',
+  clientCompanyId: 'b1',
+  factoryCompanyId: 's1',
   productId: 'p1',
 };
 const PRESET = {

@@ -113,7 +113,7 @@ describe('apiGet authentication headers', () => {
     const { apiGet } = await import('./api');
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await apiGet('/buyers');
+    await apiGet('/companies');
 
     expect(sentHeaders().Authorization).toBe('Bearer access-token-abc');
   });
@@ -124,7 +124,7 @@ describe('apiGet authentication headers', () => {
     getAssumedOrgId.mockResolvedValue('org_123');
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await apiGet('/buyers');
+    await apiGet('/companies');
 
     expect(sentHeaders()['X-Org-Id']).toBe('org_123');
   });
@@ -137,7 +137,7 @@ describe('apiGet authentication headers', () => {
     getAssumedOrgId.mockResolvedValue('org_123');
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await apiGet('/buyers');
+    await apiGet('/companies');
 
     expect(sentHeaders()).not.toHaveProperty('X-Org-Id');
   });
@@ -149,7 +149,7 @@ describe('apiGet authentication headers', () => {
     headersGet.mockReturnValue('__Secure-authjs.session-token=cookie-value');
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await apiGet('/buyers');
+    await apiGet('/companies');
 
     expect(getToken).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -164,7 +164,7 @@ describe('apiGet authentication headers', () => {
     const { apiGet } = await import('./api');
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ message: 'nope' }), { status: 403 }));
 
-    await expect(apiGet('/buyers')).rejects.toMatchObject({ status: 403, path: '/buyers' });
+    await expect(apiGet('/companies')).rejects.toMatchObject({ status: 403, path: '/companies' });
   });
 });
 
@@ -175,7 +175,7 @@ describe('loadOrFallback', () => {
     const { loadOrFallback } = await import('./api');
     fetchMock.mockResolvedValue(new Response(JSON.stringify([{ id: 'real' }]), { status: 200 }));
 
-    await expect(loadOrFallback('/buyers', FALLBACK)).resolves.toEqual({
+    await expect(loadOrFallback('/companies', FALLBACK)).resolves.toEqual({
       data: [{ id: 'real' }],
       live: true,
     });
@@ -185,7 +185,7 @@ describe('loadOrFallback', () => {
     const { loadOrFallback } = await import('./api');
     fetchMock.mockRejectedValue(new TypeError('fetch failed'));
 
-    await expect(loadOrFallback('/buyers', FALLBACK)).resolves.toEqual({
+    await expect(loadOrFallback('/companies', FALLBACK)).resolves.toEqual({
       data: FALLBACK,
       live: false,
     });
@@ -195,7 +195,7 @@ describe('loadOrFallback', () => {
     const { loadOrFallback } = await import('./api');
     fetchMock.mockResolvedValue(new Response('{}', { status: 404 }));
 
-    await expect(loadOrFallback('/buyers', FALLBACK)).resolves.toEqual({
+    await expect(loadOrFallback('/companies', FALLBACK)).resolves.toEqual({
       data: FALLBACK,
       live: false,
     });
@@ -207,14 +207,14 @@ describe('loadOrFallback', () => {
 
     // Silently showing demo data to an unauthenticated user would hide the
     // session expiry instead of sending them to log in.
-    await expect(loadOrFallback('/buyers', FALLBACK)).rejects.toMatchObject({ status: 401 });
+    await expect(loadOrFallback('/companies', FALLBACK)).rejects.toMatchObject({ status: 401 });
   });
 
   test('re-throws an ordinary 403', async () => {
     const { loadOrFallback } = await import('./api');
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ message: 'Forbidden' }), { status: 403 }));
 
-    await expect(loadOrFallback('/buyers', FALLBACK)).rejects.toMatchObject({ status: 403 });
+    await expect(loadOrFallback('/companies', FALLBACK)).rejects.toMatchObject({ status: 403 });
   });
 
   test('redirects an un-assumed Platform Admin on the no-org-context 403', async () => {
@@ -237,7 +237,7 @@ describe('token refresh', () => {
     refreshApiAccessToken.mockResolvedValue({ accessToken: 'fresh-token' });
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await apiGet('/buyers');
+    await apiGet('/companies');
 
     expect(refreshApiAccessToken).toHaveBeenCalledWith('refresh-token-xyz');
     expect(sentHeaders().Authorization).toBe('Bearer fresh-token');
@@ -249,7 +249,7 @@ describe('token refresh', () => {
     refreshApiAccessToken.mockResolvedValue(null);
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await apiGet('/buyers');
+    await apiGet('/companies');
 
     expect(sentHeaders().Authorization).toBe('Bearer access-token-abc');
   });
@@ -260,7 +260,7 @@ describe('token refresh', () => {
     refreshApiAccessToken.mockResolvedValue({ accessToken: 'fresh-token' });
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await apiGet('/buyers');
+    await apiGet('/companies');
 
     expect(sentHeaders().Authorization).toBe('Bearer fresh-token');
   });
@@ -270,7 +270,7 @@ describe('token refresh', () => {
     getToken.mockResolvedValue(null);
     fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
-    await apiGet('/buyers');
+    await apiGet('/companies');
 
     expect(sentHeaders()).not.toHaveProperty('Authorization');
   });

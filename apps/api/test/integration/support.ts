@@ -178,9 +178,7 @@ export async function inviteAndActivate(
 }
 
 export interface WorkspaceFixture {
-  buyerId: string;
-  supplierId: string;
-  /** INS-055: the two role edges. `buyerId`/`supplierId` go away in Task 8. */
+  /** INS-055: the two role edges. Trade role is a property of the PO, not the row. */
   clientCompanyId: string;
   factoryCompanyId: string;
   productId: string;
@@ -192,7 +190,7 @@ export interface WorkspaceFixture {
 }
 
 /**
- * Buyer + supplier + product + PO + a ONE-item loop preset with a loop-global
+ * Two companies (client + factory) + product + PO + a ONE-item loop preset with a loop-global
  * MINOR defect tag and measurement sheet (INS-081).
  *
  * Deliberately one item: a single-item loop completes a cycle with one upload,
@@ -205,20 +203,6 @@ export async function createWorkspace(
   ownerToken: string,
   tag: string,
 ): Promise<WorkspaceFixture> {
-  const buyer = expect2xx(
-    await client.post('/buyers', {
-      token: ownerToken,
-      body: { name: `E2E Buyer ${tag}` },
-    }),
-    'POST /buyers',
-  );
-  const supplier = expect2xx(
-    await client.post('/suppliers', {
-      token: ownerToken,
-      body: { name: `E2E Supplier ${tag}` },
-    }),
-    'POST /suppliers',
-  );
   // INS-055: the two companies that play the client and factory roles. Named
   // clientCo/factoryCo rather than client/factory because `client` is the
   // ApiClient in this file — shadowing it would be a TDZ error on the next call.
@@ -281,8 +265,6 @@ export async function createWorkspace(
     'POST /loop-presets',
   );
   return {
-    buyerId: buyer.id,
-    supplierId: supplier.id,
     clientCompanyId: clientCo.id,
     factoryCompanyId: factoryCo.id,
     productId: product.id,

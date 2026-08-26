@@ -230,9 +230,9 @@
         "x-required-role": "authenticated"
       }
     },
-    "/buyers": {
+    "/companies": {
       "get": {
-        "operationId": "BuyersController_list",
+        "operationId": "CompaniesController_list",
         "parameters": [],
         "responses": {
           "200": {
@@ -240,12 +240,12 @@
           }
         },
         "tags": [
-          "Buyers"
+          "Companies"
         ],
         "x-required-role": "QA_MANAGER"
       },
       "post": {
-        "operationId": "BuyersController_create",
+        "operationId": "CompaniesController_create",
         "parameters": [],
         "responses": {
           "201": {
@@ -253,14 +253,14 @@
           }
         },
         "tags": [
-          "Buyers"
+          "Companies"
         ],
         "x-required-role": "QA_MANAGER"
       }
     },
-    "/buyers/presign": {
+    "/companies/presign": {
       "post": {
-        "operationId": "BuyersController_presign",
+        "operationId": "CompaniesController_presign",
         "parameters": [],
         "responses": {
           "201": {
@@ -268,14 +268,14 @@
           }
         },
         "tags": [
-          "Buyers"
+          "Companies"
         ],
         "x-required-role": "QA_MANAGER"
       }
     },
-    "/buyers/{id}": {
+    "/companies/{id}": {
       "get": {
-        "operationId": "BuyersController_get",
+        "operationId": "CompaniesController_get",
         "parameters": [
           {
             "name": "id",
@@ -292,12 +292,12 @@
           }
         },
         "tags": [
-          "Buyers"
+          "Companies"
         ],
         "x-required-role": "QA_MANAGER"
       },
       "patch": {
-        "operationId": "BuyersController_update",
+        "operationId": "CompaniesController_update",
         "parameters": [
           {
             "name": "id",
@@ -314,12 +314,12 @@
           }
         },
         "tags": [
-          "Buyers"
+          "Companies"
         ],
         "x-required-role": "QA_MANAGER"
       },
       "delete": {
-        "operationId": "BuyersController_archive",
+        "operationId": "CompaniesController_archive",
         "parameters": [
           {
             "name": "id",
@@ -336,14 +336,14 @@
           }
         },
         "tags": [
-          "Buyers"
+          "Companies"
         ],
         "x-required-role": "QA_MANAGER"
       }
     },
-    "/buyers/{id}/restore": {
+    "/companies/{id}/restore": {
       "post": {
-        "operationId": "BuyersController_restore",
+        "operationId": "CompaniesController_restore",
         "parameters": [
           {
             "name": "id",
@@ -360,127 +360,7 @@
           }
         },
         "tags": [
-          "Buyers"
-        ],
-        "x-required-role": "QA_MANAGER"
-      }
-    },
-    "/suppliers": {
-      "get": {
-        "operationId": "SuppliersController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Suppliers"
-        ],
-        "x-required-role": "QA_MANAGER"
-      },
-      "post": {
-        "operationId": "SuppliersController_create",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Suppliers"
-        ],
-        "x-required-role": "QA_MANAGER"
-      }
-    },
-    "/suppliers/{id}": {
-      "get": {
-        "operationId": "SuppliersController_get",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Suppliers"
-        ],
-        "x-required-role": "QA_MANAGER"
-      },
-      "patch": {
-        "operationId": "SuppliersController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Suppliers"
-        ],
-        "x-required-role": "QA_MANAGER"
-      },
-      "delete": {
-        "operationId": "SuppliersController_archive",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Suppliers"
-        ],
-        "x-required-role": "QA_MANAGER"
-      }
-    },
-    "/suppliers/{id}/restore": {
-      "post": {
-        "operationId": "SuppliersController_restore",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Suppliers"
+          "Companies"
         ],
         "x-required-role": "QA_MANAGER"
       }
@@ -1649,12 +1529,12 @@
         "x-required-role": "ORG_OWNER"
       }
     },
-    "/buyers/{buyerId}/guests": {
+    "/companies/{companyId}/guests": {
       "get": {
-        "operationId": "BuyerGuestsController_list",
+        "operationId": "CompanyGuestsController_list",
         "parameters": [
           {
-            "name": "buyerId",
+            "name": "companyId",
             "required": true,
             "in": "path",
             "schema": {
@@ -1668,15 +1548,15 @@
           }
         },
         "tags": [
-          "BuyerGuests"
+          "CompanyGuests"
         ],
         "x-required-role": "QA_MANAGER"
       },
       "post": {
-        "operationId": "BuyerGuestsController_invite",
+        "operationId": "CompanyGuestsController_invite",
         "parameters": [
           {
-            "name": "buyerId",
+            "name": "companyId",
             "required": true,
             "in": "path",
             "schema": {
@@ -1690,14 +1570,14 @@
           }
         },
         "tags": [
-          "BuyerGuests"
+          "CompanyGuests"
         ],
         "x-required-role": "QA_MANAGER"
       }
     },
-    "/buyer-guests/{id}": {
+    "/company-guests/{id}": {
       "delete": {
-        "operationId": "BuyerGuestsController_revoke",
+        "operationId": "CompanyGuestsController_revoke",
         "parameters": [
           {
             "name": "id",
@@ -1714,7 +1594,7 @@
           }
         },
         "tags": [
-          "BuyerGuests"
+          "CompanyGuests"
         ],
         "x-required-role": "QA_MANAGER"
       }

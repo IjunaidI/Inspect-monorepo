@@ -52,7 +52,7 @@ export class SearchService {
             orgId,
             OR: [
               { purchaseOrder: { poNumber: contains } },
-              { buyer: { name: contains } },
+              { clientCompany: { name: contains } },
               { product: { styleNumber: contains } },
             ],
           },
@@ -62,7 +62,7 @@ export class SearchService {
             id: true,
             status: true,
             purchaseOrder: { select: { poNumber: true } },
-            buyer: { select: { name: true } },
+            clientCompany: { select: { name: true } },
           },
         }),
       ]);
@@ -89,7 +89,7 @@ export class SearchService {
         type: 'inspection',
         id: i.id,
         label: i.purchaseOrder?.poNumber ?? i.id.slice(0, 8),
-        sublabel: `${i.buyer?.name ?? '—'} · ${i.status}`,
+        sublabel: `${i.clientCompany?.name ?? '—'} · ${i.status}`,
       })),
     ];
   }

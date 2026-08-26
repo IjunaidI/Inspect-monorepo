@@ -36,7 +36,7 @@ function approvedInspection(overrides: Record<string, unknown> = {}) {
     id: 'insp1',
     orgId: 'org1',
     clientCompanyId: 'buy1',
-    supplierId: 'sup1',
+    factoryCompanyId: 'sup1',
     productId: 'prod1',
     status: 'APPROVED',
     inspectionType: 'PRE_SHIPMENT',

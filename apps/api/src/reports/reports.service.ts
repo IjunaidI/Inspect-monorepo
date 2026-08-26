@@ -536,9 +536,9 @@ export class ReportsService {
     if (recipients.length === 0) {
       // Not an error: the report is published to the portal and any guest invited
       // later sees it. Surfaced in the response so the console can prompt
-      // "invite a buyer guest" instead of implying an email went out.
+      // "invite a company guest" instead of implying an email went out.
       this.logger.warn(
-        `Report ${report.id} delivered with no eligible buyer guests for buyer ${report.buyerId} — nothing was emailed`,
+        `Report ${report.id} delivered with no eligible guests for client company ${report.clientCompanyId} — nothing was emailed`,
       );
     }
 
