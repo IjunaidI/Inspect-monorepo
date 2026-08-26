@@ -15,7 +15,6 @@ import type {
   CycleStateDto,
   DashboardSummaryDto,
   DefectCatalogDto,
-  DefectCatalogItemDto,
   DefectInstanceDto,
   GuestReportDto,
   GuestReportPhotoDto,
@@ -228,7 +227,15 @@ export type ApiPurchaseOrder = PurchaseOrderDto;
 export type AqlPreview = AqlPreviewDto;
 export type PresignResult = PresignResultDto;
 export type ApiPhoto = PhotoDto;
-export type ApiDefectCatalogItem = DefectCatalogItemDto;
+/**
+ * INS-086: the populate screen's view of a catalog row. Points at the SAME
+ * DefectCatalogDto the presets builder uses, because `GET /defect-catalog`
+ * returns one shape. It previously aliased a separate `DefectCatalogItemDto`
+ * that declared `severity` where the API sends `defaultSeverity` — so every
+ * severity group on the populate screen filtered to empty and no catalog
+ * defect could be tagged at all.
+ */
+export type ApiDefectCatalogItem = DefectCatalogDto;
 export type ApiDefectInstance = DefectInstanceDto;
 export type ApiMeasurement = MeasurementDto;
 export type ApiInspectionLoopItem = InspectionLoopItemDto;

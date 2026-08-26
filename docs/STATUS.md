@@ -14,6 +14,39 @@
 > `ROLE_RANK` from `@inspect/domain`**, putting the additive hierarchy in exactly one source file. Spec §4.4
 > demands each migration *reduce* total logic; moving only the console's copy would have left it at two.
 > **Three findings worth carrying forward.**
+> **A follow-up drift pass found three more live bugs of ONE shape, and closed the hole they came through.**
+> `apiGet<T>(path)` **asserts** a response shape rather than checking one, so a wire DTO that disagrees with
+> the API is invisible to `tsc`, to `next build` and to every suite. Cross-checking every DTO field against
+> its Prisma model surfaced four phantoms, three of them user-visible:
+> **(a)** `DefectCatalogItemDto.severity` where `GET /defect-catalog` sends `defaultSeverity` — the populate
+> screen groups its defect chips with `catalog.filter(c => c.severity === …)`, so **all three severity groups
+> were empty and an inspector could not tag a single catalog defect** on the product's headline screen. It
+> was a duplicate, wrong declaration of a row `DefectCatalogDto` already described correctly; deleted, not
+> patched. **(b)** `ReportDto.generatedBy`, a relation `Report` has no column for — the branded report's
+> tamper-proof block has always rendered `'—'` for "signed by" ([INS-089](future/BACKLOG.md) to record it
+> properly; the phantom is removed so nothing reads it again). **(c)** `InspectionDto.inspectorId`, dead and
+> dangerous: the only `inspectorId` in the schema lives *inside* `tamperProof` and means the ACTUAL
+> submitter, which the schema comment explicitly distinguishes from the assigned inspector.
+> **The hole is now closed permanently:** `apps/api/src/common/wire-contract.spec.ts` asserts every wire DTO
+> field exists on the model it describes, with an explicit allowlist for genuine decorations (presigned
+> `viewUrl`, `_count`, server-computed `cycleState`). It lives in `apps/api` because the API is the producer
+> and `schema.prisma` is its source of truth. Mutation-verified: reintroducing `buyer` fails it. It carries a
+> non-vacuity guard too, since a regex that silently matches nothing would make it worse than no test at all.
+> **Also fixed in that pass:** [INS-088](future/BACKLOG.md) — `login`/`me`/`refresh` moved into
+> `@inspect/api-client`, so `lib/auth.ts` now holds no raw `fetch`, no `Buffer` and no hand-assembled
+> `Authorization` header, and Phase 2 cannot implement the exchange a second time. `decodeJwtExp` was rebuilt
+> on `atob` + `decodeURIComponent` (neither the edge runtime's `middleware.ts` nor a React Native bundle has
+> `Buffer`), with the UTF-8 and base64url-padding cases tested; `next build` still emits Middleware at
+> 86.6 kB, which is the edge-safety proof. **Stale INS-055 vocabulary** was swept out of user-facing copy —
+> the reports list's column header still read "Buyer", and `/inspections/new`'s empty state told users to
+> "create a buyer, supplier, product and PO", naming two screens that no longer exist. **And Prisma's
+> interactive-transaction timeout went from the 5s default to 15s**, set once on `PrismaClient` so it covers
+> all 31: the integration suite produced `P2028 Transaction already closed … 5292ms` as a 500 on
+> `POST /inspections/:id/submit`, because that transaction runs the AQL evaluation, `AqlResult`,
+> `BillableEvent`, the status lock and a hash-chained audit append whose advisory lock serialises same-org
+> writers. No invariant relaxes — the work is identical, it just gets time to finish before the network kills
+> it.
+>
 > **(1) A real, user-visible bug was hiding behind an optional field.** `ApiReportListItem` declared `buyer`
 > while the API selects `clientCompany`, so `app/(console)/reports/page.tsx` rendered `r.buyer?.name ?? '—'`
 > — **an em-dash in the reports list's client column for every row since INS-055 shipped.** Optional
@@ -39,8 +72,13 @@
 > duplication to remove and no reason to make the API depend on a package it does not need.
 > **Verified:** `pnpm type-check` **10/10 clean** · `pnpm lint` **0 errors** (1 pre-existing font warning) ·
 > `pnpm build` **6/6** · **web 38 passing / 3 files** (32 unchanged + 6 new token assertions) ·
-> **api unit 634 / 41 suites, exit 0 — identical before and after the `rbac.ts` re-point** ·
-> new package suites **`@inspect/domain` 11/2** and **`@inspect/api-client` 13/1**.
+> **api unit 654 / 42 suites, exit 0** (634 at the extraction, +20 from the new wire-contract guard) ·
+> new package suites **`@inspect/domain` 11/2** and **`@inspect/api-client` 29/2**.
+> **Integration: not green, and not this branch's doing.** Two full `--runInBand` runs took **805s** and
+> **849s** and reported **129/147** then **146/147** — with NO overlap in which suites failed. The
+> `audit-chain` spec produced 3 failures, then 6, then 0 on identical code, and passed on `main` too. The
+> named cause is remote-DB latency (`P2028`, `$connect()` refusals), now partly addressed by the transaction
+> timeout above. **CI against containerized Postgres is the honest read and has still never run.**
 >
 > **⚠️ Still NOT verified — every one of these is carried forward from INS-055 untouched, and this phase
 > adds 6 more unpushed commits to the same pile:**
@@ -296,12 +334,10 @@ What it really proves: pnpm workspaces + Metro symlink resolution, `@inspect/api
 with a SecureStore-backed provider, the design tokens rendering through `StyleSheet`, and the EAS build
 pipeline.
 
-**Do [INS-088](future/BACKLOG.md) first — it blocks this.** `apps/web/lib/auth.ts` still hand-rolls
-`POST /auth/login`, `GET /auth/me` and `POST /auth/refresh`: the exact three endpoints a mobile app needs
-before it can render anything. Phase 1 left them alone because `refreshApiAccessToken` is imported by
-`middleware.ts` on the **edge runtime**, making it a re-point with a runtime constraint rather than a
-lift-and-shift. Writing mobile auth without moving them first means implementing the exchange twice, which is
-precisely the drift decision D3 cannot survive.
+**[INS-088](future/BACKLOG.md) is already done**, so mobile auth has a shared exchange to call:
+`client.login()`, `client.me(token)` and `client.refresh(refreshToken)` live in `@inspect/api-client`, and
+`decodeJwtExp` is `Buffer`-free so it works in a React Native bundle. What Phase 2 supplies is the
+**provider** — a SecureStore-backed `AuthProvider` — not the exchange.
 
 **Revisit the packaging decision here.** All four packages build to `dist/` (see the header entry for why —
 `ts-jest` will not transform TypeScript inside `node_modules`). Metro is the first consumer that would
@@ -311,8 +347,8 @@ duplicate React in the workspace. Pin React once at the root and have CI assert 
 **Still open and user-side:** [INS-002](future/BACKLOG.md) credential rotation — it needs the Railway
 account, and unlike the extraction, Phase 2 **does** depend on it for EAS/app-store credentials.
 
-**Baseline to preserve, measured 2026-08-27:** api unit **634 / 41 exit 0**, web **38 / 3**,
-`@inspect/domain` **11 / 2**, `@inspect/api-client` **13 / 1**, `pnpm type-check` **10/10**, `pnpm lint`
+**Baseline to preserve, measured 2026-08-27:** api unit **654 / 42 exit 0**, web **38 / 3**,
+`@inspect/domain` **11 / 2**, `@inspect/api-client` **29 / 2**, `pnpm type-check` **10/10**, `pnpm lint`
 **0 errors**, `pnpm build` **6/6**.
 
 **Four things still not done, carried forward from INS-055 — the first one has now cost something real:**
@@ -321,7 +357,7 @@ account, and unlike the extraction, Phase 2 **does** depend on it for EAS/app-st
    `buyer` while the API sends `clientCompany`. Nothing else on those screens has been looked at. The dev DB
    has **no curated workspace** — all 104 orgs are `E2E Org …` fixtures — so create an org + two companies +
    a PO first, or the console shows only test noise.
-2. **Push and let CI run.** **16 commits** now sit unpushed on `main` + this branch. Linux has never run
+2. **Push and let CI run.** **18 commits** now sit unpushed on `main` + this branch. Linux has never run
    `pnpm lint`, the OpenAPI staleness gate, or the three INS-055 migrations replaying from scratch — and
    that replay is the one to watch, because migration B breaks the INS-014 triggers and migration C repairs
    them. CI will also be the first honest read on the integration flakiness below, since it runs against

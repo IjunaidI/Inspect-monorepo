@@ -104,7 +104,11 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
     tamperProof: report
       ? {
           contentHash: report.contentHash,
-          signedBy: report.generatedBy?.name,
+          // INS-089: nothing records WHO generated a report — Report has no
+          // generatedByUserId column. This read was `report.generatedBy?.name`,
+          // a field the API never sent, so the block has always shown '—'.
+          // Left explicit rather than silently undefined.
+          signedBy: null,
           signedAt: report.generatedAt,
         }
       : null,

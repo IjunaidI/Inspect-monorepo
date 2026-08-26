@@ -189,7 +189,7 @@ export function PopulateWorkspace({
     startTransition(async () => {
       const r = await addDefect(inspection.id, {
         defectCatalogId: item.id,
-        severity: item.severity,
+        severity: item.defaultSeverity,
         inspectionLoopItemId: cursor.itemId,
         cycleIndex: cursor.cycleIndex,
       });
@@ -247,7 +247,11 @@ export function PopulateWorkspace({
   }
 
   const SEVS: SeverityKey[] = ['critical', 'major', 'minor'];
-  const catalogBySev = (sev: SeverityKey) => catalog.filter((c) => c.severity === sev.toUpperCase());
+  // `defaultSeverity` is what GET /defect-catalog actually sends. Reading
+  // `severity` here made every group filter to empty, so no catalog defect
+  // could be tagged at all (fixed in INS-086 Phase 1).
+  const catalogBySev = (sev: SeverityKey) =>
+    catalog.filter((c) => c.defaultSeverity === sev.toUpperCase());
 
   /** Every defect recorded anywhere on the unit currently on screen. */
   const defectsOnUnit = items.flatMap((item) =>

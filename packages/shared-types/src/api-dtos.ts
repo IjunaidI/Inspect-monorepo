@@ -168,7 +168,11 @@ export interface InspectionDto {
     measurementFields: { label: string; unit?: string }[];
     allowedDefects: { defectCatalogId: string; name: string; severity: DefectSeverity }[];
   } | null;
-  inspectorId?: string | null;
+  // NO `inspectorId`: `Inspection` has no such column. The only `inspectorId`
+  // in the schema lives INSIDE the `tamperProof` JSON and means the ACTUAL
+  // submitter — a different fact from the assigned inspector, which the schema
+  // comment calls out explicitly. Declaring it here invited exactly that
+  // conflation; nothing read it, so it is removed rather than mapped.
   /** Scalar FK on list rows (INS-057) — assignedInspector object only on GET /:id. */
   assignedInspectorId?: string | null;
   supersedesInspectionId?: string | null;
@@ -247,13 +251,6 @@ export interface PhotoDto {
   viewUrl?: string | null;
 }
 
-export interface DefectCatalogItemDto {
-  id: string;
-  name: string;
-  severity: DefectSeverity;
-  category?: string | null;
-}
-
 export interface DefectInstanceDto {
   id: string;
   severity: DefectSeverity;
@@ -304,7 +301,11 @@ export interface ReportDto {
   signature?: string | null;
   pdfStorageKey?: string | null;
   generatedAt: string;
-  generatedBy?: { id: string; name: string } | null;
+  // NO `generatedBy`: the Report model has no generatedByUserId column, so the
+  // API has never been able to send one. It was declared here anyway, and the
+  // console's report page read `report.generatedBy?.name` into the tamper-proof
+  // block's "signed by" — which therefore rendered an em-dash on every report.
+  // Recording and showing the signer is INS-089, and needs a schema change.
 }
 
 /** GET /reports row (INS-062) — list metadata only, never canonicalSnapshot. */
