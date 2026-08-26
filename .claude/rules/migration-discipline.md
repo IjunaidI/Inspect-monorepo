@@ -3,6 +3,7 @@ paths:
   - "apps/mobile/**"
   - "packages/domain/**"
   - "packages/design-tokens/**"
+  - "packages/api-client/**"
 ---
 
 # React Native migration discipline
@@ -30,7 +31,7 @@ Copying markup structure produces something bad on both platforms.
 Three surfaces are **permanently web-only**. Do not port them, and do not add mobile routes for them:
 
 - `/admin/orgs` — Platform Admin. The app has no Platform Admin mode at all.
-- `/portal` — the buyer guest portal.
+- `/portal` — the company guest portal (magic-link, CLIENT-role reports only).
 - `/r/[token]` — public signature verification, which must open for anyone holding a link.
 
 ## Role floors
@@ -53,6 +54,18 @@ These follow from the domain invariants in the root `CLAUDE.md`; they are the mo
   chain is the tamper-proof guarantee.
 - **Never compute an AQL verdict on the device.** The engine is server-side and its result is what gets
   signed. The app displays; the API decides.
+
+## The packages already exist
+
+[INS-086](../../docs/future/BACKLOG.md) Phase 1 shipped `@inspect/{api-client,domain,design-tokens}` and
+re-pointed `apps/web` at all three, so a mobile screen has a shared HTTP client, shared tokens and a shared
+role gate to build against. Two consequences:
+
+- **Never add a second `fetch` call site.** `@inspect/api-client` takes an INJECTED auth provider; mobile
+  supplies a SecureStore-backed one. It must not read `expo-secure-store` itself.
+- **A DTO belongs in `@inspect/shared-types`,** and it must name fields the API actually sends —
+  `apps/api/src/common/wire-contract.spec.ts` enforces that against `schema.prisma`. Five phantom fields
+  shipped before it existed.
 
 ## Every migration updates the ledger
 
