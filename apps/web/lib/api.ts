@@ -7,6 +7,9 @@ import type {
   AqlClassOutcome,
   BuyerDto,
   BuyerGuestDto,
+  CompanyDto,
+  CompanyGuestDto,
+  CompanyKind,
   DefectClass,
   DefectScope,
   DefectSeverity,
@@ -282,8 +285,8 @@ export interface ApiDashboardSummary {
   inspectionsByStatus: Record<string, number>;
   qaDecisionCounts: ApiQaDecisionCounts;
   quality: ApiQualityMetrics;
-  buyers: number;
-  suppliers: number;
+  /** INS-055: one unified counterparty count (was `buyers` + `suppliers`). */
+  companies: number;
   products: number;
   purchaseOrders: number;
   reports: number;
@@ -300,6 +303,15 @@ export type ApiSupplier = SupplierDto;
 export type ApiProduct = ProductDto;
 export type ApiBuyerGuest = BuyerGuestDto;
 
+/**
+ * INS-055 — the unified counterparty. One row that can act as the client on one
+ * PO and the factory on another, so it carries BOTH the ex-Buyer branding fields
+ * and the ex-Supplier address/GPS fields. Trade role is never read from here.
+ */
+export type ApiCompany = CompanyDto;
+export type ApiCompanyGuest = CompanyGuestDto;
+export type ApiCompanyKind = CompanyKind;
+
 export interface ApiLoopPreset {
   id: string;
   name: string;
@@ -309,7 +321,7 @@ export interface ApiLoopPreset {
   isArchived: boolean;
   updatedAt?: string;
   /** INS-005 list aggregates — present on GET /loop-presets rows. */
-  _count?: { items: number; inspections: number; defaultForBuyers: number };
+  _count?: { items: number; inspections: number; defaultForCompanies: number };
 }
 
 export interface ApiMeasurementField {

@@ -54,6 +54,9 @@ describe('Core inspection loop (integration)', () => {
     await app.close();
   });
 
+  // INS-055 Task 4 repoints this to /companies + ws.clientCompanyId. It still
+  // reads /buyers because the PO carries buyerId until then, so the count this
+  // asserts only exists on the legacy row for now.
   it('buyer list carries live relation counts (INS-005)', async () => {
     const buyers = expect2xx(
       await client.get('/buyers', { token: org.ownerToken }),

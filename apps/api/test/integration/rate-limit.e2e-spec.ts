@@ -182,7 +182,7 @@ describe('Public-route rate limiting (INS-047)', () => {
       const res = await client.get('/auth/me', { token: adminToken });
       expect(res.status).toBe(200);
     }
-    const list = await client.get('/buyers', { token: adminToken });
+    const list = await client.get('/companies', { token: adminToken });
     // 403 = the no-org Platform Admin tenant guard; the point is it is NOT 429.
     expect(list.status).not.toBe(429);
   });

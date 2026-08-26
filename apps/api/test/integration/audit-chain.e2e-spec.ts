@@ -9,7 +9,7 @@
  * rejects the loser, and that rollback takes the caller's BUSINESS mutation with
  * it. This spec drives real concurrent HTTP mutations to prove that is closed.
  *
- * DELETE /buyers/:id (archive) is used because it is one of the mutations that
+ * DELETE /companies/:id (archive) is used because it is one of the mutations that
  * actually appends an audit row today (POST /buyers does not — that gap is
  * INS-006).
  */
@@ -55,7 +55,7 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     // POST /buyers does not audit, so seeding in parallel is safe and cheap.
     const created = await Promise.all(
       Array.from({ length: count }, (_, i) =>
-        client.post('/buyers', {
+        client.post('/companies', {
           token,
           body: { name: `Audit Race Buyer ${tag}-${i}` },
         }),
@@ -94,12 +94,16 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     for (let i = 0; i < Math.max(SAME_ORG_BURST, OTHER_ORG_BURST); i++) {
       if (i < SAME_ORG_BURST) {
         pending.push(
-          client.delete(`/buyers/${buyerIdsA[i]}`, { token: orgA.ownerToken }),
+          client.delete(`/companies/${buyerIdsA[i]}`, {
+            token: orgA.ownerToken,
+          }),
         );
       }
       if (i < OTHER_ORG_BURST) {
         pending.push(
-          client.delete(`/buyers/${buyerIdsB[i]}`, { token: orgB.ownerToken }),
+          client.delete(`/companies/${buyerIdsB[i]}`, {
+            token: orgB.ownerToken,
+          }),
         );
       }
     }
@@ -125,7 +129,7 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     // The failure mode INS-012 describes is not just a bad audit row: the P2002
     // rolls back the caller's transaction, so the archive silently does not
     // happen. Assert the domain effect landed for all of them.
-    return prisma.buyer
+    return prisma.company
       .findMany({
         where: { id: { in: buyerIdsA } },
         select: { id: true, archivedAt: true },
@@ -150,7 +154,7 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
 
   it('records exactly one audit row per concurrent archive, one per buyer', async () => {
     const rows = await chainFor(orgA.orgId);
-    const archived = rows.filter((r) => r.action === 'buyer.archived');
+    const archived = rows.filter((r) => r.action === 'company.archived');
     // Non-vacuity guard for the sequence test above: a chain of length M is
     // trivially 1..M if the appends never happened at all.
     expect(archived).toHaveLength(SAME_ORG_BURST);
@@ -175,7 +179,7 @@ describe('Audit chain under concurrent mutations (INS-012)', () => {
     expect(rows.length).toBeGreaterThanOrEqual(OTHER_ORG_BURST + 1);
     expect(rows.map((r) => r.sequence)).toEqual(rows.map((_, i) => i + 1));
     expect(verifyChain(rows)).toBe(true);
-    expect(rows.filter((r) => r.action === 'buyer.archived')).toHaveLength(
+    expect(rows.filter((r) => r.action === 'company.archived')).toHaveLength(
       OTHER_ORG_BURST,
     );
     // Per-org counters, not a global one: both orgs must own a sequence 1.

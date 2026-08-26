@@ -17,6 +17,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { BuyersModule } from './buyers/buyers.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
+import { CompaniesModule } from './companies/companies.module';
 import { ProductsModule } from './products/products.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { LoopPresetsModule } from './loop-presets/loop-presets.module';
@@ -139,6 +140,7 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     AuthModule,
     BuyersModule,
     SuppliersModule,
+    CompaniesModule,
     ProductsModule,
     PurchaseOrdersModule,
     LoopPresetsModule,

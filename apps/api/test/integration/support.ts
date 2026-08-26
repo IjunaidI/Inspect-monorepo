@@ -180,6 +180,9 @@ export async function inviteAndActivate(
 export interface WorkspaceFixture {
   buyerId: string;
   supplierId: string;
+  /** INS-055: the two role edges. `buyerId`/`supplierId` go away in Task 8. */
+  clientCompanyId: string;
+  factoryCompanyId: string;
   productId: string;
   poId: string;
   presetId: string;
@@ -215,6 +218,27 @@ export async function createWorkspace(
       body: { name: `E2E Supplier ${tag}` },
     }),
     'POST /suppliers',
+  );
+  // INS-055: the two companies that play the client and factory roles. Named
+  // clientCo/factoryCo rather than client/factory because `client` is the
+  // ApiClient in this file — shadowing it would be a TDZ error on the next call.
+  const clientCo = expect2xx(
+    await client.post('/companies', {
+      token: ownerToken,
+      body: { name: `E2E Client ${tag}`, kind: 'THIRD_PARTY' },
+    }),
+    'POST /companies (client)',
+  );
+  const factoryCo = expect2xx(
+    await client.post('/companies', {
+      token: ownerToken,
+      body: {
+        name: `E2E Factory ${tag}`,
+        kind: 'INTERNAL',
+        address: 'Dhaka, Bangladesh',
+      },
+    }),
+    'POST /companies (factory)',
   );
   const product = expect2xx(
     await client.post('/products', {
@@ -259,6 +283,8 @@ export async function createWorkspace(
   return {
     buyerId: buyer.id,
     supplierId: supplier.id,
+    clientCompanyId: clientCo.id,
+    factoryCompanyId: factoryCo.id,
     productId: product.id,
     poId: po.id,
     presetId: preset.id,

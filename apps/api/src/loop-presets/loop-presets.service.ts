@@ -58,7 +58,7 @@ export class LoopPresetsService {
       // INS-005: usage counts so the presets screen renders real figures.
       include: {
         _count: {
-          select: { items: true, inspections: true, defaultForBuyers: true },
+          select: { items: true, inspections: true, defaultForCompanies: true },
         },
       },
     });

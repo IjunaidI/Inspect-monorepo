@@ -26,20 +26,20 @@ function Kbd({ children, bordered = true }: { children: ReactNode; bordered?: bo
 
 /** Matches the API's GET /search hit shape (INS-051). */
 export interface SearchHit {
-  type: 'buyer' | 'supplier' | 'product' | 'po' | 'inspection';
+  /** INS-055: `buyer` + `supplier` collapsed into `company` — a row has no trade role. */
+  type: 'company' | 'product' | 'po' | 'inspection';
   id: string;
   label: string;
   sublabel: string | null;
 }
 
 const TYPE_META: Record<SearchHit['type'], { label: string; route: (id: string) => string }> = {
-  buyer: { label: 'Buyer', route: (id) => `/buyers/${id}` },
-  supplier: { label: 'Supplier', route: (id) => `/suppliers/${id}` },
+  company: { label: 'Company', route: (id) => `/companies/${id}` },
   product: { label: 'Product', route: (id) => `/products/${id}` },
   po: { label: 'PO', route: (id) => `/purchase-orders/${id}` },
   inspection: { label: 'Inspection', route: (id) => `/inspections/${id}/review` },
 };
-const TYPE_ORDER: SearchHit['type'][] = ['buyer', 'supplier', 'product', 'po', 'inspection'];
+const TYPE_ORDER: SearchHit['type'][] = ['company', 'product', 'po', 'inspection'];
 
 /**
  * ⌘K command palette (INS-051): topbar trigger + overlay. Debounced org-scoped
@@ -187,7 +187,7 @@ export function CommandPalette({ placeholder }: { placeholder: string }) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder="Search buyers, suppliers, products, POs, inspections…"
+                placeholder="Search companies, products, POs, inspections…"
                 style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: ui.ink, fontFamily: 'inherit' }}
               />
               <Kbd>Esc</Kbd>

@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface SearchHit {
-  type: 'buyer' | 'supplier' | 'product' | 'po' | 'inspection';
+  /**
+   * INS-055: `buyer` and `supplier` collapsed into one `company` type. A hit is
+   * a row, and a row has no trade role — role lives on the PO/inspection edge —
+   * so the palette can no longer label a counterparty as one or the other.
+   */
+  type: 'company' | 'product' | 'po' | 'inspection';
   id: string;
   label: string;
   sublabel: string | null;
@@ -18,14 +23,9 @@ export class SearchService {
   async search(orgId: string, q?: string): Promise<SearchHit[]> {
     if (!q) return [];
     const contains = { contains: q, mode: 'insensitive' as const };
-    const [buyers, suppliers, products, pos, inspections] =
+    const [companies, products, pos, inspections] =
       await this.prisma.$transaction([
-        this.prisma.buyer.findMany({
-          where: { orgId, name: contains },
-          take: PER_TYPE,
-          select: { id: true, name: true },
-        }),
-        this.prisma.supplier.findMany({
+        this.prisma.company.findMany({
           where: { orgId, name: contains },
           take: PER_TYPE,
           select: { id: true, name: true },
@@ -67,16 +67,10 @@ export class SearchService {
         }),
       ]);
     return [
-      ...buyers.map<SearchHit>((b) => ({
-        type: 'buyer',
-        id: b.id,
-        label: b.name,
-        sublabel: null,
-      })),
-      ...suppliers.map<SearchHit>((s) => ({
-        type: 'supplier',
-        id: s.id,
-        label: s.name,
+      ...companies.map<SearchHit>((c) => ({
+        type: 'company',
+        id: c.id,
+        label: c.name,
         sublabel: null,
       })),
       ...products.map<SearchHit>((p) => ({

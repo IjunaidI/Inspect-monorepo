@@ -50,14 +50,14 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       },
     ));
     buyerAId = expect2xx(
-      await client.post('/buyers', {
+      await client.post('/companies', {
         token: orgA.ownerToken,
         body: { name: `Buyer A ${tag}` },
       }),
       'POST /buyers (org A)',
     ).id;
     buyerBId = expect2xx(
-      await client.post('/buyers', {
+      await client.post('/companies', {
         token: orgB.ownerToken,
         body: { name: `Buyer B ${tag}` },
       }),
@@ -71,12 +71,12 @@ describe('Auth & RBAC negative matrix (integration)', () => {
 
   describe('401 — unauthenticated / bad tokens', () => {
     it('rejects a protected route with no token', async () => {
-      const res = await client.get('/buyers');
+      const res = await client.get('/companies');
       expect(res.status).toBe(401);
     });
 
     it('rejects a garbage token', async () => {
-      const res = await client.get('/buyers', { token: 'not-a-jwt' });
+      const res = await client.get('/companies', { token: 'not-a-jwt' });
       expect(res.status).toBe(401);
     });
 
@@ -161,7 +161,7 @@ describe('Auth & RBAC negative matrix (integration)', () => {
 
   describe('403 — additive role floors', () => {
     it('INSPECTOR cannot write a QA_MANAGER resource', async () => {
-      const res = await client.post('/buyers', {
+      const res = await client.post('/companies', {
         token: inspectorToken,
         body: { name: 'nope' },
       });
@@ -208,7 +208,7 @@ describe('Auth & RBAC negative matrix (integration)', () => {
     });
 
     it('the no-org PLATFORM_ADMIN is refused on org-scoped routes (tenant guard)', async () => {
-      const res = await client.get('/buyers', { token: adminToken });
+      const res = await client.get('/companies', { token: adminToken });
       expect(res.status).toBe(403);
       expect(JSON.stringify(res.body)).toContain('organization context');
     });
@@ -216,29 +216,29 @@ describe('Auth & RBAC negative matrix (integration)', () => {
 
   describe('cross-org isolation', () => {
     it("owner A cannot read org B's buyer by id", async () => {
-      const res = await client.get(`/buyers/${buyerBId}`, {
+      const res = await client.get(`/companies/${buyerBId}`, {
         token: orgA.ownerToken,
       });
       expect(res.status).toBe(404);
     });
 
     it("owner A cannot mutate org B's buyer", async () => {
-      const res = await client.patch(`/buyers/${buyerBId}`, {
+      const res = await client.patch(`/companies/${buyerBId}`, {
         token: orgA.ownerToken,
         body: { name: 'hijacked' },
       });
       expect(res.status).toBe(404);
       const intact = expect2xx(
-        await client.get(`/buyers/${buyerBId}`, { token: orgB.ownerToken }),
-        'GET /buyers/:id (org B, after attempted hijack)',
+        await client.get(`/companies/${buyerBId}`, { token: orgB.ownerToken }),
+        'GET /companies/:id (org B, after attempted hijack)',
       );
       expect(intact.name).toBe(`Buyer B ${tag}`);
     });
 
     it("owner A's buyer list never contains org B's rows", async () => {
       const list = expect2xx(
-        await client.get('/buyers', { token: orgA.ownerToken }),
-        'GET /buyers (org A)',
+        await client.get('/companies', { token: orgA.ownerToken }),
+        'GET /companies (org A)',
       );
       const ids = (list as any[]).map((b) => b.id);
       expect(ids).toContain(buyerAId);
@@ -267,33 +267,39 @@ describe('Auth & RBAC negative matrix (integration)', () => {
   describe('list search + pagination (INS-050)', () => {
     it('q filters case-insensitively and stays org-scoped', async () => {
       const hit = expect2xx(
-        await client.get(`/buyers?q=${encodeURIComponent(`buyer a ${tag}`)}`, {
-          token: orgA.ownerToken,
-        }),
-        'GET /buyers?q=<match>',
+        await client.get(
+          `/companies?q=${encodeURIComponent(`buyer a ${tag}`)}`,
+          {
+            token: orgA.ownerToken,
+          },
+        ),
+        'GET /companies?q=<match>',
       ) as any[];
       expect(hit.some((b) => b.id === buyerAId)).toBe(true);
 
       const miss = expect2xx(
-        await client.get('/buyers?q=zzz-no-such-buyer', {
+        await client.get('/companies?q=zzz-no-such-buyer', {
           token: orgA.ownerToken,
         }),
-        'GET /buyers?q=<miss>',
+        'GET /companies?q=<miss>',
       ) as any[];
       expect(miss.length).toBe(0);
 
       // Org B searching org A's buyer name sees nothing (isolation holds under q).
       const cross = expect2xx(
-        await client.get(`/buyers?q=${encodeURIComponent(`Buyer A ${tag}`)}`, {
-          token: orgB.ownerToken,
-        }),
-        'GET /buyers?q= (cross-org)',
+        await client.get(
+          `/companies?q=${encodeURIComponent(`Buyer A ${tag}`)}`,
+          {
+            token: orgB.ownerToken,
+          },
+        ),
+        'GET /companies?q= (cross-org)',
       ) as any[];
       expect(cross.length).toBe(0);
     });
 
     it('a repeated q param does not 500 (review hardening)', async () => {
-      const res = await client.get('/buyers?q=a&q=b', {
+      const res = await client.get('/companies?q=a&q=b', {
         token: orgA.ownerToken,
       });
       expect(res.status).toBe(200);
@@ -303,19 +309,23 @@ describe('Auth & RBAC negative matrix (integration)', () => {
       // Two known buyers exist in org A by now (Buyer A + at least one more via
       // other suites is NOT guaranteed here, so create a second one).
       expect2xx(
-        await client.post('/buyers', {
+        await client.post('/companies', {
           token: orgA.ownerToken,
           body: { name: `Buyer A2 ${tag}` },
         }),
         'POST /buyers (pagination fixture)',
       );
       const page1 = expect2xx(
-        await client.get('/buyers?take=1&skip=0', { token: orgA.ownerToken }),
-        'GET /buyers?take=1&skip=0',
+        await client.get('/companies?take=1&skip=0', {
+          token: orgA.ownerToken,
+        }),
+        'GET /companies?take=1&skip=0',
       ) as any[];
       const page2 = expect2xx(
-        await client.get('/buyers?take=1&skip=1', { token: orgA.ownerToken }),
-        'GET /buyers?take=1&skip=1',
+        await client.get('/companies?take=1&skip=1', {
+          token: orgA.ownerToken,
+        }),
+        'GET /companies?take=1&skip=1',
       ) as any[];
       expect(page1.length).toBe(1);
       expect(page2.length).toBe(1);
@@ -331,7 +341,7 @@ describe('Auth & RBAC negative matrix (integration)', () => {
         }),
         'GET /search (org A)',
       ) as Array<{ type: string; id: string }>;
-      expect(hits.some((h) => h.type === 'buyer' && h.id === buyerAId)).toBe(
+      expect(hits.some((h) => h.type === 'company' && h.id === buyerAId)).toBe(
         true,
       );
 
@@ -360,15 +370,15 @@ describe('Auth & RBAC negative matrix (integration)', () => {
         await client.get('/dashboard/summary', { token: orgA.ownerToken }),
         'GET /dashboard/summary (org A)',
       );
-      expect(a.buyers).toBeGreaterThanOrEqual(1); // buyerAId created in beforeAll
+      expect(a.companies).toBeGreaterThanOrEqual(1); // buyerAId created in beforeAll
       expect(a.inspectionsByStatus).toBeDefined();
 
-      // Org B has exactly its own single buyer — org A's rows never leak in.
+      // Org B has exactly its own single company — org A's rows never leak in.
       const b = expect2xx(
         await client.get('/dashboard/summary', { token: orgB.ownerToken }),
         'GET /dashboard/summary (org B)',
       );
-      expect(b.buyers).toBe(1);
+      expect(b.companies).toBe(1);
       expect(b.purchaseOrders).toBe(0);
     });
 
