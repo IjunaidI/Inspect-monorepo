@@ -43,13 +43,22 @@ single `pnpm install` at the root installs everything):
 
 - `apps/api/` — **NestJS 11 + Prisma 6** API (port **3000**, override via `API_PORT`). The RBAC authority + domain core.
 - `apps/web/` — **Next.js 15** App-Router console (port **3001**, hardcoded in its `dev`/`start` scripts). React 19, NextAuth v5, Tailwind, shadcn/ui.
-- `packages/shared-types/` — `@inspect/shared-types` (Zod contracts + enum unions). **Built but not yet wired into either app — see [INS-008](docs/future/BACKLOG.md).**
+- `packages/shared-types/` — `@inspect/shared-types`: the **wire contract** — enum unions, JSON-column
+  contracts, and every request/response DTO. Imported by both apps ([INS-008](docs/future/BACKLOG.md) done).
+- `packages/api-client/` — `@inspect/api-client`: one dependency-free `fetch` client, parameterised by base
+  URL and an **injected auth provider**. Owns HTTP, never auth — it must not read a cookie, `next/headers`
+  or `expo-secure-store`. See [`.claude/rules/wire-contract.md`](.claude/rules/wire-contract.md).
+- `packages/domain/` — `@inspect/domain`: platform-free rules with no I/O and no React. Holds the single
+  `ROLE_RANK` table that both the API's `RolesGuard` and the console read.
+- `packages/design-tokens/` — `@inspect/design-tokens`: the palette, font **stacks** and severity/role maps.
+  Deliberately free of CSS — `var(--font-sans)` and `CSSProperties` are composed in `apps/web`.
 
-Node ≥ 20, pnpm 9.12.0 (declared in root `package.json`).
+All four packages build to `dist/` and are consumed through it; `apps/web`'s Vitest aliases `@inspect/*` to
+package **source**, so a stale `dist` cannot fake a green suite. Node ≥ 20, pnpm 9.12.0 (root `package.json`).
 
-**Planned (React Native migration, [INS-086](docs/future/BACKLOG.md)) — do not assume these exist yet:**
-`apps/mobile/` (Expo, iOS + Android, arrives in Phase 2) and `packages/{api-client,domain,design-tokens}/`
-(extracted from `apps/web` in Phase 1). Design:
+**Planned (React Native migration, [INS-086](docs/future/BACKLOG.md)) — do not assume this exists yet:**
+`apps/mobile/` (Expo, iOS + Android, arrives in Phase 2). The three shared packages above landed in
+Phase 1 ([INS-086](docs/future/BACKLOG.md), 2026-08-27). Design:
 [docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md).
 Per-screen state lives in [docs/reference/screen-migration-map.md](docs/reference/screen-migration-map.md);
 the procedure is the `migrate-screen` skill.
@@ -166,7 +175,7 @@ back them yet — tracked as [INS-010..INS-018](docs/future/BACKLOG.md)); when y
 - **The API won't boot without `DATABASE_URL` + `REDIS_URL`.** `CacheModule` throws `REDIS_URL is required`; Prisma needs `DATABASE_URL`. There is no dev-mode silent fallback — bring up `docker-compose.dev.yml` first.
 - **Verify DB-bound changes with the integration suite.** The core paths are proven live (INS-001 closed), but update/delete paths and service internals are thinner — run `pnpm api test:integration` (and extend it) rather than assuming "compiles" means "works." The bootstrap-admin password converges to `BOOTSTRAP_ADMIN_*` on every `prisma db seed` (by design — re-seed if login 401s after regenerating `.env`).
 - **One canonical schema.** `apps/api/prisma/schema.prisma` is the only Prisma schema. (The old root `LoopQC_schema.prisma` mirror was removed 2026-06-20 — don't recreate it.)
-- **`@inspect/shared-types` is built but unlinked** ([INS-008](docs/future/BACKLOG.md)) — both apps currently redeclare their own enums/DTOs, so the client/server contract can drift.
+- **A shared package must be rebuilt before the API or `next build` sees a change** — they resolve `dist/`, and only `pnpm build`/`type-check` (which carry `dependsOn: ["^build"]`) rebuild it for you. `apps/web`'s Vitest is the exception: it aliases `@inspect/*` to `src`, which also means a **missing** workspace dependency still passes the web suite and only fails at `tsc`/`next build`. Trust type-check, not the suite, for wiring.
 - **Object storage is a managed S3-compatible bucket** (`S3_*` in the repo-root `.env`), verified live: presigned PUT/GET round-trip, private objects, permissive CORS. So the byte-upload spec now **runs** locally rather than skipping. CI still uses a MinIO container. Note managed endpoints answer `403` for *any* bucket name, so the suite's probe cannot prove a bucket exists there — a wrong `S3_BUCKET` surfaces as a failing presigned PUT, not a skip. Local `docker-compose.dev.yml` still requires Docker Desktop.
 - **Windows + pnpm:** if `pnpm` isn't on PATH, use `npx -y pnpm@9.12.0 <cmd>` or `apps/api/node_modules/.bin`. The API reads the **repo-root** `.env` (`../../.env`), not just `apps/api/.env`.
 

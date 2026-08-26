@@ -1,6 +1,63 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-08-26 ([INS-055](future/BACKLOG.md) SHIPPED — `Company` is the only counterparty).**
+> **Last verified: 2026-08-27 ([INS-086](future/BACKLOG.md) **Phase 1 SHIPPED** — the logic core is extracted).**
+> `@inspect/{api-client,domain,design-tokens}` now exist alongside `shared-types`, and `apps/web` is
+> re-pointed at all three. The seam that matters is `createApiClient({ baseUrl, auth })`: HTTP no longer
+> reaches into `next/headers` / `next-auth/jwt` itself but receives an **injected auth provider**, so the
+> console keeps its server-side-only token model (INS-045) while mobile can hand it a Keychain-backed one.
+> `apps/web/lib/api.ts` fell from **635 lines to 232**, and what is left is genuinely Next-specific.
+> **The acceptance was "no behavioural change", and it held:** the console's 32 characterization tests
+> ([INS-082](future/BACKLOG.md)) passed **unchanged** at every step — they were the instrument, never edited.
+> **The phase went beyond the spec's Phase-1 row by explicit choice.** Two items drafted as deferrals were
+> folded in: the **34 wire DTOs** moved to `shared-types` (so `apps/web/lib/api.ts` declares no wire shape at
+> all — this is what finally closes [INS-008](future/BACKLOG.md)), and **`apps/api/src/auth/rbac.ts` now reads
+> `ROLE_RANK` from `@inspect/domain`**, putting the additive hierarchy in exactly one source file. Spec §4.4
+> demands each migration *reduce* total logic; moving only the console's copy would have left it at two.
+> **Three findings worth carrying forward.**
+> **(1) A real, user-visible bug was hiding behind an optional field.** `ApiReportListItem` declared `buyer`
+> while the API selects `clientCompany`, so `app/(console)/reports/page.tsx` rendered `r.buyer?.name ?? '—'`
+> — **an em-dash in the reports list's client column for every row since INS-055 shipped.** Optional
+> properties make a stale read invisible to `tsc` *as long as the type sits next to its only consumer*;
+> moving the DTO into a package turned it into a compile error on the first type-check. This is the class of
+> defect the "no manual console pass" gap was always going to be hiding.
+> **(2) The vitest alias that protects the suite also hides a missing dependency.** `@inspect/api-client` was
+> absent from `apps/web/package.json` and the web suite still went green, because the alias resolves
+> `@inspect/*` to package source regardless. `tsc` and `next build` are the real wiring gate — the suite is
+> not. Recorded in the root `CLAUDE.md` gotchas.
+> **(3) One HTTP call site was deliberately left outside the client.** `lib/auth.ts` still hand-rolls
+> `POST /auth/login`, `GET /auth/me` and `POST /auth/refresh` — the three endpoints mobile needs *first*.
+> Not folded in because `refreshApiAccessToken` is imported by `middleware.ts` on the **edge runtime**, which
+> makes it a re-point with a runtime constraint rather than a lift-and-shift. Filed as
+> [INS-088](future/BACKLOG.md); it blocks Phase 2.
+> **Two decisions the spec left open, now closed.** *Packaging:* all four packages build to `dist/`, **not**
+> source-as-entry as §2.1 suggested — `ts-jest` will not transform TypeScript inside `node_modules`, so a
+> source entry would have broken all 634 API tests in a phase whose whole point is being boring. The
+> stale-`dist` risk is removed where it is dangerous by aliasing `@inspect/*` to package **source** in
+> `apps/web/vitest.config.mts`, so the acceptance instrument always tests what was just written. Revisit for
+> Metro in Phase 2. *Spec §9's open question:* `@inspect/domain` does **not** absorb `cycle-state.ts` — the
+> console reads `inspection.cycleState` off the API response and never computes it, so there is no
+> duplication to remove and no reason to make the API depend on a package it does not need.
+> **Verified:** `pnpm type-check` **10/10 clean** · `pnpm lint` **0 errors** (1 pre-existing font warning) ·
+> `pnpm build` **6/6** · **web 38 passing / 3 files** (32 unchanged + 6 new token assertions) ·
+> **api unit 634 / 41 suites, exit 0 — identical before and after the `rbac.ts` re-point** ·
+> new package suites **`@inspect/domain` 11/2** and **`@inspect/api-client` 13/1**.
+>
+> **⚠️ Still NOT verified — every one of these is carried forward from INS-055 untouched, and this phase
+> adds 6 more unpushed commits to the same pile:**
+> 1. **No manual console pass has ever been performed** on the post-INS-055 screens — and finding (1) above
+>    is precisely what that gap costs. The reports-list column is fixed, but nothing else was clicked.
+> 2. **The dev database has no curated workspace** — all 104 orgs are `E2E Org …` fixtures.
+> 3. **CI has still never run on Linux** — `pnpm lint`, the OpenAPI staleness gate, and the three INS-055
+>    migrations replaying from scratch.
+> 4. **The PO party pickers still do not rank by role** ([INS-087](future/BACKLOG.md)).
+>
+> **New gotcha from this phase:** a shared package must be **rebuilt** before the API or `next build` sees a
+> change — they resolve `dist/`, and only `pnpm build` / `pnpm type-check` (which carry
+> `dependsOn: ["^build"]`) rebuild it for you. Also note `pnpm install` runs `prisma generate`, which fails
+> with `EPERM … query_engine-windows.dll.node` while any node process holds the engine; `pnpm install
+> --ignore-scripts` is the way through when the schema has not changed.
+>
+> Prior entry: **2026-08-26 ([INS-055](future/BACKLOG.md) SHIPPED — `Company` is the only counterparty).**
 > `Buyer`, `Supplier` and `BuyerGuest` are gone from the schema and the code. Trade role now lives on the
 > **edge** (`clientCompanyId` / `factoryCompanyId`), so one company can be the client on one PO and the
 > factory on another — the thing the old two-table split could not express. **Phase 0 of the RN programme is
@@ -166,10 +223,20 @@
 > (multi-tenant B2B SaaS; web-first MVP, mobile deferred). Requirements: [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md).
 
 ## Tests
-- **Web (Vitest, unit): 32 passing across 2 suites** ([INS-082](future/BACKLOG.md)) — the console's automated
-  tests. `apps/web/lib/roles.test.ts` (12) and `apps/web/lib/api.test.ts` (20). Unchanged by INS-055, which is
-  the point: they cover `loadOrFallback`'s branch table and the `X-Org-Id` role gate, neither of which the
-  Company refactor touches. Run with `pnpm web test`; included in root `pnpm test`.
+- **Web (Vitest, unit): 38 passing across 3 suites** (measured 2026-08-27 at [INS-086](future/BACKLOG.md)
+  Phase 1 close). `apps/web/lib/roles.test.ts` (12), `apps/web/lib/api.test.ts` (20) and the new
+  `apps/web/components/inspect/tokens.test.ts` (6). **The first 32 are the acceptance instrument for the
+  Phase 1 extraction and passed unchanged through all of it** — a red one there is a real regression, never a
+  test to update. The 6 new ones assert the composed `ui.font` / `mono` strings verbatim, because a mangled
+  font stack fails no build. Run with `pnpm web test`; included in root `pnpm test`.
+- **`@inspect/domain` (Vitest): 11 passing across 2 suites** ([INS-086](future/BACKLOG.md) Phase 1) —
+  `roles.test.ts` (6: the additive hierarchy, the fail-closed branch for an unknown or missing role, and the
+  shape of the single `ROLE_RANK` table both the API and the console now read) and `text.test.ts` (5).
+- **`@inspect/api-client` (Vitest): 13 passing across 1 suite** ([INS-086](future/BACKLOG.md) Phase 1) —
+  proves the client works with **zero framework mocks**: injected bearer + `X-Org-Id`, **no auth headers ever
+  on the public helpers**, `ApiError` carrying status/path/body, validation-array joining, the non-JSON
+  fallback message, and 204/empty decoding. The contrast with `apps/web/lib/api.test.ts`'s mock preamble is
+  the coupling this package removed.
 - **API (Jest, unit): 634 passing across 41 suites, exit 0** (measured 2026-08-26 at INS-055 close). Net of
   INS-055: **+20** `reports/canonical.spec.ts` (the pure v1/v2 readers, incl. hostile-marker and spoofed-key
   cases), **+68** `companies/*.spec.ts` (the merged Buyers+Suppliers suites plus `kind` validation and the
@@ -212,56 +279,77 @@
 | Reports & verification | working-with-gaps | `reports.service` signed-report generation + **public `GET /reports/verify/:token` verified live** (2026-06-20 smoke). **2026-07-11 security review: the Ed25519-signed canonical now covers the defect list + evidence, quantity/carton verification, notes and decision attribution (INS-038 done — previously alterable under a valid signature), is jsonb-round-trip-normalized, and generate() is now idempotency-safe under concurrency (INS-043 done).** Still **never renders the PDF binary** (INS-003); service has no unit spec (INS-019); delivery records modeled but **nothing sends** (INS-020); canonicalSnapshot still nullable (INS-046). | [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md) | INS-003, INS-019, INS-020, INS-046 |
 | Guest portal | working-with-gaps | Magic-link guest **backend verified live** (2026-06-20 smoke). **Web portal wired (2026-06-28, INS-025)**: `/portal?token=TOKEN` reads the token server-side, fetches `GET /guest/reports?token=…` (unauthenticated), renders buyer-branded report list sidebar + `BrandedReport` detail panel; invalid/expired token shows an error card; "Verify" link → `/r/:verificationToken`; "Download PDF" enabled when `pdfStorageKey` set (pending INS-003). | [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md) | INS-003 |
 | Web console | working-with-gaps | Next.js 15 console; all major screens wired: operator-loop spine (INS-026/027/028), inspections lifecycle (INS-023/017/032/033), loop presets builder (INS-024), workspace directory (2026-06-28), **guest portal + invite flow (2026-06-28, INS-025/029/030)**: `/portal` live token auth + buyer report list + branded report view; `/invite?token=…` accept form activates account + redirects to login; `/users` inline Invite form with copyable link; per-row role `<select>` live-patches role; Deactivate action via MoreVertical. Shell NAV has Products + Purchase Orders. Photo byte PUT gated on MinIO (INS-023 infra). **Write helpers (apiPost/Put/Patch/Delete) confirmed live + used across every server action → INS-022 done (2026-07-11).** **2026-07-25 (INS-079): Platform Admin now has a working console** — `/admin/orgs` (list, create-org-with-first-owner-invite, Enter workspace), an httpOnly cookie carrying the assumed org (`X-Org-Id` attached only in `apiGet`/`apiSend`), scope-aware nav, a non-dismissible "operating inside «Org»" banner, role-aware middleware routing, and a console `error.tsx` 403 safety net (no-org 403s now redirect server-side from `loadOrFallback` instead of crashing the render) — closing INS-078. Remaining: list counts (INS-031), PDF rendering (INS-003), the session exposes the raw API JWT to the browser (INS-045), and every org user's sidebar/topbar shows the hardcoded demo org name instead of their real one (INS-080, found 2026-07-25 — also see the correction below to this sweep's 2026-07-12 entry). | [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md) | INS-003, INS-045, INS-068, INS-074, INS-080 |
-| Infra & CI | working-with-gaps | Stack **boots and drives the full loop green** against the Railway managed Postgres+Redis (2026-06-20, 25-step smoke; `/health` db+redis up); `.env.example` scrubbed (INS-002, live-cred rotation pending). **2026-07-11: 36-test integration suite green vs the live DB + GitHub Actions CI (containerized Postgres/Redis/MinIO) — INS-009 done; INS-001 closed.** Still: `@inspect/shared-types` built but **unlinked** (INS-008), lint broken repo-wide so not CI-gated (INS-048), local MinIO needs Docker. | [reference/inspect-build-index.md](reference/inspect-build-index.md) | INS-002, INS-008, INS-048 |
+| Infra & CI | working-with-gaps | Stack **boots and drives the full loop green** against the Railway managed Postgres+Redis (2026-06-20, 25-step smoke; `/health` db+redis up); `.env.example` scrubbed (INS-002, live-cred rotation pending). **2026-07-11: 36-test integration suite green vs the live DB + GitHub Actions CI (containerized Postgres/Redis/MinIO) — INS-009 done; INS-001 closed.** **2026-08-27 ([INS-086](future/BACKLOG.md) Phase 1): the workspace is now FOUR packages** — `shared-types` (the whole wire contract, INS-008 closed), `api-client` (HTTP behind an injected auth provider), `domain` (the single `ROLE_RANK`), `design-tokens`. All build to `dist/`; `apps/web`'s Vitest aliases them to `src`. `pnpm build` 6 tasks, `type-check` 10, `lint` 0 errors. Still: local MinIO needs Docker; **CI has never run on Linux** and 6 more commits are unpushed; the **integration suite is flaky against the remote dev DB** (a full run takes ~13 min and has produced `$connect()` failures + short audit-row counts in the INS-012 concurrency spec that do not reproduce when the suite runs alone). | [reference/inspect-build-index.md](reference/inspect-build-index.md) | INS-002, INS-088 |
 
 ## Active work
 
-### ▶️ NEXT SESSION STARTS HERE — [INS-086](future/BACKLOG.md) Phase 1: the shared-package extraction
+### ▶️ NEXT SESSION STARTS HERE — [INS-086](future/BACKLOG.md) Phase 2: the Expo skeleton
 
-**Phase 0 is code-complete.** [INS-055](future/BACKLOG.md) shipped, which was the last item gating the
-contract, so **Phase 1 is unblocked**: extract the platform-free layer into
-`@inspect/{api-client,domain,design-tokens}`. The contract it freezes is now the final one — `Company` with
-`clientCompanyId` / `factoryCompanyId`, not `Buyer`/`Supplier`. That was decision D5's whole purpose: a
-shipped app build cannot be force-updated the way a console is redeployed.
+**Phase 1 is done** (2026-08-27). `@inspect/{api-client,domain,design-tokens}` exist, `apps/web` is
+re-pointed at all three, and the console's characterization tests passed unchanged throughout. Phase 2 is the
+first mobile code in the tree.
 
-**Phase 1 is extraction ONLY.** No mobile code in the tree. Its acceptance is that the console behaves
-identically — which is exactly what `apps/web`'s 32 Vitest tests exist to prove, so treat a red one as a real
-regression, never as a test to update. The procedure is in
-[the RN spec](in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) and
-`.claude/rules/wire-contract.md`; the non-negotiable rule is that when logic moves into a shared package,
-**`apps/web` is re-pointed at it in the same change**.
+**Phase 2's acceptance is deliberately tiny and deliberately on-device** (spec §6): *the inspections list
+renders on a physical device via EAS.* That is not a modest goal dressed up — the toolchain is where RN
+monorepo projects actually die, and it is worth discovering that with one screen at risk rather than twenty.
+What it really proves: pnpm workspaces + Metro symlink resolution, `@inspect/api-client` running on native
+with a SecureStore-backed provider, the design tokens rendering through `StyleSheet`, and the EAS build
+pipeline.
 
-**Still open in Phase 0:** [INS-002](future/BACKLOG.md) credential rotation — user-side, needs the Railway
-account. It gates EAS/app-store credentials, not the extraction, so Phase 1 does not wait on it.
+**Do [INS-088](future/BACKLOG.md) first — it blocks this.** `apps/web/lib/auth.ts` still hand-rolls
+`POST /auth/login`, `GET /auth/me` and `POST /auth/refresh`: the exact three endpoints a mobile app needs
+before it can render anything. Phase 1 left them alone because `refreshApiAccessToken` is imported by
+`middleware.ts` on the **edge runtime**, making it a re-point with a runtime constraint rather than a
+lift-and-shift. Writing mobile auth without moving them first means implementing the exchange twice, which is
+precisely the drift decision D3 cannot survive.
 
-**Baseline to beat, measured 2026-08-26 against a reset + reseeded database:** api unit **634 / 41 exit 0**,
-web **32 / 2**, integration **147 / 16 exit 0 with zero SKIP lines**, `pnpm type-check` 4/4, `pnpm lint` 0
-errors, `pnpm build` 3/3.
+**Revisit the packaging decision here.** All four packages build to `dist/` (see the header entry for why —
+`ts-jest` will not transform TypeScript inside `node_modules`). Metro is the first consumer that would
+genuinely benefit from source-as-entry, so Phase 2 is when to weigh it. Watch spec §7's named footgun: a
+duplicate React in the workspace. Pin React once at the root and have CI assert a single resolved version.
 
-**Four cheap things worth doing before Phase 1 — none is a blocker, all are quick:**
-1. **Click through the console once.** Nothing in INS-055 was manually verified; the screens changed a lot
-   (one Companies directory, a merged detail form, two-party PO pickers, the guests screen moved to
-   `/companies/:id/guests`). See the ⚠️ gaps in the header entry. The dev DB has **no curated workspace** —
-   all 104 orgs are `E2E Org …` fixtures — so create an org + two companies + a PO first, or the console
-   shows only test noise.
-2. **Push and let CI run.** 9 commits sit unpushed on `main`. Linux has never run `pnpm lint`, the OpenAPI
-   staleness gate, or the three INS-055 migrations replaying from scratch — and that replay is the one to
-   watch, because migration B breaks the INS-014 triggers and migration C repairs them.
+**Still open and user-side:** [INS-002](future/BACKLOG.md) credential rotation — it needs the Railway
+account, and unlike the extraction, Phase 2 **does** depend on it for EAS/app-store credentials.
+
+**Baseline to preserve, measured 2026-08-27:** api unit **634 / 41 exit 0**, web **38 / 3**,
+`@inspect/domain` **11 / 2**, `@inspect/api-client` **13 / 1**, `pnpm type-check` **10/10**, `pnpm lint`
+**0 errors**, `pnpm build` **6/6**.
+
+**Four things still not done, carried forward from INS-055 — the first one has now cost something real:**
+1. **Click through the console once.** Phase 1 found and fixed a bug a single glance would have caught: the
+   reports list rendered an em-dash in its client column for **every row** because the DTO still said
+   `buyer` while the API sends `clientCompany`. Nothing else on those screens has been looked at. The dev DB
+   has **no curated workspace** — all 104 orgs are `E2E Org …` fixtures — so create an org + two companies +
+   a PO first, or the console shows only test noise.
+2. **Push and let CI run.** **16 commits** now sit unpushed on `main` + this branch. Linux has never run
+   `pnpm lint`, the OpenAPI staleness gate, or the three INS-055 migrations replaying from scratch — and
+   that replay is the one to watch, because migration B breaks the INS-014 triggers and migration C repairs
+   them. CI will also be the first honest read on the integration flakiness below, since it runs against
+   containerized Postgres rather than the remote dev DB.
 3. **Reseed or prune the dev DB** if you want a usable console. `prisma migrate reset` needs explicit,
    per-invocation user consent (see the header entry).
-4. **Decide on the PO picker ranking** ([INS-087](future/BACKLOG.md)). `rankedFor()` ignores its `role` argument — spec §0 P3 promised
-   per-role ranking as the replacement for capability flags, and today it sorts by total PO count. Either
-   expose per-role counts on `CompanyDto._count` or drop the unused argument.
+4. **Decide on the PO picker ranking** ([INS-087](future/BACKLOG.md)). `rankedFor()` ignores its `role`
+   argument — spec §0 P3 promised per-role ranking as the replacement for capability flags, and today it
+   sorts by total PO count. Either expose per-role counts on `CompanyDto._count` or drop the argument.
 
-**Two operational notes for whoever picks this up:**
+**Operational notes for whoever picks this up:**
 - **Run the API suites with `jest --runInBand`** (`apps/api/node_modules/.bin/jest`). Root `pnpm test` OOMs
   under Jest's parallel workers on the dev machine (`FATAL ERROR: Zone Allocation failed`) — this looks like
   the real cause of [INS-085](future/BACKLOG.md)'s phantom Windows exit-134, which reproduced here as an OOM
   rather than a teardown crash. In-band exits 0 every time. Note `pnpm --filter @inspect/api exec jest`
   reports "Command jest not found"; `pnpm` 9.15.9 is on PATH directly and `npx -y pnpm@9.12.0` crashes.
+- **The integration suite is flaky against the remote dev DB.** A full `--runInBand` run takes ~13 minutes
+  and has produced `$connect()` failures plus short audit-row counts in the INS-012 concurrency spec. The
+  same suites pass when run alone, and the identical spec produced 3 failures, then 6, then 0 with **no code
+  change between runs**. Attribute a failure by re-running that suite in isolation before blaming a change.
 - **Prisma CLI needs the repo-root `.env` exported** (`set -a && . ./.env && set +a`) — it does not read
   `../../.env` the way the API's `ConfigModule` does, and fails with `Environment variable not found:
   DATABASE_URL` otherwise.
+- **`pnpm install` runs `prisma generate`**, which fails with `EPERM … query_engine-windows.dll.node` while
+  any node process holds the engine. `pnpm install --ignore-scripts` is the way through when the schema has
+  not changed.
+- **A shared package must be rebuilt** before the API or `next build` sees a change — they resolve `dist/`,
+  and only `pnpm build` / `pnpm type-check` (which carry `dependsOn: ["^build"]`) do it for you.
 
 - **🚧 React Native migration — design + scaffolding done, Phase 0 next (2026-08-26, [INS-086](future/BACKLOG.md)).**
   Approach A (shared logic core, UI per platform) is specified and the `.claude/` machinery to execute it

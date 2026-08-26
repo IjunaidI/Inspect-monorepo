@@ -17,7 +17,7 @@ auth provider**, which is precisely the seam that lets mobile supply a SecureSto
 
 **Tech Stack:** pnpm 9 workspaces + Turborepo · TypeScript 5.7 (strict) · Vitest 4 · Next 15 · NextAuth v5
 
-**Spec:** [../specs/2026-08-26-inspect-react-native-migration-design.md](../specs/2026-08-26-inspect-react-native-migration-design.md)
+**Spec:** [../specs/2026-08-26-inspect-react-native-migration-design.md](../../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md)
 (§2.1 the packages · §2.2 what is deliberately not shared · §4.4 the re-point rule · §6 phase table · §9 open questions)
 
 **Backlog item:** [INS-086](../../future/BACKLOG.md) · **Path-scoped rule that governs two of these packages:**
@@ -1911,7 +1911,7 @@ paths:
   describe four packages, three of them new.
 - **Active work:** replace the "▶️ NEXT SESSION STARTS HERE" block with **Phase 2** — the Expo skeleton,
   whose acceptance (spec §6) is one read-only screen running on a physical device via EAS. Note that Phase 2
-  is the moment to revisit D1 (source-as-entry for Metro), and that [INS-002](docs/future/BACKLOG.md)
+  is the moment to revisit D1 (source-as-entry for Metro), and that [INS-002](../../future/BACKLOG.md)
   credential rotation is user-side and gates EAS/app-store credentials.
 
 - [ ] **Step 9: Verify the docs are internally consistent**
@@ -1970,3 +1970,40 @@ is written from the repo's Jest config rather than from a run; if `--config apps
 run it as `cd apps/api && node_modules/.bin/jest --runInBand`. The predicted task counts for `pnpm
 type-check` (7) and `pnpm build` (6) assume turbo picks up all three new packages' scripts — verify, and if
 the real numbers differ, record the real ones in STATUS.
+
+---
+
+## Execution record (2026-08-27)
+
+All six tasks executed inline, in order, on branch `ins-086-phase1-extraction`. Six commits.
+
+**Where the plan was wrong, and what actually happened:**
+
+- **Test counts.** The plan predicted "36 passing / 3 files" for the web suite. The real number is **38** —
+  the plan miscounted its own six new token assertions against a 32-test baseline. Every other predicted
+  count was right: domain 11/2, api-client 13/1, api unit 634/41, build 6 tasks. `pnpm type-check` runs
+  **10** tasks, not the predicted 7, because turbo counts each package's `build` **and** `type-check`.
+- **The vitest alias masked a missing dependency.** `@inspect/api-client` was absent from
+  `apps/web/package.json` and the web suite passed anyway, because the alias resolves `@inspect/*` to source
+  regardless of what is declared. `tsc` / `next build` are the wiring gate; the suite is not. Recorded in
+  the root and `apps/web` `CLAUDE.md`.
+- **The api-client suite's first run failed 4/13 on a test-authoring bug**, not a client bug:
+  `mockResolvedValue(new Response(...))` hands the *same* object to every call, and a `Response` body can
+  only be read once, so every multi-request test died on "Body has already been read". Fixed with a
+  `replyWith()` helper that builds a fresh Response per call. Worth knowing:
+  `apps/web/lib/api.test.ts` has the same pattern and survives only because its one two-call test asserts
+  solely on `status`, which the fallback path still produces.
+- **The D7 defect behaved exactly as predicted** — one `tsc` error, at `reports/page.tsx:57`, the moment the
+  corrected DTO landed.
+- **Task 6 Step 3's "no logic left behind" grep found a real one:** `apps/web/lib/auth.ts` still hand-rolls
+  the login / refresh / me exchange, including its own `Authorization` header. Not folded in — it is
+  edge-runtime coupled through `middleware.ts` — and filed as **INS-088**, which blocks Phase 2.
+
+**Integration suite — not green, and not attributable to this phase.** A full `--runInBand` run took
+**805 seconds** and reported **129 passed / 18 failed across 5 suites**, the failures being `$connect()`
+refusals at `PrismaService.onModuleInit` plus short audit-row counts in the INS-012 concurrency spec.
+Re-running `audit-chain.e2e-spec.ts` alone produced **3 failures, then 6, then 0, with no code change
+between runs**, and the same spec passed on `main`. That is non-determinism against a contended remote dev
+database, not a regression — 16 suites each booting their own Nest app + Prisma client against Railway.
+**CI, which runs against containerized Postgres, is the honest read here and has still never run** (see
+STATUS's carried-forward gaps).

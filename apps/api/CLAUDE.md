@@ -11,8 +11,15 @@ The RBAC authority and the domain core. Port **3000** (`API_PORT`). The domain i
 - `pnpm api prisma:migrate` · `prisma:generate` · `prisma:studio`
 - `pnpm --filter @inspect/api exec prisma db seed` — global defect library (idempotent).
 
-> **Windows:** `pnpm api test` exits 134 from a Jest parallel-worker teardown crash *after* every test
-> reports green. `jest --runInBand` exits 0. Do not chase a phantom failure ([INS-085](../../docs/future/BACKLOG.md)).
+> **Windows:** `pnpm api test` can exit 134 *after* every test reports green. Reproduced 2026-08-26 as a
+> **V8 out-of-memory in Jest's parallel workers** (`FATAL ERROR: Zone Allocation failed`), not a teardown
+> bug — which is why it comes and goes with free RAM. `node_modules/.bin/jest --runInBand` exits 0 every
+> time. Do not chase a phantom failure ([INS-085](../../docs/future/BACKLOG.md)).
+>
+> **The integration suite is flaky against the remote dev DB.** A full `--runInBand` run takes ~13 minutes
+> and has produced `$connect()` failures and short audit-row counts in the INS-012 concurrency spec; the
+> same suites pass when run alone. Attribute a failure by re-running the suite in isolation before blaming
+> a code change.
 
 ## Layout
 
@@ -25,7 +32,11 @@ lives here and DB-bound services consume it:
 - `src/inspections/cycle-state.ts` — the single definition of "is that unit complete". Shared by the submit
   guard, the populate read and the report snapshot so they cannot drift.
 - `src/audit/audit-chain.ts` — `entryHash` + `verifyChain`.
-- `src/auth/{rbac,password,jwt}.ts` · `src/storage/sigv4.ts`
+- `src/auth/{rbac,password,jwt}.ts` · `src/storage/sigv4.ts`. **`rbac.ts` no longer declares the rank
+  table** — it imports `ROLE_RANK` from `@inspect/domain` ([INS-086](../../docs/future/BACKLOG.md) Phase 1),
+  so the additive hierarchy exists in exactly one source file across the API, the console and mobile.
+  `hasAtLeast` stays here and stays strictly `Role`-typed; the shared `roleAtLeast` takes a loose
+  `string | undefined` because clients gate UI on unverified session data.
 
 **NestJS wiring** — feature modules mirror the domain. `PrismaModule` is global; `CacheModule` is
 Redis-backed.

@@ -2,6 +2,8 @@
 paths:
   - "packages/shared-types/**"
   - "packages/api-client/**"
+  - "packages/domain/**"
+  - "packages/design-tokens/**"
   - "apps/web/lib/api.ts"
 ---
 
