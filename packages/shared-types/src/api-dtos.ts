@@ -344,7 +344,13 @@ export interface VerifyResultDto {
 export interface GuestReportPhotoDto {
   id: string;
   contentHash?: string | null;
-  inspectionLoopId?: string | null;
+  /**
+   * INS-081 retired "loops" in favour of loop ITEMS, and `guest.service`
+   * selects `inspectionLoopItemId`. This was still declared as
+   * `inspectionLoopId` — a key the endpoint has never sent. Nothing read it,
+   * so the fix is the correct name rather than a mapping.
+   */
+  inspectionLoopItemId?: string | null;
   viewUrl: string | null;
 }
 

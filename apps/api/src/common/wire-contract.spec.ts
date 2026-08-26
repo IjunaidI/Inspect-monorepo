@@ -27,6 +27,16 @@ import { resolve } from 'node:path';
  * A field that is legitimately not a column (a decoration, an aggregate, a
  * computed rollup) goes in DECORATIONS with a reason. Adding one is a
  * deliberate act; the point is that it cannot happen by accident.
+ *
+ * WHAT THIS DOES NOT CATCH — do not mistake a green run for a verified wire:
+ *   - Nested object shapes. `InspectionDto.clientCompany.{id,name,primaryColor}`
+ *     is only checked as far as `clientCompany` existing on `Inspection`.
+ *   - A field that exists on the model but that the service's `select` omits.
+ *     The DTO would promise something the endpoint never sends, and this test
+ *     would pass. Only a real request proves that.
+ *   - Types. `severity: string` where the column is an enum is invisible here.
+ * Closing those needs response schemas in `openapi.json`, which INS-084
+ * deliberately left out (it captured routes and role floors only).
  */
 
 const SCHEMA = resolve(__dirname, '../../prisma/schema.prisma');
@@ -56,7 +66,36 @@ const DTO_TO_MODEL: Record<string, string> = {
   GuestReportDto: 'Report',
   InvitationDto: 'Invitation',
   OrganizationDto: 'Organization',
+  GuestReportPhotoDto: 'Photo',
 };
+
+/**
+ * DTOs with no backing model — computed rollups, request bodies, verification
+ * results. Listed EXPLICITLY rather than skipped by omission: without this, a
+ * newly added DTO escapes the check simply by not appearing in DTO_TO_MODEL,
+ * which is the quiet way a guard stops guarding.
+ */
+const COMPUTED = new Set([
+  // Dashboard rollups (INS-005/068) — aggregates, not rows.
+  'QaDecisionCountsDto',
+  'QualityMetricsDto',
+  'DashboardSummaryDto',
+  // Derived from the ISO 2859-1 engine, never stored as a row.
+  'AqlPreviewDto',
+  'CycleStateDto',
+  // Presign + public verification results.
+  'PresignResultDto',
+  'VerifyResultDto',
+  // Public invitation lookup: a deliberately narrowed projection (INS-054).
+  'InvitationLookupDto',
+  // POST /admin/orgs — an org plus its first invitation, composed at the call.
+  'CreatedOrgDto',
+  // Request bodies.
+  'RegisterPhotoInput',
+  'RetakePhotoInput',
+  'AddDefectInput',
+  'AddMeasurementInput',
+]);
 
 /**
  * Fields the API adds that are not columns. Each needs a reason, because an
@@ -69,6 +108,7 @@ const DECORATIONS: Record<string, string[]> = {
   PhotoDto: ['viewUrl'],
   PresetItemDto: ['referenceImage'],
   GuestReportDto: ['photos'],
+  GuestReportPhotoDto: ['viewUrl'],
   // Server-computed completeness, not stored (INS-081).
   InspectionDto: ['cycleState', 'items', 'measurements'],
   InspectionLoopItemDto: ['photos', 'defects'],
@@ -136,6 +176,15 @@ describe('wire contract: DTO fields exist on the model they describe', () => {
     expect(models.size).toBeGreaterThan(20);
     expect(interfaces.size).toBeGreaterThan(20);
     expect(models.get('Report')).toContain('clientCompanyId');
+  });
+
+  it('every exported DTO is either mapped to a model or declared computed', () => {
+    // The escape hatch this closes: a new DTO that nobody adds to DTO_TO_MODEL
+    // would otherwise be checked by nothing at all, silently.
+    const unclassified = [...interfaces.keys()].filter(
+      (name) => !(name in DTO_TO_MODEL) && !COMPUTED.has(name),
+    );
+    expect(unclassified).toEqual([]);
   });
 
   it.each(Object.entries(DTO_TO_MODEL))(
