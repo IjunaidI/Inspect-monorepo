@@ -95,8 +95,9 @@
 >    column was an em-dash on every row, and **no catalog defect could be tagged at all** on the populate
 >    screen. Both are fixed — but populate is the screen Phase 3 ports to the phone, so anything still wrong
 >    there gets carried into the app. This is now the highest-value hour anyone can spend on this project.
-> 2. **The API is deployed nowhere** ([INS-090](future/BACKLOG.md), new) — no Dockerfile, no `railway.json`,
->    no deploy workflow. It has only ever run on `localhost`, which a phone cannot reach.
+> 2. **The API has never run outside `localhost`** ([INS-090](future/BACKLOG.md)) — a deploy to a brand-new
+>    production environment is under way as of 2026-08-27; the build-order blocker is fixed (`pnpm build:api`
+>    / `pnpm build:web`), the rest of the deploy is not done. A phone cannot reach `localhost:3000`.
 > 3. **CI has still never run on Linux** — `pnpm lint`, the OpenAPI staleness gate, the three INS-055
 >    migrations replaying from scratch, and now `wire-contract.spec.ts`. **24 commits sit unpushed.**
 > 4. **The dev database has no curated workspace** — all 104 orgs are `E2E Org …` fixtures, so a manual pass
@@ -352,18 +353,23 @@ things nobody has done yet, three of which are not code.
 
 #### The mobile-readiness checklist, in dependency order
 
-**1. [INS-002](future/BACKLOG.md) — rotate the credentials. `in-progress`, user-side, needs the Railway account.**
-Do this FIRST, not because mobile needs it but because step 2 makes it urgent: `.env.example` is scrubbed, but
-the real-looking secrets are **still in git history** and the live Railway secrets are **unrotated**. Deploying
-with them publishes them. Nothing here can be done for you.
+**1. [INS-090](future/BACKLOG.md) — finish the deploy. `in-progress`, and the hard blocker.**
+A **brand-new production environment** exists and is being deployed to as of 2026-08-27. The first attempt hit
+the monorepo's build-order trap: `pnpm --filter @inspect/web build` builds **only** web, while the four shared
+packages ship `main: dist/index.js` with `dist/` gitignored — so in a clean Docker context they have never
+been built and the build dies on `Cannot find module '@inspect/shared-types'`. Turbo's
+`dependsOn: ["^build"]` is what normally orders that, and filtering one package bypasses turbo entirely.
+**Fixed at the root:** `pnpm build:api` and `pnpm build:web` wrap `--filter "@inspect/<app>..."` — the trailing
+`...` means *and its dependencies* — both verified from a state with every `dist/` deleted. Deploy configs must
+call those, never a bare `--filter <app> build`. Still to do: the container/Nixpacks config, `prisma migrate
+deploy` on release, and a reachable HTTPS origin. The full env + start contract is on the backlog item.
 
-**2. [INS-090](future/BACKLOG.md) — deploy the API. NEW, and the hard blocker.**
-There is no Dockerfile, no `railway.json`, no Procfile, no deploy workflow: the API has only ever run on
-`localhost`. Phase 2's acceptance is *the inspections list rendering on a physical device via EAS*, and a phone
-on a mobile network cannot resolve `localhost:3000`. Pointing a simulator at a laptop is not that acceptance —
-it proves the bundler works while leaving TLS, CORS, cold starts and token lifetime over a slow link untested
-until Phase 3, which is exactly the "toolchain is where RN projects die" risk §7 warns about. Railway is the
-path of least resistance since Postgres and Redis already live there.
+**2. [INS-002](future/BACKLOG.md) — one part of this now matters for production.**
+Its scope has **narrowed**: because the prod environment is new and its secrets are generated fresh there,
+nothing in git history is being deployed, so this no longer gates the deploy. What remains is the old dev
+Railway project (rotate it or abandon it) — plus the one item that does carry forward: **mint a NEW Ed25519
+`REPORT_SIGNING_PRIVATE_KEY_PEM` for production.** A signing key is the tamper-proof guarantee; reusing one
+that has ever sat on a developer machine would let whoever holds it forge a valid report.
 
 **3. Push, and let CI run. 24 commits sit unpushed.**
 Linux has never run `pnpm lint`, the OpenAPI staleness gate, the three INS-055 migrations replaying from

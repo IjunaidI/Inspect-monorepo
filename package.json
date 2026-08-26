@@ -12,6 +12,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore",
     "api": "pnpm --filter @inspect/api",
     "web": "pnpm --filter @inspect/web",
+    "build:api": "pnpm --filter \"@inspect/api...\" build",
+    "build:web": "pnpm --filter \"@inspect/web...\" build",
     "clean": "turbo run clean"
   },
   "devDependencies": {
