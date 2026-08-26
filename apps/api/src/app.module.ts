@@ -32,7 +32,7 @@ import { GuestModule } from './guest/guest.module';
 import { OrgsModule } from './orgs/orgs.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { UsersModule } from './users/users.module';
-import { BuyerGuestsModule } from './buyer-guests/buyer-guests.module';
+import { CompanyGuestsModule } from './company-guests/company-guests.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { SearchModule } from './search/search.module';
 import {
@@ -155,7 +155,7 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     OrgsModule,
     InvitationsModule,
     UsersModule,
-    BuyerGuestsModule,
+    CompanyGuestsModule,
     DashboardModule,
     SearchModule,
   ],

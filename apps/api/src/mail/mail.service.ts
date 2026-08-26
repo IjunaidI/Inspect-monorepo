@@ -24,10 +24,10 @@ export interface UserInvitationMail {
   orgName?: string;
 }
 
-export interface BuyerGuestMagicLinkMail {
+export interface CompanyGuestMagicLinkMail {
   to: string;
   token: string;
-  buyerName?: string;
+  companyName?: string;
 }
 
 export interface InspectionSubmittedMail {
@@ -46,11 +46,11 @@ export interface InspectionDecidedMail {
 
 export interface ReportDeliveredMail {
   to: string;
-  /** The recipient's OWN buyer-guest magic-link token (their portal credential). */
+  /** The recipient's OWN company-guest magic-link token (their portal credential). */
   token: string;
   reportId: string;
   poNumber?: string | null;
-  buyerName?: string | null;
+  companyName?: string | null;
   /** Public verification token — lets the buyer check the signature themselves. */
   verificationToken?: string | null;
 }
@@ -162,14 +162,14 @@ export class MailService {
     });
   }
 
-  /** Magic-link email for read-only buyer guests (opens the /portal). */
-  async sendBuyerGuestMagicLink(
-    input: BuyerGuestMagicLinkMail,
+  /** Magic-link email for read-only company guests (opens the /portal). */
+  async sendCompanyGuestMagicLink(
+    input: CompanyGuestMagicLinkMail,
   ): Promise<SendResult> {
     const link = `${this.webBaseUrl}/portal?token=${encodeURIComponent(input.token)}`;
-    const buyerSuffix = input.buyerName ? ` for ${input.buyerName}` : '';
+    const clientSuffix = input.companyName ? ` for ${input.companyName}` : '';
     const text = [
-      `You've been given access to inspection reports${buyerSuffix} on Inspect.`,
+      `You've been given access to inspection reports${clientSuffix} on Inspect.`,
       '',
       'Open your portal with this magic link:',
       link,
@@ -237,9 +237,9 @@ export class MailService {
     const link = `${this.webBaseUrl}/portal?token=${encodeURIComponent(input.token)}`;
     // Same reference convention as the inspection notifications above.
     const ref = input.poNumber ?? input.reportId.slice(0, 8);
-    const buyerSuffix = input.buyerName ? ` for ${input.buyerName}` : '';
+    const clientSuffix = input.companyName ? ` for ${input.companyName}` : '';
     const text = [
-      `The inspection report ${ref}${buyerSuffix} is ready on Inspect.`,
+      `The inspection report ${ref}${clientSuffix} is ready on Inspect.`,
       '',
       'Open it in your report portal:',
       link,

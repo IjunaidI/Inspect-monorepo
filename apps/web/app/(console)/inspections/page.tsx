@@ -154,13 +154,13 @@ export default async function InspectionsListPage({
       ) : (
         <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 1fr 1fr 48px', padding: '10px 20px', fontSize: 11, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, background: ui.fill, borderBottom: `1px solid ${ui.line}` }}>
-            <span>PO</span><span>Buyer</span><span>Product</span><span>Status</span><span>System</span><span />
+            <span>PO</span><span>Client</span><span>Product</span><span>Status</span><span>System</span><span />
           </div>
           {inspections.map((i) => (
             <div key={i.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 1fr 1fr 1fr 48px', alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${ui.lineSoft}` }}>
               <Link href={`/inspections/${i.id}/review`} style={{ display: 'contents', textDecoration: 'none', color: ui.ink }}>
                 <Mono style={{ fontWeight: 600 }}>{i.purchaseOrder?.poNumber ?? i.id.slice(0, 8)}</Mono>
-                <span>{i.buyer?.name ?? '—'}</span>
+                <span>{i.clientCompany?.name ?? '—'}</span>
                 <span>{i.product?.styleNumber ?? '—'}</span>
                 <span style={{ fontSize: 12.5, color: ui.sub }}>{i.status}</span>
                 <span style={{ fontSize: 12.5, color: ui.sub }}>{i.aqlResult?.systemRecommendation ?? '—'}</span>

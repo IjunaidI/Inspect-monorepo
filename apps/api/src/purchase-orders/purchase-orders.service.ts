@@ -8,10 +8,15 @@ import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
 
+/**
+ * INS-055 — a PO is an explicitly TWO-PARTY trade document. Trade role belongs
+ * to this edge, not to the Company row, so the same company can be the client
+ * here and the factory on another PO.
+ */
 export interface CreatePurchaseOrderInput {
   poNumber: string;
-  buyerId: string;
-  supplierId: string;
+  clientCompanyId: string;
+  factoryCompanyId: string;
   productId: string;
   totalQuantity?: number;
 }
@@ -31,14 +36,14 @@ export class PurchaseOrdersService {
     return this.prisma.purchaseOrder.findMany({
       where: { orgId },
       orderBy: { createdAt: 'desc' },
-      include: { buyer: true, supplier: true, product: true },
+      include: { clientCompany: true, factoryCompany: true, product: true },
     });
   }
 
   async get(orgId: string, id: string) {
     const po = await this.prisma.purchaseOrder.findFirst({
       where: { id, orgId },
-      include: { buyer: true, supplier: true, product: true },
+      include: { clientCompany: true, factoryCompany: true, product: true },
     });
     if (!po) {
       throw new NotFoundException('Purchase order not found');
@@ -54,15 +59,24 @@ export class PurchaseOrdersService {
     if (!input?.poNumber?.trim()) {
       throw new BadRequestException('poNumber is required');
     }
-    if (!input.buyerId || !input.supplierId || !input.productId) {
+    if (!input.clientCompanyId || !input.factoryCompanyId || !input.productId) {
       throw new BadRequestException(
-        'buyerId, supplierId and productId are required',
+        'clientCompanyId, factoryCompanyId and productId are required',
       );
+    }
+    // INS-055 spec §2.4: two FKs make self-dealing EXPRESSIBLE for the first
+    // time (it was structurally impossible while the parties were different
+    // tables). Guarded at the application layer, not as a DB check constraint —
+    // consistent with every other cross-field invariant here, and easy to relax
+    // if internal self-inspection turns out to be a real workflow. Checked
+    // BEFORE the org lookups so the message names the actual problem.
+    if (input.clientCompanyId === input.factoryCompanyId) {
+      throw new BadRequestException('client and factory must differ');
     }
     await this.assertBelongsToOrg(
       orgId,
-      input.buyerId,
-      input.supplierId,
+      input.clientCompanyId,
+      input.factoryCompanyId,
       input.productId,
     );
     // INS-006: audit inside the business transaction.
@@ -71,8 +85,8 @@ export class PurchaseOrdersService {
         data: {
           orgId,
           poNumber: input.poNumber.trim(),
-          buyerId: input.buyerId,
-          supplierId: input.supplierId,
+          clientCompanyId: input.clientCompanyId,
+          factoryCompanyId: input.factoryCompanyId,
           productId: input.productId,
           totalQuantity: input.totalQuantity,
           createdByUserId: actor.userId,
@@ -88,8 +102,8 @@ export class PurchaseOrdersService {
           entityId: po.id,
           metadata: {
             poNumber: po.poNumber,
-            buyerId: po.buyerId,
-            supplierId: po.supplierId,
+            clientCompanyId: po.clientCompanyId,
+            factoryCompanyId: po.factoryCompanyId,
             productId: po.productId,
           },
         },
@@ -159,19 +173,24 @@ export class PurchaseOrdersService {
     }
   }
 
+  /**
+   * Tenant guard: both parties and the product must live in the CALLER's org.
+   * The DB FKs only check existence, so without this a caller could name another
+   * tenant's company on their own PO.
+   */
   private async assertBelongsToOrg(
     orgId: string,
-    buyerId: string,
-    supplierId: string,
+    clientCompanyId: string,
+    factoryCompanyId: string,
     productId: string,
   ): Promise<void> {
-    const [buyer, supplier, product] = await Promise.all([
-      this.prisma.buyer.findFirst({
-        where: { id: buyerId, orgId },
+    const [clientCompany, factoryCompany, product] = await Promise.all([
+      this.prisma.company.findFirst({
+        where: { id: clientCompanyId, orgId },
         select: { id: true },
       }),
-      this.prisma.supplier.findFirst({
-        where: { id: supplierId, orgId },
+      this.prisma.company.findFirst({
+        where: { id: factoryCompanyId, orgId },
         select: { id: true },
       }),
       this.prisma.product.findFirst({
@@ -179,10 +198,12 @@ export class PurchaseOrdersService {
         select: { id: true },
       }),
     ]);
-    if (!buyer)
-      throw new BadRequestException('buyer not found in organization');
-    if (!supplier)
-      throw new BadRequestException('supplier not found in organization');
+    if (!clientCompany)
+      throw new BadRequestException('client company not found in organization');
+    if (!factoryCompany)
+      throw new BadRequestException(
+        'factory company not found in organization',
+      );
     if (!product)
       throw new BadRequestException('product not found in organization');
   }

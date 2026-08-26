@@ -32,7 +32,7 @@ describe('MailService report delivery (INS-020)', () => {
       token: 'magic token/1',
       reportId: 'rep-abcdef123',
       poNumber: 'PO-77',
-      buyerName: 'Northwind Apparel',
+      companyName: 'Northwind Apparel',
       verificationToken: 'verify-9',
     });
 

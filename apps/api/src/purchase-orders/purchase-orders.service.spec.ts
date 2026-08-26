@@ -5,7 +5,7 @@ import { AuthUser } from '../auth/auth-user';
 /**
  * INS-034 — `purchase-orders` had no spec, and it is the entry point of the
  * whole product: `POST /inspections` is PO-driven, so a PO that references
- * another org's buyer/supplier/product would carry that cross-tenant reference
+ * another org's client/factory/product would carry that cross-tenant reference
  * into an inspection and, eventually, into an Ed25519-signed report.
  *
  * The behaviour that matters:
@@ -28,23 +28,23 @@ const ACTOR = {
 
 const VALID = {
   poNumber: 'PO-1001',
-  buyerId: 'buyer-1',
-  supplierId: 'supplier-1',
+  clientCompanyId: 'company-client-1',
+  factoryCompanyId: 'company-factory-1',
   productId: 'product-1',
 };
 
 interface HarnessOpts {
   /** Which of the three referenced rows resolve inside the caller's org. */
-  buyerFound?: boolean;
-  supplierFound?: boolean;
+  clientFound?: boolean;
+  factoryFound?: boolean;
   productFound?: boolean;
   existingPo?: Record<string, unknown> | null;
 }
 
 function makeService(opts: HarnessOpts = {}) {
   const {
-    buyerFound = true,
-    supplierFound = true,
+    clientFound = true,
+    factoryFound = true,
     productFound = true,
     existingPo = { id: 'po-1', orgId: ORG, poNumber: 'PO-1001' },
   } = opts;
@@ -70,14 +70,18 @@ function makeService(opts: HarnessOpts = {}) {
       findFirst: poFindFirst,
       findMany: poFindMany,
     },
-    buyer: {
-      findFirst: jest.fn(async () =>
-        buyerFound ? { id: VALID.buyerId } : null,
-      ),
-    },
-    supplier: {
-      findFirst: jest.fn(async () =>
-        supplierFound ? { id: VALID.supplierId } : null,
+    // INS-055: ONE company table now serves BOTH parties, so the mock has to
+    // discriminate by the id being looked up — which is precisely the point of
+    // the model: role is carried by the FK, not by which table the row is in.
+    company: {
+      findFirst: jest.fn(
+        async (args: { where: { id: string; orgId: string } }) => {
+          if (args.where.id === VALID.clientCompanyId)
+            return clientFound ? { id: VALID.clientCompanyId } : null;
+          if (args.where.id === VALID.factoryCompanyId)
+            return factoryFound ? { id: VALID.factoryCompanyId } : null;
+          return null;
+        },
       ),
     },
     product: {
@@ -96,8 +100,7 @@ function makeService(opts: HarnessOpts = {}) {
   return {
     service: new PurchaseOrdersService(prisma, audit),
     prisma: prisma as unknown as {
-      buyer: { findFirst: jest.Mock };
-      supplier: { findFirst: jest.Mock };
+      company: { findFirst: jest.Mock };
       product: { findFirst: jest.Mock };
     },
     poCreate,
@@ -145,14 +148,41 @@ describe('PurchaseOrdersService.create validation', () => {
   it('requires all three references', async () => {
     const h = makeService();
     await expect(
-      h.service.create(ORG, ACTOR, { ...VALID, buyerId: '' }),
+      h.service.create(ORG, ACTOR, { ...VALID, clientCompanyId: '' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(h.poCreate).not.toHaveBeenCalled();
   });
 
+  /**
+   * INS-055 spec §2.4 — two FKs onto one table make self-dealing EXPRESSIBLE
+   * for the first time; while the parties lived in different tables it was
+   * structurally impossible. Guarded in the service, not by a DB constraint.
+   */
+  it('refuses a PO whose client and factory are the same company', async () => {
+    const h = makeService();
+    await expect(
+      h.service.create(ORG, ACTOR, {
+        ...VALID,
+        factoryCompanyId: VALID.clientCompanyId,
+      }),
+    ).rejects.toThrow(/client and factory must differ/i);
+    expect(h.poCreate).not.toHaveBeenCalled();
+  });
+
+  it('checks self-dealing before the org lookups, so the message names the real problem', async () => {
+    const h = makeService({ clientFound: false });
+    await expect(
+      h.service.create(ORG, ACTOR, {
+        ...VALID,
+        factoryCompanyId: VALID.clientCompanyId,
+      }),
+    ).rejects.toThrow(/client and factory must differ/i);
+    expect(h.prisma.company.findFirst).not.toHaveBeenCalled();
+  });
+
   it.each([
-    ['buyer', { buyerFound: false }],
-    ['supplier', { supplierFound: false }],
+    ['client company', { clientFound: false }],
+    ['factory company', { factoryFound: false }],
     ['product', { productFound: false }],
   ])('refuses a %s that does not belong to the org', async (_label, opts) => {
     const h = makeService(opts as HarnessOpts);
@@ -168,13 +198,16 @@ describe('PurchaseOrdersService.create validation', () => {
     const h = makeService();
     await h.service.create(ORG, ACTOR, VALID);
 
-    for (const model of ['buyer', 'supplier', 'product'] as const) {
+    for (const model of ['company', 'product'] as const) {
       expect(h.prisma[model].findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ orgId: ORG }),
         }),
       );
     }
+    // Both parties, not just one — a single lookup would leave the other edge
+    // unguarded.
+    expect(h.prisma.company.findFirst).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -187,8 +220,8 @@ describe('PurchaseOrdersService.create write', () => {
       data: expect.objectContaining({
         orgId: ORG,
         poNumber: 'PO-2002',
-        buyerId: VALID.buyerId,
-        supplierId: VALID.supplierId,
+        clientCompanyId: VALID.clientCompanyId,
+        factoryCompanyId: VALID.factoryCompanyId,
         productId: VALID.productId,
         createdByUserId: ACTOR.userId,
       }),

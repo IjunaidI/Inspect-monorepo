@@ -345,11 +345,14 @@ function RowMenu({ id, archived, onClose }: { id: string; archived: boolean; onC
         Edit
       </button>
       {/*
-        INS-055 Task 7 restores "Manage guests" here, pointing at
-        /companies/:id/guests. It is deliberately absent until then: CompanyGuest
-        and the client-only visibility predicate land together, and a link to a
-        route that cannot resolve is worse than no link.
+        Offered for every company: a guest sees the reports where this company is
+        the CLIENT, so the affordance is about who may read, not about what the
+        company "is". A company that only ever plays the factory role simply has
+        no guests, and a guest of it would see nothing (spec §4.2).
       */}
+      <button onClick={() => { router.push(`/companies/${id}/guests`); onClose(); }} style={item(ui.ink)}>
+        Manage guests
+      </button>
       {archived ? (
         <button disabled={pending} onClick={() => runArchiveOrRestore(restoreCompany)} style={item(ui.accent)}>
           Restore

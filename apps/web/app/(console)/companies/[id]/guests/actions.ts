@@ -1,13 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { apiPost, apiDelete, ApiError, type ApiBuyerGuest } from '@/lib/api';
+import { apiPost, apiDelete, ApiError, type ApiCompanyGuest } from '@/lib/api';
 
 const msg = (e: unknown, fallback: string) =>
   e instanceof ApiError || e instanceof Error ? e.message : fallback;
 
-export const inviteBuyerGuest = async (
-  buyerId: string,
+export const inviteCompanyGuest = async (
+  companyId: string,
   _prev: unknown,
   formData: FormData,
 ): Promise<{ error?: string; data?: { token: string; expiresAt: string; emailSent: boolean } }> => {
@@ -20,11 +20,11 @@ export const inviteBuyerGuest = async (
   if (expiresInDays) body.ttlDays = Number(expiresInDays);
 
   try {
-    const res = await apiPost<{ guest: ApiBuyerGuest; token: string; emailSent: boolean }>(
-      `/buyers/${buyerId}/guests`,
+    const res = await apiPost<{ guest: ApiCompanyGuest; token: string; emailSent: boolean }>(
+      `/companies/${companyId}/guests`,
       body,
     );
-    revalidatePath(`/buyers/${buyerId}/guests`);
+    revalidatePath(`/companies/${companyId}/guests`);
     return {
       data: { token: res.token, expiresAt: res.guest.tokenExpiresAt, emailSent: res.emailSent },
     };
@@ -33,12 +33,12 @@ export const inviteBuyerGuest = async (
   }
 };
 
-export async function revokeBuyerGuest(buyerId: string, guestId: string): Promise<{ error?: string }> {
+export async function revokeCompanyGuest(companyId: string, guestId: string): Promise<{ error?: string }> {
   try {
-    await apiDelete(`/buyer-guests/${guestId}`);
+    await apiDelete(`/company-guests/${guestId}`);
   } catch (e) {
     return { error: msg(e, 'Failed to revoke guest') };
   }
-  revalidatePath(`/buyers/${buyerId}/guests`);
+  revalidatePath(`/companies/${companyId}/guests`);
   return {};
 }

@@ -77,8 +77,8 @@ export function CreateInspectionForm({ pos, presets, inspectors }: { pos: ApiPur
             </select>
           </div>
           <div style={{ display: 'flex', gap: 18, marginTop: 14, fontSize: 13, color: ui.sub }}>
-            <span>Buyer: <strong style={{ color: ui.ink }}>{po?.buyer?.name ?? '—'}</strong></span>
-            <span>Supplier: <strong style={{ color: ui.ink }}>{po?.supplier?.name ?? '—'}</strong></span>
+            <span>Client: <strong style={{ color: ui.ink }}>{po?.clientCompany?.name ?? '—'}</strong></span>
+            <span>Factory: <strong style={{ color: ui.ink }}>{po?.factoryCompany?.name ?? '—'}</strong></span>
             <span>Product: <strong style={{ color: ui.ink }}>{po?.product?.styleNumber ?? '—'}</strong></span>
           </div>
         </div>

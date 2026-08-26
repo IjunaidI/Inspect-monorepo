@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { MapPin } from 'lucide-react';
 import { apiGet, type ApiCompany, type ApiLoopPreset } from '@/lib/api';
-import { PageHead } from '@/components/inspect/shell';
+import { Btn, PageHead } from '@/components/inspect/shell';
 import { mono, ui } from '@/components/inspect/tokens';
 import { EditCompanyForm } from './edit-form';
 
@@ -36,8 +36,7 @@ export default async function CompanyDetailPage({ params }: { params: Promise<{ 
             ? 'Internal company — one of our own sites'
             : 'Third-party company'
         }
-        // INS-055 Task 7 adds the "Manage guests" action here once
-        // /companies/:id/guests exists.
+        actions={<Btn kind="ghost" href={`/companies/${id}/guests`}>Manage guests</Btn>}
       />
       {/*
         INS-071: show the real coordinates, not just a "Pinned" badge. The badge

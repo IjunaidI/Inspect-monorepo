@@ -5,6 +5,7 @@ import { Download, Eye, ExternalLink, Lock, Search } from 'lucide-react';
 import { Mono } from '@/components/inspect/shell';
 import { BrandedReport, type BrandedReportData } from '@/components/inspect/branded-report';
 import { severity, ui } from '@/components/inspect/tokens';
+import { readCanonicalParties } from '@inspect/shared-types';
 import type { ApiGuestReport, ApiGuestReportPhoto } from '@/lib/api';
 
 type PortalStatus = 'pass' | 'fail' | 'hold';
@@ -25,14 +26,14 @@ function reportStatus(r: ApiGuestReport): PortalStatus {
 
 function mapToReportData(
   r: ApiGuestReport,
-  buyer: { name: string; color: string },
+  client: { name: string; color: string },
   photos?: ApiGuestReportPhoto[],
 ): BrandedReportData {
   type Snap = {
     poNumber?: string | null;
     lotSize?: number | null;
     product?: { styleNumber?: string | null; description?: string | null } | null;
-    supplier?: { name?: string | null } | null;
+
     aqlResult?: {
       qaDecision?: string | null;
       qaRemarks?: string | null;
@@ -48,6 +49,10 @@ function mapToReportData(
   const snap = (r.canonicalSnapshot ?? {}) as Snap;
   const aqlResult = snap.aqlResult;
   const cs = snap.computedSampling;
+  // INS-055 spec §5.5: party identity comes from the shared reader, which knows
+  // both canonical versions. This component must not destructure `buyer` or
+  // `client` itself — a v1 and a v2 report have to render identically, forever.
+  const parties = readCanonicalParties(r.canonicalSnapshot);
 
   const classes: BrandedReportData['classes'] = (['critical', 'major', 'minor'] as const).map((sev) => ({
     sev,
@@ -62,13 +67,13 @@ function mapToReportData(
     decisionRaw === 'pass' ? 'pass' : decisionRaw === 'fail' ? 'fail' : 'hold';
 
   return {
-    buyer: { name: buyer.name, initials: initialsOf(buyer.name), color: buyer.color },
+    client: { name: client.name, initials: initialsOf(client.name), color: client.color },
     meta: {
       // Synthetic display id — no reportNo column exists (documented as synthetic).
       reportNo: `IR-${r.id.slice(0, 8).toUpperCase()}`,
       po: snap.poNumber ?? '—',
       product: snap.product?.styleNumber ?? snap.product?.description ?? '—',
-      supplier: snap.supplier?.name ?? '—',
+      factory: parties.factory?.name ?? '—',
       type: 'Pre-shipment',
       date: r.generatedAt.split('T')[0],
     },
@@ -94,11 +99,11 @@ function mapToReportData(
 export function PortalClient({
   token,
   reports,
-  buyer,
+  client,
 }: {
   token: string;
   reports: ApiGuestReport[];
-  buyer: { name: string; color: string };
+  client: { name: string; color: string };
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(reports[0]?.id ?? null);
   const [search, setSearch] = useState('');
@@ -124,8 +129,8 @@ export function PortalClient({
     return () => { cancelled = true; };
   }, [selectedId, token, photosById]);
 
-  const C = buyer.color;
-  const initials = initialsOf(buyer.name);
+  const C = client.color;
+  const initials = initialsOf(client.name);
 
   const filtered = reports.filter((r) => {
     const snap = r.canonicalSnapshot as { poNumber?: string } | null;
@@ -136,7 +141,7 @@ export function PortalClient({
   const selected = reports.find((r) => r.id === selectedId);
   const selectedStatus = selected ? reportStatus(selected) : 'hold';
   const selectedChip = statusChip[selectedStatus];
-  const reportData = selected ? mapToReportData(selected, buyer, photosById[selected.id]) : null;
+  const reportData = selected ? mapToReportData(selected, client, photosById[selected.id]) : null;
 
   return (
     <div style={{ height: '100vh', background: '#EEF1F5', fontFamily: ui.font, fontSize: 13, color: ui.ink, display: 'flex', flexDirection: 'column' }}>
@@ -147,7 +152,7 @@ export function PortalClient({
             {initials}
           </div>
           <div style={{ color: '#fff' }}>
-            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.2 }}>{buyer.name}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.2 }}>{client.name}</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.75)' }}>Inspection reports</div>
           </div>
         </div>
@@ -163,7 +168,7 @@ export function PortalClient({
         <div style={{ width: 360, background: '#fff', borderRightWidth: 1, borderRightStyle: 'solid', borderRightColor: ui.line, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: '20px 20px 14px', borderBottomWidth: 1, borderBottomStyle: 'solid', borderBottomColor: ui.line }}>
             <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.2 }}>Your reports</div>
-            <div style={{ fontSize: 12.5, color: ui.sub, marginTop: 2 }}>Showing reports for {buyer.name} only</div>
+            <div style={{ fontSize: 12.5, color: ui.sub, marginTop: 2 }}>Showing reports for {client.name} only</div>
             <div style={{ position: 'relative', marginTop: 14 }}>
               <Search size={15} color={ui.faint} style={{ position: 'absolute', left: 12, top: 10.5 }} />
               <input

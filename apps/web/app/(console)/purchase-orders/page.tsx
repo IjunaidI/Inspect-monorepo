@@ -7,9 +7,9 @@ import { ui } from '@/components/inspect/tokens';
 export const dynamic = 'force-dynamic';
 
 const DEMO: ApiPurchaseOrder[] = [
-  { id: 'demo-po1', poNumber: 'PO-2026-NV-0041', totalQuantity: 1200, buyer: { id: 'b1', name: 'Nordvik Retail Group' }, supplier: { id: 's1', name: 'Tirupur Knits Unit-3' }, product: { id: 'p1', styleNumber: 'NV-2026-POLO-M' } },
-  { id: 'demo-po2', poNumber: 'PO-2026-MA-0019', totalQuantity: 400, buyer: { id: 'b2', name: 'Maison Adèle' }, supplier: { id: 's4', name: 'Hanoi Apparel Co.' }, product: { id: 'p2', styleNumber: 'MA-BLZR-WF-01' } },
-  { id: 'demo-po3', poNumber: 'PO-2026-KT-0033', totalQuantity: 800, buyer: { id: 'b4', name: 'Kestrel & Thorne' }, supplier: { id: 's2', name: 'Dhaka Weave Ltd.' }, product: { id: 'p3', styleNumber: 'KT-CHNO-BLU-32' } },
+  { id: 'demo-po1', poNumber: 'PO-2026-NV-0041', totalQuantity: 1200, clientCompany: { id: 'b1', name: 'Nordvik Retail Group' }, factoryCompany: { id: 's1', name: 'Tirupur Knits Unit-3' }, product: { id: 'p1', styleNumber: 'NV-2026-POLO-M' } },
+  { id: 'demo-po2', poNumber: 'PO-2026-MA-0019', totalQuantity: 400, clientCompany: { id: 'b2', name: 'Maison Adèle' }, factoryCompany: { id: 's4', name: 'Hanoi Apparel Co.' }, product: { id: 'p2', styleNumber: 'MA-BLZR-WF-01' } },
+  { id: 'demo-po3', poNumber: 'PO-2026-KT-0033', totalQuantity: 800, clientCompany: { id: 'b4', name: 'Kestrel & Thorne' }, factoryCompany: { id: 's2', name: 'Dhaka Weave Ltd.' }, product: { id: 'p3', styleNumber: 'KT-CHNO-BLU-32' } },
 ];
 
 export default async function PurchaseOrdersPage() {
@@ -34,8 +34,8 @@ export default async function PurchaseOrdersPage() {
           <thead>
             <tr>
               <th style={th}>PO Number</th>
-              <th style={th}>Buyer</th>
-              <th style={th}>Supplier</th>
+              <th style={th}>Client</th>
+              <th style={th}>Factory</th>
               <th style={th}>Product</th>
               <th style={{ ...th, textAlign: 'right' }}>Qty</th>
               <th style={{ ...th, width: 96 }} />
@@ -47,8 +47,8 @@ export default async function PurchaseOrdersPage() {
                 <td style={{ padding: '14px 20px', fontSize: 13 }}>
                   <Mono style={{ fontWeight: 550 }}>{po.poNumber}</Mono>
                 </td>
-                <td style={{ padding: '14px 20px', fontSize: 13 }}>{po.buyer?.name ?? '—'}</td>
-                <td style={{ padding: '14px 20px', fontSize: 13 }}>{po.supplier?.name ?? '—'}</td>
+                <td style={{ padding: '14px 20px', fontSize: 13 }}>{po.clientCompany?.name ?? '—'}</td>
+                <td style={{ padding: '14px 20px', fontSize: 13 }}>{po.factoryCompany?.name ?? '—'}</td>
                 <td style={{ padding: '14px 20px', fontSize: 13 }}>
                   {po.product ? <Mono style={{ fontSize: 12 }}>{po.product.styleNumber}</Mono> : '—'}
                 </td>

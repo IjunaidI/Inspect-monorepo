@@ -87,7 +87,7 @@ describe('MailService', () => {
     });
   });
 
-  describe('sendBuyerGuestMagicLink', () => {
+  describe('sendCompanyGuestMagicLink', () => {
     it('sends the exact URL-encoded portal magic link', async () => {
       const transport = makeTransport();
       const { service } = makeService(
@@ -95,10 +95,10 @@ describe('MailService', () => {
         transport,
       );
 
-      const result = await service.sendBuyerGuestMagicLink({
+      const result = await service.sendCompanyGuestMagicLink({
         to: 'guest@buyer.com',
         token: 'magic token/2',
-        buyerName: 'Nordwind Retail',
+        companyName: 'Nordwind Retail',
       });
 
       expect(result).toEqual({ sent: true, messageId: 'fake-message-id' });
@@ -117,7 +117,10 @@ describe('MailService', () => {
       const { service } = makeService({}, transport);
 
       await expect(
-        service.sendBuyerGuestMagicLink({ to: 'guest@buyer.com', token: 't' }),
+        service.sendCompanyGuestMagicLink({
+          to: 'guest@buyer.com',
+          token: 't',
+        }),
       ).resolves.toEqual({ sent: false });
     });
   });

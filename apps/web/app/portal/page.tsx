@@ -1,4 +1,5 @@
 import { Lock } from 'lucide-react';
+import { readCanonicalParties } from '@inspect/shared-types';
 import { ApiError, apiGetPublic, type ApiGuestReport } from '@/lib/api';
 import { ui } from '@/components/inspect/tokens';
 import { PortalClient } from './portal-client';
@@ -54,16 +55,20 @@ export default async function GuestPortalPage({
     return <ErrorCard title="Access denied" body={errorMsg} />;
   }
 
-  // Derive buyer identity from the first report's snapshot/branding
+  // Derive the client's identity from the first report's snapshot/branding.
+  // INS-055 spec §5.5: read the parties through readCanonicalParties, which
+  // handles BOTH canonical versions. v1 reports are immutable and will exist for
+  // the life of the product, so this component must never destructure the
+  // snapshot itself — the version rule lives in exactly one place.
   const first = reports[0];
-  const canonical = (first?.canonicalSnapshot ?? {}) as { buyer?: { name?: string } };
+  const parties = readCanonicalParties(first?.canonicalSnapshot);
   const branding = (first?.brandingSnapshot ?? {}) as { primaryColor?: string };
-  const buyerName = canonical?.buyer?.name ?? 'Buyer';
-  const buyer = {
-    name: buyerName,
-    initials: initialsOf(buyerName),
+  const clientName = parties.client.name ?? 'Client';
+  const clientParty = {
+    name: clientName,
+    initials: initialsOf(clientName),
     color: branding?.primaryColor ?? '#037BF4',
   };
 
-  return <PortalClient token={token} reports={reports} buyer={buyer} />;
+  return <PortalClient token={token} reports={reports} client={clientParty} />;
 }

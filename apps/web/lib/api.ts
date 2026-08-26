@@ -395,8 +395,13 @@ export interface ApiInspection {
   lotSize?: number | null;
   computedSampling?: { sampleSizeCodeLetter: string; sampleSize: number; perClass: Record<string, { aql: number; ac: number; re: number }> } | null;
   aqlResult?: ApiAqlResult | null;
-  buyer?: { id: string; name: string; primaryColor?: string | null } | null;
-  supplier?: { id: string; name: string; gps?: { lat: number; lng: number } | null } | null;
+  /**
+   * INS-055: trade role lives on this EDGE, not on the company row — the same
+   * company can be the client here and the factory on another inspection. The
+   * factory edge stays optional, exactly as `supplier` was.
+   */
+  clientCompany?: { id: string; name: string; primaryColor?: string | null } | null;
+  factoryCompany?: { id: string; name: string; gps?: { lat: number; lng: number } | null } | null;
   product?: { id: string; styleNumber: string } | null;
   purchaseOrder?: { id: string; poNumber: string } | null;
   /** Present on GET /inspections/:id (safe select: id/name/email). */
@@ -425,8 +430,9 @@ export interface ApiPurchaseOrder {
   id: string;
   poNumber: string;
   totalQuantity?: number | null;
-  buyer?: { id: string; name: string } | null;
-  supplier?: { id: string; name: string } | null;
+  /** INS-055: a PO is explicitly two-party. Both are required on create. */
+  clientCompany?: { id: string; name: string } | null;
+  factoryCompany?: { id: string; name: string } | null;
   product?: { id: string; styleNumber: string } | null;
 }
 export interface AqlPreview {

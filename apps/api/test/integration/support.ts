@@ -252,8 +252,8 @@ export async function createWorkspace(
       token: ownerToken,
       body: {
         poNumber: `PO-${tag}`,
-        buyerId: buyer.id,
-        supplierId: supplier.id,
+        clientCompanyId: clientCo.id,
+        factoryCompanyId: factoryCo.id,
         productId: product.id,
         totalQuantity: 1000,
       },
@@ -335,4 +335,76 @@ export async function setReportsImmutabilityTrigger(
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "reports" ${enabled ? 'ENABLE' : 'DISABLE'} TRIGGER reports_immutable_columns`,
   );
+}
+
+/**
+ * Insert a report signed in the **v1 canonical shape** — `buyer` / `supplier`
+ * keys, no `canonicalVersion` marker — exactly as `reports.service.ts` produced
+ * before INS-055.
+ *
+ * This exists because the guarantee "a report signed before INS-055 still
+ * verifies" has to be provable FOREVER, and the original plan proved it by
+ * keeping pre-migration rows alive. Under the pre-production data policy those
+ * rows are gone (and `prisma migrate reset` would delete them again), so the
+ * fixture is built here instead: same signing key the service uses, same
+ * `contentHash` + `sign` helpers, same JSON round-trip. That makes the test
+ * repeatable rather than dependent on database archaeology.
+ *
+ * The requirement was always about the FORMAT, not about the disposable rows.
+ */
+export async function insertLegacyV1Report(
+  app: INestApplication,
+  opts: {
+    orgId: string;
+    inspectionId: string;
+    clientCompanyId: string;
+    buyerName: string;
+    supplierName: string;
+  },
+): Promise<{ verificationToken: string; contentHash: string }> {
+  // Imported lazily so this helper does not drag crypto into every spec.
+  const { contentHash } = await import('../../src/tamper-proof/content-hash');
+  const { sign } = await import('../../src/tamper-proof/signature');
+  const { ConfigService } = await import('@nestjs/config');
+  const { PrismaService } = await import('../../src/prisma/prisma.service');
+
+  const config = app.get(ConfigService);
+  const prisma = app.get(PrismaService);
+  const pem = config.get<string>('REPORT_SIGNING_PRIVATE_KEY_PEM');
+  if (!pem) throw new Error('REPORT_SIGNING_PRIVATE_KEY_PEM is not configured');
+
+  const photoHashes: string[] = [];
+  const rawCanonical = {
+    inspectionId: opts.inspectionId,
+    inspectionType: 'PRE_SHIPMENT',
+    poNumber: null,
+    // The v1 party shape. No canonicalVersion key — its ABSENCE is what makes
+    // this v1, and canonicalVersionOf() must read it that way.
+    buyer: { id: opts.clientCompanyId, name: opts.buyerName },
+    supplier: { id: 'legacy-supplier-id', name: opts.supplierName },
+    lotSize: 1000,
+    photoHashes,
+  };
+  // Same normalization the service applies before hashing (a jsonb round-trip
+  // drops undefined-valued keys), so generate-time and verify-time bytes match.
+  const canonical = JSON.parse(JSON.stringify(rawCanonical));
+  const hash = contentHash(canonical, photoHashes);
+  const signature = sign(hash, pem);
+
+  const created = await prisma.report.create({
+    data: {
+      inspectionId: opts.inspectionId,
+      orgId: opts.orgId,
+      clientCompanyId: opts.clientCompanyId,
+      brandingSnapshot: {},
+      canonicalSnapshot: canonical,
+      contentHash: hash,
+      signature,
+      status: 'GENERATED',
+      // Left at its default 1 on purpose: the column MIRRORS the payload, and a
+      // v1 payload has no marker at all.
+    },
+    select: { verificationToken: true, contentHash: true },
+  });
+  return created;
 }

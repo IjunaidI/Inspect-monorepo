@@ -94,7 +94,7 @@ export class InspectionsService {
                   },
                 },
                 {
-                  buyer: {
+                  clientCompany: {
                     name: { contains: opts.q, mode: 'insensitive' as const },
                   },
                 },
@@ -114,8 +114,8 @@ export class InspectionsService {
       take: opts.take,
       skip: opts.skip,
       include: {
-        buyer: true,
-        supplier: true,
+        clientCompany: true,
+        factoryCompany: true,
         product: true,
         purchaseOrder: true,
         aqlResult: true,
@@ -127,8 +127,8 @@ export class InspectionsService {
     const inspection = await this.prisma.inspection.findFirst({
       where: { id, orgId, ...this.inspectorScope(actor) },
       include: {
-        buyer: true,
-        supplier: true,
+        clientCompany: true,
+        factoryCompany: true,
         product: true,
         purchaseOrder: true,
         // Items carry their evidence: without these includes the populate
@@ -239,8 +239,10 @@ export class InspectionsService {
     return this.prisma.inspection.create({
       data: {
         orgId,
-        buyerId: po.buyerId,
-        supplierId: po.supplierId,
+        // INS-055: both parties are denormalized from the PO at create time,
+        // exactly as buyerId/supplierId were. The factory edge stays optional.
+        clientCompanyId: po.clientCompanyId,
+        factoryCompanyId: po.factoryCompanyId,
         poId: po.id,
         productId: po.productId,
         lotSize: input.lotSize,

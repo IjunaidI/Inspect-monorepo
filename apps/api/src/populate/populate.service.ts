@@ -618,8 +618,8 @@ export class PopulateService {
     const inspection = await this.prisma.inspection.findFirst({
       where: { id: inspectionId, ...this.scopeFor(actor) },
       include: {
-        buyer: true,
-        supplier: true,
+        clientCompany: true,
+        factoryCompany: true,
         product: true,
         purchaseOrder: true,
         items: {

@@ -44,7 +44,7 @@ export class SearchService {
           select: {
             id: true,
             poNumber: true,
-            buyer: { select: { name: true } },
+            clientCompany: { select: { name: true } },
           },
         }),
         this.prisma.inspection.findMany({
@@ -83,7 +83,7 @@ export class SearchService {
         type: 'po',
         id: po.id,
         label: po.poNumber,
-        sublabel: po.buyer?.name ?? null,
+        sublabel: po.clientCompany?.name ?? null,
       })),
       ...inspections.map<SearchHit>((i) => ({
         type: 'inspection',

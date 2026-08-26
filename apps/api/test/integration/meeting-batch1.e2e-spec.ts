@@ -339,7 +339,7 @@ describe('meeting batch 1 (product-feedback 2026-07-17)', () => {
       expect(row).toBeTruthy();
       expect(row.canonicalSnapshot).toBeUndefined();
       expect(row.inspection.purchaseOrder.poNumber).toBe(`PO-${tag}`);
-      expect(row.buyer.name).toBe(`E2E Buyer ${tag}`);
+      expect(row.clientCompany.name).toBe(`E2E Client ${tag}`);
 
       const listB = expect2xx(
         await client.get('/reports', { token: orgB.ownerToken }),

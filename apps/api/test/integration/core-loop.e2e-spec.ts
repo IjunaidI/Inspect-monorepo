@@ -54,18 +54,23 @@ describe('Core inspection loop (integration)', () => {
     await app.close();
   });
 
-  // INS-055 Task 4 repoints this to /companies + ws.clientCompanyId. It still
-  // reads /buyers because the PO carries buyerId until then, so the count this
-  // asserts only exists on the legacy row for now.
-  it('buyer list carries live relation counts (INS-005)', async () => {
-    const buyers = expect2xx(
-      await client.get('/buyers', { token: org.ownerToken }),
-      'GET /buyers (_count)',
+  it('company list carries live relation counts across both role edges (INS-005)', async () => {
+    const companies = expect2xx(
+      await client.get('/companies', { token: org.ownerToken }),
+      'GET /companies (_count)',
     ) as Array<{ id: string; _count?: Record<string, number> }>;
-    const mine = buyers.find((b) => b.id === ws.buyerId);
-    expect(mine).toBeTruthy();
-    expect(mine!._count?.purchaseOrders).toBe(1);
-    expect(mine!._count?.reports).toBe(0); // none generated yet at this point
+
+    // The client side of the PO.
+    const client_ = companies.find((c) => c.id === ws.clientCompanyId);
+    expect(client_).toBeTruthy();
+    expect(client_!._count?.purchaseOrders).toBe(1);
+    expect(client_!._count?.reports).toBe(0); // none generated yet at this point
+
+    // INS-055: the SAME count must include the factory edge, or a company that
+    // only ever produces goods would read as unused.
+    const factory = companies.find((c) => c.id === ws.factoryCompanyId);
+    expect(factory).toBeTruthy();
+    expect(factory!._count?.purchaseOrders).toBe(1);
   });
 
   it('creates an inspection with a snapshotted preset and computed AQL sampling (lot 1000 -> code J)', async () => {
@@ -337,13 +342,13 @@ describe('Core inspection loop (integration)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('a buyer guest fetches the report through the public magic link', async () => {
+  it('a client-company guest fetches the report through the public magic link', async () => {
     const guestRes = expect2xx(
-      await client.post(`/buyers/${ws.buyerId}/guests`, {
+      await client.post(`/companies/${ws.clientCompanyId}/guests`, {
         token: org.ownerToken,
         body: { email: `guest+${tag}@e2e.local` },
       }),
-      'POST /buyers/:buyerId/guests',
+      'POST /companies/:companyId/guests',
     );
     expect(guestRes.token).toBeTruthy();
 

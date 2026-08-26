@@ -4,8 +4,8 @@ import { useActionState, useTransition, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Btn, Mono } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
-import type { ApiBuyerGuest } from '@/lib/api';
-import { inviteBuyerGuest, revokeBuyerGuest } from './actions';
+import type { ApiCompanyGuest } from '@/lib/api';
+import { inviteCompanyGuest, revokeCompanyGuest } from './actions';
 
 const label = { display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 };
 const input = { height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const };
@@ -26,7 +26,7 @@ const guestStatusStyle: Record<string, { label: string; fg: string; dot: string 
   SUSPENDED: { label: 'Revoked', fg: '#DC2626', dot: '#DC2626' },
 };
 
-function GuestRow({ guest, buyerId }: { guest: ApiBuyerGuest; buyerId: string }) {
+function GuestRow({ guest, companyId }: { guest: ApiCompanyGuest; companyId: string }) {
   const [pending, start] = useTransition();
   const expired = new Date(guest.tokenExpiresAt) < new Date();
   const ss = guestStatusStyle[guest.status] ?? { label: guest.status, fg: ui.sub, dot: ui.faint };
@@ -51,7 +51,7 @@ function GuestRow({ guest, buyerId }: { guest: ApiBuyerGuest; buyerId: string })
       <td style={{ padding: '12px 20px', textAlign: 'right' }}>
         {/* No per-row magic-link copy: the list endpoint deliberately never returns
             the token — a fresh link exists only in the invite-success state above. */}
-        <button onClick={() => start(async () => { await revokeBuyerGuest(buyerId, guest.id); })} disabled={pending}
+        <button onClick={() => start(async () => { await revokeCompanyGuest(companyId, guest.id); })} disabled={pending}
           style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FECACA', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', cursor: pending ? 'default' : 'pointer', fontFamily: 'inherit', opacity: pending ? 0.6 : 1 }}>
           {pending ? '…' : 'Revoke'}
         </button>
@@ -60,8 +60,8 @@ function GuestRow({ guest, buyerId }: { guest: ApiBuyerGuest; buyerId: string })
   );
 }
 
-export function GuestsClient({ buyerId, initialGuests }: { buyerId: string; initialGuests: ApiBuyerGuest[] }) {
-  const boundInvite = inviteBuyerGuest.bind(null, buyerId);
+export function GuestsClient({ companyId, initialGuests }: { companyId: string; initialGuests: ApiCompanyGuest[] }) {
+  const boundInvite = inviteCompanyGuest.bind(null, companyId);
   const [state, action, pending] = useActionState(boundInvite, {});
 
   return (
@@ -89,7 +89,7 @@ export function GuestsClient({ buyerId, initialGuests }: { buyerId: string; init
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'flex-end' }}>
             <div>
               <label style={label}>Email *</label>
-              <input name="email" type="email" required style={{ ...input, width: '100%' }} placeholder="buyer@example.com" />
+              <input name="email" type="email" required style={{ ...input, width: '100%' }} placeholder="name@example.com" />
             </div>
             <div>
               <label style={label}>Expires in</label>
@@ -118,7 +118,7 @@ export function GuestsClient({ buyerId, initialGuests }: { buyerId: string; init
               </tr>
             </thead>
             <tbody>
-              {initialGuests.map((g) => <GuestRow key={g.id} guest={g} buyerId={buyerId} />)}
+              {initialGuests.map((g) => <GuestRow key={g.id} guest={g} companyId={companyId} />)}
             </tbody>
           </table>
         </div>
