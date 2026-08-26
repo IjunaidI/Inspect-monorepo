@@ -1,0 +1,19 @@
+{
+  "name": "@inspect/api-client",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Dependency-free Inspect API client with an injected auth provider (console, future mobile).",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist .turbo"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
+}

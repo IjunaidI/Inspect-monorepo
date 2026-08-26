@@ -153,6 +153,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@inspect/api-client':
+        specifier: workspace:^
+        version: link:../../packages/api-client
       '@inspect/design-tokens':
         specifier: workspace:^
         version: link:../../packages/design-tokens
@@ -244,6 +247,12 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@20.17.6)(vite@8.2.2(@types/node@20.17.6)(jiti@1.21.7)(terser@5.47.1))
+
+  packages/api-client:
+    devDependencies:
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.19.19)(vite@8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1))
 
   packages/design-tokens: {}
 

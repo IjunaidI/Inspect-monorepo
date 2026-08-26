@@ -14,6 +14,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "@inspect/api-client": "workspace:^",
     "@inspect/design-tokens": "workspace:^",
     "@inspect/domain": "workspace:^",
     "@inspect/shared-types": "workspace:^",

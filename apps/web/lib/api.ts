@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getToken } from 'next-auth/jwt';
+import { ApiError, createApiClient, type AuthContext } from '@inspect/api-client';
 import { refreshApiAccessToken } from './auth';
 import { getAssumedOrgId } from './admin-org';
 import type {
@@ -21,18 +22,17 @@ import type {
 
 const API_URL = process.env.INSPECT_API_URL ?? 'http://localhost:3000';
 
-/** Thrown by all API helpers on a non-2xx response; carries the HTTP status. */
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly path: string,
-    message: string,
-    public readonly body?: unknown,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+/**
+ * The console's API layer (INS-086 Phase 1).
+ *
+ * HTTP now lives in `@inspect/api-client`, shared with the mobile app. What
+ * stays here is everything that is genuinely Next-specific: reading the
+ * encrypted NextAuth cookie, the Platform-Admin org-assumption cookie, and
+ * `loadOrFallback`'s demo-data + redirect policy.
+ */
+
+/** Re-exported so the ~47 call sites importing it from here keep working. */
+export { ApiError };
 
 // ── Session token access (INS-045) ──────────────────────────────────────────
 // The API bearer token lives ONLY inside the encrypted (JWE) NextAuth cookie —
@@ -80,11 +80,10 @@ async function readSessionJwt(): Promise<SessionJwt | null> {
 /**
  * The access token to send, renewed on the spot when it has expired — mirroring
  * the `jwt` callback in lib/auth.ts, same 60s clock-skew buffer, so a call
- * landing right at expiry still authenticates instead of 401-ing. As before this
- * change the renewal is in-memory only: Auth.js discards Set-Cookie outside
- * middleware, so middleware.ts stays the one place that persists a rotated token.
- * On refresh failure we send the stale token and let the API return 401, exactly
- * as the previous `session.accessToken` path did.
+ * landing right at expiry still authenticates instead of 401-ing. The renewal is
+ * in-memory only: Auth.js discards Set-Cookie outside middleware, so
+ * middleware.ts stays the one place that persists a rotated token. On refresh
+ * failure we send the stale token and let the API return 401.
  */
 async function accessTokenFrom(jwt: SessionJwt | null): Promise<string | null> {
   if (!jwt?.accessToken) return null;
@@ -99,90 +98,42 @@ export async function apiToken(): Promise<string | null> {
 }
 
 /**
- * Headers carrying the session token plus, for a verified Platform Admin
- * operating inside an assumed org, the X-Org-Id selector (INS-079). The role
- * check is defense-in-depth (the API guard ignores the header for anyone else
- * regardless) against a stale `inspect_admin_org` cookie surviving into a
- * different session on a shared browser (final review, finding 2) — reads the
- * one decrypted JWT already needed here for the bearer token, rather than a
- * second lookup. Deliberately NOT used by apiGetPublic/apiPostPublic — those are
- * unauthenticated by contract.
+ * The injected auth provider (`.claude/rules/wire-contract.md`).
+ *
+ * Resolves the bearer token and, for a verified Platform Admin operating inside
+ * an assumed org, the X-Org-Id selector (INS-079) — from ONE decryption of the
+ * NextAuth JWT. The role check is defense-in-depth (the API guard ignores the
+ * header for anyone else regardless) against a stale `inspect_admin_org` cookie
+ * surviving into a different session on a shared browser. Deliberately NOT
+ * consulted by the public helpers — those are unauthenticated by contract, and
+ * the client enforces that rather than trusting each call site.
  */
-async function authHeaders(): Promise<Record<string, string>> {
+async function nextAuthContext(): Promise<AuthContext> {
   const jwt = await readSessionJwt();
   const token = await accessTokenFrom(jwt);
   const orgId = jwt?.role === 'PLATFORM_ADMIN' ? await getAssumedOrgId() : null;
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(orgId ? { 'X-Org-Id': orgId } : {}),
-  };
+  return { token, orgId };
 }
 
+const client = createApiClient({ baseUrl: API_URL, auth: nextAuthContext });
+
 /**
- * Unauthenticated GET — for public endpoints (guest portal, verify, invite lookup).
- * Does NOT call auth(); safe to use from pages with no session.
- * Throws ApiError on non-2xx so callers can branch on the HTTP status
+ * Unauthenticated GET — for public endpoints (guest portal, verify, invite
+ * lookup). Throws ApiError on non-2xx so callers can branch on the HTTP status
  * (e.g. 404 unknown invite vs 410 consumed/expired). Network failures still
  * surface as fetch's TypeError — distinct from an API-level error.
  */
-export async function apiGetPublic<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { cache: 'no-store' });
-  if (!res.ok) {
-    let detail = '';
-    try {
-      const parsed = await res.json() as { message?: unknown };
-      const m = parsed.message;
-      detail = Array.isArray(m) ? m.join(', ') : typeof m === 'string' ? m : '';
-    } catch { /* non-JSON */ }
-    throw new ApiError(res.status, path, detail || `API GET ${path} failed: ${res.status}`);
-  }
-  return (await res.json()) as T;
-}
+export const apiGetPublic = <T,>(path: string): Promise<T> => client.getPublic<T>(path);
 
-/**
- * Unauthenticated POST — for public endpoints (accept invitation).
- */
-export async function apiPostPublic<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    let detail = '';
-    try {
-      const parsed = await res.json() as { message?: unknown };
-      const m = parsed.message;
-      detail = Array.isArray(m) ? m.join(', ') : typeof m === 'string' ? m : '';
-    } catch { /* non-JSON */ }
-    throw new Error(detail || `API POST ${path} failed: ${res.status}`);
-  }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
-}
+/** Unauthenticated POST — for public endpoints (accept invitation). */
+export const apiPostPublic = <T,>(path: string, body?: unknown): Promise<T> =>
+  client.postPublic<T>(path, body);
 
 /**
  * Server-side GET against the NestJS API with the session bearer token.
  * Always no-store (live data) — pages that use it are dynamic.
- * Throws ApiError on non-2xx so callers can distinguish 401 from network errors.
  */
-export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    headers: await authHeaders(),
-    cache: 'no-store'
-  });
-  if (!res.ok) {
-    let detail = '';
-    try {
-      const parsed = await res.json() as { message?: unknown };
-      const m = parsed.message;
-      detail = Array.isArray(m) ? m.join(', ') : typeof m === 'string' ? m : '';
-    } catch { /* non-JSON */ }
-    throw new ApiError(res.status, path, detail || `API GET ${path} failed: ${res.status}`);
-  }
-  return (await res.json()) as T;
-}
+export const apiGet = <T,>(path: string): Promise<T> => client.get<T>(path);
 
 /**
  * Load live data from the API, falling back to design demo data when the API is
@@ -195,6 +146,10 @@ export async function apiGet<T>(path: string): Promise<T> {
  * redacts Server Component error messages in production builds, so a client
  * error boundary cannot reliably pattern-match on `error.message` — this
  * function still has the real message, so it is the right place to act on it.
+ *
+ * Deliberately NOT in `@inspect/api-client`: both behaviours are console-only.
+ * Mobile has no demo-preview mode and, by spec decision D1, no Platform Admin
+ * mode — so it has no /admin/orgs to redirect to.
  */
 export async function loadOrFallback<T>(path: string, fallback: T): Promise<{ data: T; live: boolean }> {
   try {
@@ -209,46 +164,16 @@ export async function loadOrFallback<T>(path: string, fallback: T): Promise<{ da
   }
 }
 
-type WriteMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-
 /**
- * Server-side mutation against the NestJS API with the session bearer token.
- * Use from Server Actions / route handlers (relies on `auth()`, which is server-only).
- * Sends `body` as JSON when provided; surfaces the API's error message via `ApiError`;
- * returns `undefined` for an empty/204 response.
+ * Server-side mutations against the NestJS API with the session bearer token.
+ * Use from Server Actions / route handlers. Sends `body` as JSON when provided;
+ * surfaces the API's error message via `ApiError`; returns `undefined` for an
+ * empty/204 response.
  */
-async function apiSend<T>(method: WriteMethod, path: string, body?: unknown): Promise<T> {
-  const hasBody = body !== undefined;
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: {
-      ...(await authHeaders()),
-      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: hasBody ? JSON.stringify(body) : undefined,
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    let parsed: unknown;
-    let detail = '';
-    try {
-      parsed = await res.json();
-      const m = (parsed as { message?: unknown })?.message;
-      detail = Array.isArray(m) ? m.join(', ') : typeof m === 'string' ? m : '';
-    } catch {
-      /* non-JSON error body */
-    }
-    throw new ApiError(res.status, path, detail || `API ${method} ${path} failed: ${res.status}`, parsed);
-  }
-  if (res.status === 204) return undefined as T;
-  const text = await res.text();
-  return (text ? (JSON.parse(text) as T) : (undefined as T));
-}
-
-export const apiPost = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('POST', path, body);
-export const apiPut = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('PUT', path, body);
-export const apiPatch = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('PATCH', path, body);
-export const apiDelete = <T>(path: string, body?: unknown): Promise<T> => apiSend<T>('DELETE', path, body);
+export const apiPost = <T,>(path: string, body?: unknown): Promise<T> => client.post<T>(path, body);
+export const apiPut = <T,>(path: string, body?: unknown): Promise<T> => client.put<T>(path, body);
+export const apiPatch = <T,>(path: string, body?: unknown): Promise<T> => client.patch<T>(path, body);
+export const apiDelete = <T,>(path: string, body?: unknown): Promise<T> => client.del<T>(path, body);
 
 // ── Response shapes (subset of the Prisma models the screens read) ──
 /** Binding QA-call rollup (INS-068). PENDING = submitted, awaiting the QA decision. */
