@@ -54,6 +54,16 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 
 ## High
 
+### INS-090 · The API is not deployed anywhere — a phone cannot reach it   [HIGH]
+- status: todo            # filed 2026-08-27. Found while assessing mobile readiness: there is no Dockerfile, no railway.json, no Procfile and no deploy workflow in the repo. The Railway account hosts the Postgres + Redis the dev machine connects to; the API itself has only ever run on localhost. This is not tracked anywhere else and it is the hard blocker for [INS-086](BACKLOG.md) Phase 2.
+- area: Infra & CI
+- evidence: `find . -maxdepth 2 -iname "Dockerfile*" -o -iname "railway*" -o -iname "Procfile"` returns nothing; `.github/workflows/ci.yml` builds and tests but never deploys; `INSPECT_API_URL` defaults to `http://localhost:3000` in both `apps/web/lib/api.ts` and `apps/web/lib/auth.ts`.
+- problem: Phase 2's acceptance is "the inspections list renders on a PHYSICAL DEVICE via EAS". A device on a phone network cannot resolve `localhost:3000`, and a simulator pointing at a laptop is not the acceptance the spec asks for — it would prove the bundler works while leaving the real integration (TLS, CORS, cold starts, token lifetime over a slow link) untested until much later. Every other Phase 2 task is blocked behind having a reachable base URL.
+- fix: Deploy `apps/api` to a reachable HTTPS origin — Railway is the path of least resistance since the database already lives there. Needs: a container or Nixpacks build for the Nest app, `DATABASE_URL`/`REDIS_URL`/the JWT + Ed25519 + S3 secrets set in the environment, `prisma migrate deploy` on release, and `ALLOWED_ORIGINS` widened for the app. Do [INS-002](BACKLOG.md) FIRST — deploying with the credentials that are still in git history would publish them.
+- verify: `GET https://<host>/health` returns db+redis up from a device off the local network; the console can be pointed at it via `INSPECT_API_URL`; a login round-trip works from a phone browser before any native code exists.
+- refs: spec [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) §6 (Phase 2 acceptance) · blocks Phase 2 of [INS-086](BACKLOG.md) · gated by [INS-002](BACKLOG.md)
+
+
 ### INS-081 · Loop model reshaped: one loop of single-image items, populate cycles per unit   [HIGH]
 - status: done            # 2026-08-13: a preset IS one loop holding ordered single-image loop items; populate walks them repeatedly (one cycle per inspected unit) and can only be ended on a cycle boundary — finish the unit or discard it. Defect tags and the measurement sheet moved up to loop level; recorded defects pin to (cycle, item) and measurements to a cycle. Retake replaces a slot's bytes in place with both content hashes in the audit chain. `@@unique([inspectionLoopItemId, cycleIndex])` makes one-image-per-slot a DB guarantee. Destructive clean-break migration (spec §9) applied to the Railway dev DB. 565 unit tests + 129 integration tests + the 24-step smoke loop green.
 - area: Loop presets + populate + reports (schema, API, web)
@@ -667,6 +677,7 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - fix: Decide what "signed by" means first — the QA Manager who made the binding decision is the honest answer, and `AqlResult.decidedByUserId` already records it. Either resolve that id to a name on the report read, or add `generatedByUserId` to `Report` and set it in `generate()`. Do NOT backfill either onto existing rows, and do NOT touch `canonicalSnapshot`/`contentHash`/`signature` — the decision attribution is already inside the signed envelope (INS-038), so this is a presentation fix on top of signed data, not a change to it.
 - verify: A generated report shows a real person's name in the tamper-proof block; `GET /reports/verify/:token` still returns `valid:true` for reports signed before and after the change; `wire-contract.spec.ts` stays green.
 - refs: [../done/plans/2026-08-27-inspect-rn-phase1-extraction.md](../done/plans/2026-08-27-inspect-rn-phase1-extraction.md) · found by `apps/api/src/common/wire-contract.spec.ts` · related [INS-038](BACKLOG.md) (what the signature covers), [INS-039](BACKLOG.md) (actor identity in the audit payload)
+
 
 ## Low
 
