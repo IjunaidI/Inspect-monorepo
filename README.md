@@ -56,7 +56,7 @@ A pnpm + Turborepo monorepo with a NestJS API and a Next.js console sharing one 
 ```mermaid
 flowchart LR
     subgraph Web["apps/web — Next.js 15 console"]
-        UI["11 screens · shadcn/ui · Tailwind"]
+        UI["28 routes · shadcn/ui · Tailwind"]
         NA["NextAuth (Credentials)"]
     end
     subgraph API["apps/api — NestJS 11"]
@@ -106,20 +106,20 @@ Legend: ✅ done & verified · ⬜ planned
 - [x] ISO 2859‑1 AQL engine *(39 unit tests)*
 - [x] Tamper‑proof crypto: canonicalization + SHA‑256 content hash + Ed25519 *(14 tests)*
 - [x] Append‑only hash‑chained audit core *(7 tests)*
-- [x] `@inspect/shared-types` contract package
+- [x] Four shared packages — `@inspect/{shared-types,api-client,domain,design-tokens}`, consumed by the API and the console today and by the React Native app in Phase 2 (INS-086 Phase 1)
 
-**Backend API (NestJS)** — ✅ *verified live against Postgres + Redis + S3-compatible object storage: 68 integration tests across 6 suites, green in CI (GitHub Actions)*
+**Backend API (NestJS)** — ✅ *verified live against Postgres + Redis + S3-compatible object storage: 147 integration tests across 16 suites, plus 656 unit tests. See [docs/STATUS.md](docs/STATUS.md) for what is and is not verified — the integration suite is currently flaky against the remote dev database.*
 - [x] JWT auth + additive RBAC guards — scrypt + HS256 *(25 tests)*
-- [x] Workspace CRUD — buyers, suppliers, products, purchase orders
+- [x] Workspace CRUD — companies, products, purchase orders *(INS-055: one `Company` model is every counterparty; whether it is the client or the factory lives on the PO/Inspection/Report edge)*
 - [x] Loop‑preset builder (versioned) + defect catalog (global + per‑org)
 - [x] Inspection lifecycle — create→snapshot→AQL sampling, submit→evaluate→result, QA decision
 - [x] Admin populate console API — presigned S3 upload, defect tagging, free‑form measurements
 - [x] Signed report generation + public verification endpoint + audit writes
-- [x] Buyer guest portal (magic‑link) + invite‑only onboarding (orgs / users / guests) with email delivery (`nodemailer`)
+- [x] Company guest portal (magic‑link, scoped to a company's CLIENT-role reports) + invite‑only onboarding (orgs / users / guests) with email delivery (`nodemailer`)
 
 **Web console (Next.js)** — ✅
 - [x] Design system (tokens, responsive shell, reusable branded report)
-- [x] 11 screens — dashboard, create inspection, presets list + builder, populate, review, report, guest portal, users, invite, login
+- [x] 28 routes — dashboard, inspections (list/create/populate/review/report), companies + guests, products, purchase orders, presets list + builder, reports, users, admin orgs, guest portal, public verify, invite, login
 - [x] NextAuth Credentials → API; console screens wired to live reads + server‑action writes with offline fallback
 
 **Next up** — ⬜
@@ -186,15 +186,19 @@ Inspect-monorepo/
 │   │       ├── audit/               hash-chain core + AuditService (tested)
 │   │       ├── auth/                JWT · scrypt · RBAC guards     (tested)
 │   │       ├── inspections/  reports/  populate/  storage/
-│   │       ├── buyers/  suppliers/  products/  purchase-orders/
+│   │       ├── companies/  products/  purchase-orders/
 │   │       ├── loop-presets/  defect-catalog/  guest/
-│   │       └── orgs/  invitations/  users/  buyer-guests/
+│   │       └── orgs/  invitations/  users/  company-guests/
 │   └── web/                         @inspect/web — Next.js console
-│       ├── app/(console)/           dashboard · inspections · presets · populate · review · users
-│       ├── app/{login,invite,portal,report}/
+│       ├── app/(console)/           dashboard · inspections · companies · presets · populate · review · users
+│       ├── app/{login,invite,portal,report,r}/
 │       ├── components/inspect/      tokens · shell · branded-report
-│       └── lib/                     auth.ts (NextAuth) · api.ts (typed client)
-├── packages/shared-types/           @inspect/shared-types — shared contracts
+│       └── lib/                     auth.ts (NextAuth) · api.ts (Next adapter over @inspect/api-client)
+├── packages/
+│   ├── shared-types/                 @inspect/shared-types — enums · JSON contracts · every wire DTO
+│   ├── api-client/                   @inspect/api-client — fetch client, INJECTED auth provider
+│   ├── domain/                       @inspect/domain — platform-free rules (the one ROLE_RANK)
+│   └── design-tokens/                @inspect/design-tokens — palette · font stacks · severity maps
 ├── docs/                            STATUS.md · future/BACKLOG.md · {done,in-progress,future}/ · reference/
 └── docker-compose.dev.yml           Postgres + Redis + MinIO
 ```
