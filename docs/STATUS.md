@@ -1,6 +1,39 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-08-26 (RN migration designed + scaffolded; **Phase 0 substantially complete — 7 of 9
+> **Last verified: 2026-08-26 ([INS-055](future/BACKLOG.md) SHIPPED — `Company` is the only counterparty).**
+> `Buyer`, `Supplier` and `BuyerGuest` are gone from the schema and the code. Trade role now lives on the
+> **edge** (`clientCompanyId` / `factoryCompanyId`), so one company can be the client on one PO and the
+> factory on another — the thing the old two-table split could not express. **Phase 0 of the RN programme is
+> code-complete and Phase 1 (extraction) is unblocked:** the contract it freezes is the final one.
+> **Executed against a re-scoped plan.** The authored 10-phase plan was rewritten in place: the pre-production
+> data policy deleted the 1:1 backfill, the lineage columns, the human-adjudicated dedupe, the
+> RENAME-to-save-live-tokens migrations and the staged drop, leaving **9 tasks**. Everything that was a decision
+> about the *code* survived intact — the two-FK role model, the guest-visibility predicate, canonical v1/v2
+> versioning, and the partial CI unique index. All eight P1–P8 product defaults were honoured with no override.
+> **Three findings worth carrying forward.**
+> **(1) The plan's task split was wrong and the tests proved it.** PO / Inspection / Report / guests were four
+> tasks; each denormalizes its parties from the previous one, so the moment the PO stopped writing `buyerId`
+> the whole chain went null. They shipped as one commit.
+> **(2) Dropping a column does NOT drop the trigger that guards it.** Both INS-014 immutability triggers
+> reference `NEW."buyerId"` **by name**; Postgres resolves record fields only when a trigger *fires*, so the
+> guard began raising *"The column `new` does not exist in the current database"* on every UPDATE of a
+> submitted inspection — a 500 on `POST /inspections/:id/decision`. `pnpm type-check`, `pnpm lint` and **634
+> unit tests were all green while that was broken**; only the DB-backed integration suite caught it. Fixed in a
+> **separate** migration, because editing an applied one is the checksum drift that blocked `migrate dev` at
+> the start of this session.
+> **(3) The v1 guarantee is now proven by a fixture the test builds itself**, signing a `buyer`/`supplier`-shaped
+> payload with the real key — repeatable, and it survives `prisma migrate reset`. The original gate depended on
+> rows surviving a migration, which the data policy deletes. The requirement was always about the **format**.
+> **Verified against a reset + reseeded database:** `pnpm lint` 0 errors · `pnpm type-check` 4/4 ·
+> **api unit 634 / 41 suites exit 0** · web 32 / 2 · **integration 147 / 16 suites, exit 0 with ZERO SKIP lines**
+> (`db-invariants` 12/12 real, not vacuous) · `pnpm build` 3/3 · `prisma migrate diff` "No difference detected" ·
+> `openapi.json` regenerated (**`PLATFORM_ADMIN` is down to the 2 `/admin/orgs` operations** — exactly the
+> surface the mobile app excludes by design).
+> **Known-unverified, unchanged from the previous session:** CI has never run on Linux; the commits are
+> unpushed. Also note `pnpm test` at the root OOMs on this machine under Jest's parallel workers —
+> `jest --runInBand` is what was used throughout and exits 0 (relevant to [INS-085](future/BACKLOG.md)).
+>
+> Prior entry: ** 2026-08-26 (RN migration designed + scaffolded; **Phase 0 substantially complete — 7 of 9
 > items closed**).** Approach A is specified ([INS-086](future/BACKLOG.md)) and Phase 0 — the hardening that makes
 > the platform safe to refactor — is done except for one user-side item and one deliberately deferred epic.
 > **Closed this session:** [INS-082](future/BACKLOG.md) the console's first test suite (Vitest, 32 tests, each
@@ -105,19 +138,24 @@
 > (multi-tenant B2B SaaS; web-first MVP, mobile deferred). Requirements: [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md).
 
 ## Tests
-- **Web (Vitest, unit): 32 passing across 2 suites** (new 2026-08-26, [INS-082](future/BACKLOG.md)) — the console's
-  first automated tests. `apps/web/lib/roles.test.ts` (12: additive hierarchy, fail-closed on unknown/missing role,
-  display-key mapping, initials) and `apps/web/lib/api.test.ts` (20: `ApiError` status preservation, message-array
-  join, non-JSON error bodies, no-auth-header on public helpers, the `X-Org-Id` PLATFORM_ADMIN-only rule, `__Secure-`
-  cookie-name detection, `loadOrFallback`'s six branches, and token refresh incl. the stale-token fallback). Run with
-  `pnpm web test`; included in root `pnpm test`. **Every behaviour verified by mutation** — see the INS-082 entry.
-- **API (Jest, unit): 597 passing across 41 suites** (measured 2026-08-26 at Phase 0 close). Grew from 569/39 with
-  the INS-083 scoping tests (7, written RED first) and the INS-034 specs for `defect-catalog` (10) and
-  `purchase-orders` (11). Note the 565 recorded on 2026-08-13 had already drifted to 569 before this session.
-- **Integration (Jest, real DB): 139 passing across 15 suites, exit 0** (measured 2026-08-26). New:
-  `populate-rbac.e2e-spec.ts` (10 — the INS-083 boundary proved live). `db-invariants.e2e-spec.ts` ran with **zero
-  SKIP lines**, so its assertions are real; two pre-existing tests were deliberately superseded and annotated in
-  place rather than silently changed (see INS-083). New in INS-081: `cycle-state.spec.ts` (the pure completeness rule — partial cycles, ordering by item position, gap-tolerant next-slot allocation), plus reshaped submit-gate, preset, populate (slot addressing, retake, discard, per-cycle measurements) and report-snapshot specs. Note: `pnpm api test` exits 134 on Windows from a Jest **parallel-worker teardown** crash *after* all tests report green; `jest --runInBand` exits 0.
+- **Web (Vitest, unit): 32 passing across 2 suites** ([INS-082](future/BACKLOG.md)) — the console's automated
+  tests. `apps/web/lib/roles.test.ts` (12) and `apps/web/lib/api.test.ts` (20). Unchanged by INS-055, which is
+  the point: they cover `loadOrFallback`'s branch table and the `X-Org-Id` role gate, neither of which the
+  Company refactor touches. Run with `pnpm web test`; included in root `pnpm test`.
+- **API (Jest, unit): 634 passing across 41 suites, exit 0** (measured 2026-08-26 at INS-055 close). Net of
+  INS-055: **+20** `reports/canonical.spec.ts` (the pure v1/v2 readers, incl. hostile-marker and spoofed-key
+  cases), **+68** `companies/*.spec.ts` (the merged Buyers+Suppliers suites plus `kind` validation and the
+  `_count` flattening), **+9** `company-guests.service.spec.ts` (ported, plus a new case proving the audit row
+  does **not** contain the magic-link token), **+2** PO self-dealing; **−** the deleted buyers/suppliers/
+  buyer-guests suites. Note: root `pnpm test` OOMs under Jest's parallel workers on the dev machine;
+  `jest --runInBand` exits 0 (see [INS-085](future/BACKLOG.md)).
+- **Integration (Jest, real DB): 147 passing across 16 suites, exit 0** (measured 2026-08-26, against a
+  reset + reseeded database). New: `company-model.e2e-spec.ts` (8) — PO self-dealing → 400, a cross-org party
+  → 400, both parties read back through their relations, **the three guest-visibility boundary tests**
+  (a factory-role guest sees zero reports and 404s on the client's report id; a client-role guest sees exactly
+  that company's; a guest of one org sees none of another's), and canonical **v1 verifies `valid:true` /
+  v2 verifies `valid:true`**. `db-invariants.e2e-spec.ts` ran **12/12 with zero SKIP lines**, so its
+  assertions are real — which is what caught the dropped-column trigger defect.
 - **Integration (Jest, real DB): 129 passing across 14 suites** (measured 2026-08-13). New in INS-081: `populate-cycles.e2e-spec.ts` — submit blocked mid-cycle naming the unit and its missing item, unblocked by either finishing or discarding the unit, 409 on a filled slot pointing at retake, retake-in-place, per-unit measurement idempotency, and the LOCKED guard covering retake + discard.
 - **Superseded baseline — API (Jest, unit): 533 passing across 38 suites** (measured 2026-08-01, all pure-unit, no DB). Grew from 204/26 in the backlog-clearing pass with: `audit.service.spec.ts` (INS-013 — sequence assignment, prevEntryHash linkage, the advisory lock, P2002 retry), `populate.service.spec.ts` (INS-007 — the LOCKED set, catalog-XOR-custom, the cross-tenant orgId derivation, replay/conflict), `reports.service.spec.ts` + `report-pdf.spec.ts` (INS-019/003), `storage.service.spec.ts` (INS-060 placeholder-credential guard), `throttler.config.spec.ts` (INS-047, incl. right-to-left X-Forwarded-For resolution), `dashboard-metrics.spec.ts` (INS-068 DPHU/passRate), `aql-plan-input.spec.ts` (INS-063), `suppliers.service.spec.ts` (INS-071), `products.service.spec.ts` (INS-074), `buyers.controller.spec.ts`, an extended `inspections.service.spec.ts` (INS-021 create/submit/decision lifecycle), and audit-on-write assertions in the buyers + populate specs (INS-006).
 - **Superseded baseline — API (Jest, unit): 204 passing** across 26 suites — all pure-unit, **no DB**. Exact per-suite counts, measured 2026-08-01: (AQL 39 + aql-preview 3, auth 26 [rbac 5 / jwt 6 / password 5 / auth.service 10], tamper-proof 14 [canonicalize 5 / content-hash 5 / signature 4], audit-chain 7, storage/sigv4 8, inspection-mapping 6, inspections.service 12, app 1; invitations 10, buyers 10 — security review + sweep; mail 9 + mail-inspection 2, users 16, orgs 4, buyer-guests 4 — INS-004; list-query 5, config 5, loop-presets 10 — 2026-07-12 sweep; **2026-07-18 (meeting batch 1):** `mail-inspection.spec.ts` (status-change email templates) + extended `inspections.service.spec.ts` (submit-evidence gate), `users.service.spec.ts` (self-guards/reactivate/direct-add), `buyers.service.spec.ts` (restore/idempotent re-archive); **new 2026-07-25 (INS-079):** `jwt-auth.guard.spec.ts` (11 cases — the `X-Org-Id` tenant boundary: honored only for a verified PLATFORM_ADMIN, ignored for each org role, absent header leaves orgId null) + `audit/actor-type.spec.ts` (`actorTypeFor` helper) + extended `auth.service.spec.ts`/`buyers.service.spec.ts`/`inspections.service.spec.ts`/`users.service.spec.ts` (actor-attribution at the real call sites).)
@@ -134,8 +172,8 @@
 | Pillar | Maturity | State (one line) | Governing doc | Open backlog |
 |---|---|---|---|---|
 | AQL domain core | production-ready | Pure ISO 2859-1 / Z1.4 single-sampling Level II engine, fully unit-tested (~39 cases); verified band G–N at AQL {1.0,1.5,2.5,4.0,6.5} + critical Ac0; no DB. | [done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md](done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md) | — |
-| Data model & schema | working-with-gaps | 25-model orgId-scoped Prisma schema; `00000000000000_init` **applied to Postgres 16 — all 25 tables created** (2026-06-20); 14-defect global seed loaded. 7 cross-cutting invariants still **app-layer-only** (no DB enforcement). | [reference/inspect-schema.md](reference/inspect-schema.md) | INS-010, INS-055 |
-| Tamper-proof & audit | working-with-gaps | canonicalize/content-hash/Ed25519 + audit-chain helper unit-tested (14 + 7); the 2 wired `audit.append` calls (`org.created`, `report.generated`) **executed live 2026-06-20**. **2026-07-11 security review: the audit payload hash now covers actor identity + app-assigned timestamp (INS-039 done) so attribution can't be silently forged; the per-org sequence race is confirmed (INS-012) and its misleading comment corrected.** **The INS-038 tamper guarantee now has a live regression test** (integration suite mutates the stored canonical → public verify flips to invalid). Still: `audit.service` has no DB spec (INS-013), `audit.append` wired into **7 of ~15** mutating services (`buyers`, `inspections`, `orgs`, `products`, `reports`, `suppliers`, `users` — verified 2026-07-25 via `grep -rl "audit\.append" apps/api/src --include=*.service.ts`; coverage remains partial even within those — e.g. buyers/suppliers/products only audit archive+restore, not create/update) (INS-006), append-only is caller-discipline (no DB triggers, INS-011). | [done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md](done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md) | INS-006, INS-011, INS-012, INS-013 |
+| Data model & schema | production-ready | **24-model** orgId-scoped Prisma schema, **8 migrations, all applied**. [INS-055](future/BACKLOG.md) unified Buyer+Supplier into one `Company` (trade role on the EDGE: `clientCompanyId`/`factoryCompanyId`); `CompanyGuest` replaces `BuyerGuest`. The DB-level invariants (INS-010/011/014/015/018/046) are applied and **proved live with zero SKIP lines** (12/12). Business keys enforced by partial CI unique indexes. | [reference/inspect-schema.md](reference/inspect-schema.md) | — |
+| Tamper-proof & audit | working-with-gaps | canonicalize/content-hash/Ed25519 + audit-chain helper unit-tested (14 + 7); the 2 wired `audit.append` calls (`org.created`, `report.generated`) **executed live 2026-06-20**. **2026-07-11 security review: the audit payload hash now covers actor identity + app-assigned timestamp (INS-039 done) so attribution can't be silently forged; the per-org sequence race is confirmed (INS-012) and its misleading comment corrected.** **The INS-038 tamper guarantee now has a live regression test** (integration suite mutates the stored canonical → public verify flips to invalid). **INS-055: the canonical payload is now VERSIONED** — new reports embed `canonicalVersion: 2` INSIDE the signed envelope; v1 reports (buyer/supplier keys) still verify `valid:true`, proven by a self-built fixture, and `readCanonicalParties()` is the single reader both shapes go through. The INS-014 report/inspection immutability triggers were repointed at the Company columns (a dropped column does NOT drop the trigger that names it). Still: `audit.service` has no DB spec (INS-013), `audit.append` wired into most mutating services (`companies`, `inspections`, `orgs`, `products`, `reports`, `users`, `company-guests` — verified 2026-07-25 via `grep -rl "audit\.append" apps/api/src --include=*.service.ts`; coverage remains partial even within those — e.g. buyers/suppliers/products only audit archive+restore, not create/update) (INS-006), append-only is caller-discipline (no DB triggers, INS-011). | [done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md](done/plans/2026-06-06-inspect-phase1-foundation-domain-core.md) | INS-006, INS-011, INS-012, INS-013 |
 | Auth & RBAC | working-with-gaps | JWT(HS256)+scrypt+additive RBAC libs unit-tested (25); the **full loop exercises both `PLATFORM_ADMIN` and `ORG_OWNER` live** (2026-06-20). **2026-07-11 security review: removed the source-visible JWT dev-secret fallback and now fail closed at boot without a strong secret (INS-036 done — was a full auth-bypass/forge-admin hole); equalized login timing to stop account enumeration (INS-042 done).** **2026-07-11 INS-009: token refresh + the negative RBAC matrix (401/403/cross-org, forged/expired tokens) verified live by the integration suite.** **2026-07-25 (INS-079): `JwtAuthGuard` now resolves an `X-Org-Id` header into `actingAsOrgId`, honored ONLY for a verified PLATFORM_ADMIN and ignored outright for every other role (11 guard unit tests + a live tenant-boundary integration test prove the boundary — an ORG_OWNER's response is byte-identical with/without the header); all 15 audit-log call sites now attribute assumed-org actions to `actorType: PLATFORM_ADMIN` + the real admin's id via `actorTypeFor`, closing the hole the INS-039 fix would otherwise have reopened.** Rate limiting (INS-047) still open. | [done/plans/2026-06-06-inspect-phase2-auth-tenancy.md](done/plans/2026-06-06-inspect-phase2-auth-tenancy.md) | INS-047 |
 | Tenancy & onboarding | working-with-gaps | Invite-only org→Org-Owner onboarding + buyer-guest magic-link **verified live end-to-end** (2026-06-20). **2026-07-11 security review: closed a BLOCKER cross-tenant account-takeover in invitation accept (INS-035 done, unit-tested) and switched invitation tokens from the guessable cuid() default to a CSPRNG (INS-037 done).** **Invitation + magic-link emails now sent** via `MailService` (INS-004 done, 2026-07-11 — SMTP_URL transport or dev/json fallback; copyable link still returned as fallback; real-SMTP delivery not yet exercised). | [done/plans/2026-06-06-inspect-phase2-auth-tenancy.md](done/plans/2026-06-06-inspect-phase2-auth-tenancy.md) | INS-047 |
 | Workspace CRUD | working-with-gaps | Buyers/Suppliers/Products/POs CRUD **create-path verified live** (2026-06-20 smoke loop). **2026-07-11 security review: Buyer.defaultLoopPresetId is now org-validated on create+update (INS-041 done, unit-tested) — closes a cross-tenant preset reference.** Still no full specs (INS-034), **write audit entries only on archive+restore** (INS-061, done) **but none on create/update** (INS-006 — verified 2026-07-25: `buyers`/`suppliers`/`products` `.service.ts` each call `audit.append` only inside `archive()`/`restore()`), Buyers/Suppliers/Products list endpoints carry relation `_count` (POs/inspections/reports) since the INS-005 dynamic-data sweep (done 2026-07-12). | [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md) | INS-034, INS-071, INS-072, INS-077 |
@@ -150,44 +188,40 @@
 
 ## Active work
 
-### ▶️ NEXT SESSION STARTS HERE — INS-055, and read this first
+### ▶️ NEXT SESSION STARTS HERE — [INS-086](future/BACKLOG.md) Phase 1: the shared-package extraction
 
-**Phase 0 of the RN programme is closed except for [INS-002](future/BACKLOG.md) (user-side credential
-rotation). The critical path is now [INS-055](future/BACKLOG.md), the Company model** — decision D5 put it
-*before* the shared contract is frozen, so RN Phase 1 (extraction into
-`@inspect/{api-client,domain,design-tokens}`) waits on it.
+**Phase 0 is code-complete.** [INS-055](future/BACKLOG.md) shipped, which was the last item gating the
+contract, so **Phase 1 is unblocked**: extract the platform-free layer into
+`@inspect/{api-client,domain,design-tokens}`. The contract it freezes is now the final one — `Company` with
+`clientCompanyId` / `factoryCompanyId`, not `Buyer`/`Supplier`. That was decision D5's whole purpose: a
+shipped app build cannot be force-updated the way a console is redeployed.
 
-**⚠️ Re-scope the plan before executing it.** [The authored plan](in-progress/plans/2026-08-01-inspect-company-model.md)
-is 10 phases, and most of that structure exists to **preserve existing rows** — a 1:1 backfill, lineage
-columns, a human-adjudicated dedupe, a staged table drop. The repo-root `CLAUDE.md` now states that this is a
-pre-production project whose database holds nothing of value, which removes that entire constraint. Under
-that rule the epic collapses to roughly:
+**Phase 1 is extraction ONLY.** No mobile code in the tree. Its acceptance is that the console behaves
+identically — which is exactly what `apps/web`'s 32 Vitest tests exist to prove, so treat a red one as a real
+regression, never as a test to update. The procedure is in
+[the RN spec](in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) and
+`.claude/rules/wire-contract.md`; the non-negotiable rule is that when logic moves into a shared package,
+**`apps/web` is re-pointed at it in the same change**.
 
-1. Write the **correct final schema** — `Company` with `kind`, the two role FKs (`clientCompanyId` +
-   `factoryCompanyId`) on PO/Inspection/Report, `CompanyGuest` — with **no** `Buyer`/`Supplier` tables and
-   **no** lineage columns.
-2. Clean-break migration + `prisma migrate reset` + reseed. No backfill, no dedupe phase, no staged drop.
-3. Repoint the API, the console and `@inspect/shared-types` at it in one pass.
+**Still open in Phase 0:** [INS-002](future/BACKLOG.md) credential rotation — user-side, needs the Railway
+account. It gates EAS/app-store credentials, not the extraction, so Phase 1 does not wait on it.
 
-The plan's phases 1, 2 and 8 largely evaporate; **its §2 role model, §4 guest-visibility predicate and §5
-canonical v1/v2 versioning still stand and are still binding** — those are correctness decisions about the
-code, not migration bookkeeping. Canonical **v2 is still needed**: `verifyByToken` must keep verifying any
-v1 report the code produced, and the presentation readers must handle both shapes. Do not skip that because
-the dev rows are disposable — the requirement is about the *format*, not the data.
+**Baseline to beat, measured 2026-08-26 against a reset + reseeded database:** api unit **634 / 41 exit 0**,
+web **32 / 2**, integration **147 / 16 exit 0 with zero SKIP lines**, `pnpm type-check` 4/4, `pnpm lint` 0
+errors, `pnpm build` 3/3.
 
-**Do first, in one command:** re-read the P1–P8 sign-off in
-[the spec's §0](in-progress/specs/2026-08-01-inspect-company-model-design.md) (all eight defaults confirmed
-2026-08-26, no overrides; P1 stands, so two role FKs), then write the new schema.
+**Two operational notes for whoever picks this up:**
+- **Run the API suites with `jest --runInBand`.** Root `pnpm test` OOMs under Jest's parallel workers on the
+  dev machine (`FATAL ERROR: Zone Allocation failed`) — this looks like the real cause of
+  [INS-085](future/BACKLOG.md)'s phantom Windows exit-134, which reproduced here as an OOM rather than a
+  teardown crash. In-band exits 0 every time.
+- **Prisma CLI needs the repo-root `.env` exported** (`set -a && . ./.env && set +a`) — it does not read
+  `../../.env` the way the API's `ConfigModule` does, and fails with `Environment variable not found:
+  DATABASE_URL` otherwise.
 
-**Baseline to beat, measured 2026-08-26:** unit **597 / 41 suites**, integration **139 / 15, exit 0**,
-`pnpm type-check` 4/4, `pnpm lint` 0 errors, `pnpm build` 3/3.
-
-**Known-unverified, deliberately deferred:** the 11 commits on `main` are **unpushed**, and CI has never run
-the two gates added this session — `pnpm lint` (new ESLint 9 flat configs) and the OpenAPI staleness check
-(`pnpm api openapi:generate` + `git diff --exit-code`, which boots the real Nest container and so needs the
-Postgres/Redis service containers up at that step). Everything was verified locally on Windows; Linux CI is
-unproven. Watch line endings — `.prettierrc` now sets `endOfLine: auto` to suppress ~15,800 false CRLF
-errors on Windows, which should be inert on Linux.
+**Known-unverified, carried forward:** CI has still never run on Linux, and the branch is unpushed. The
+gates that have never run there are `pnpm lint` (ESLint 9 flat configs), the OpenAPI staleness check, and now
+the three INS-055 migrations replaying from scratch.
 
 - **🚧 React Native migration — design + scaffolding done, Phase 0 next (2026-08-26, [INS-086](future/BACKLOG.md)).**
   Approach A (shared logic core, UI per platform) is specified and the `.claude/` machinery to execute it

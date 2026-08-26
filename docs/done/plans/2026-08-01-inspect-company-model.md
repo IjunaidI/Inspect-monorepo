@@ -1,8 +1,14 @@
-# Unified Company Model (INS-055) — Implementation Plan
+# Unified Company Model (INS-055) — Implementation Plan  ✅ EXECUTED 2026-08-26
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended)
 > or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`)
 > syntax for tracking.
+>
+> **✅ EXECUTED 2026-08-26 — all 9 tasks shipped.** One correction the next reader should know: Tasks 4–7
+> (PO / Inspection / Report / guests) shipped as ONE commit, not four. Each denormalizes its parties from the
+> previous one, so the moment the PO stopped writing `buyerId` the whole chain went null — the split in this
+> document does not hold. A third migration was also needed: dropping a column does not drop the INS-014
+> trigger that guards it by name. See the INS-055 entry in [BACKLOG](../../future/BACKLOG.md).
 >
 > **Re-scoped 2026-08-26 — this document REPLACES the 10-phase plan authored 2026-08-01.** The repo-root
 > `CLAUDE.md` now carries a ⚠️ TEMPORARY pre-production policy: this project has no deployment and the

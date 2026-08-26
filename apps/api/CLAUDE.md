@@ -40,14 +40,16 @@ Opt out or scope with `@Public()`, `@Roles(min)`, `@CurrentUser()`.
 
 ## Finding a route's contract
 
-Controller (path, method, role floor) → service (input type, business rules) → the Prisma model. Note that
-service input types are currently declared locally and **redeclared again** in `apps/web/lib/api.ts` — that
-duplication is [INS-008](../../docs/future/BACKLOG.md), and `@inspect/shared-types` is where it is being
-resolved. Prefer the shared package for any new DTO.
+Controller (path, method, role floor) → service (input type, business rules) → the Prisma model. Wire types
+live in `@inspect/shared-types` and are **imported, never redeclared** ([INS-008](../../docs/future/BACKLOG.md)
+closed that duplication; `.claude/rules/wire-contract.md` is the rule). Any new DTO goes in the package.
+
+`openapi.json` is committed and is a **CI gate** — regenerate it with `pnpm api openapi:generate` whenever a
+route, its role floor or its shape changes, or the build fails on a stale contract.
 
 ## Schema
 
-`prisma/schema.prisma` is the **single canonical schema** (25 models, `orgId`-scoped). There is no mirror;
+`prisma/schema.prisma` is the **single canonical schema** (24 models, `orgId`-scoped). There is no mirror;
 do not create one.
 
 ## Testing convention

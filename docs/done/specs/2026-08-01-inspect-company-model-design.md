@@ -1,7 +1,19 @@
 # Inspect — Unified Company Model — Design
 
-> **Status:** 🟡 Designed 2026-08-01, **not approved** — §0 lists the decisions that need a human product
-> call before Phase 1 may start. No migration is authored by this document.
+> **Status:** ✅ **SHIPPED 2026-08-26.** All eight §0 decisions were confirmed with no override and the
+> model is live: `Company` is the only counterparty, `Buyer`/`Supplier`/`BuyerGuest` are dropped.
+>
+> **Two sections did NOT ship as written, and the difference is deliberate:**
+> §4.3 (hand-written `RENAME` migrations so live magic links survive) and §6 (the human-adjudicated dedupe)
+> were **deleted** — both existed only to preserve rows, and the pre-production data policy in the repo-root
+> `CLAUDE.md` made that constraint void. §6.6's partial CI unique index still landed. Everything that was a
+> decision about the *code* — §2's role model, §4.2's guest predicate, §5's canonical versioning — shipped
+> exactly as specified. §5's v1 guarantee is proven by a fixture the test builds rather than by surviving
+> rows. Two smaller staleness notes: §9's "no test runner exists on the web side" has been false since
+> INS-082, and its "company merge planner" unit test belonged to the deleted dedupe phase.
+>
+> Original header: *🟡 Designed 2026-08-01, not approved — §0 lists the decisions that need a human product
+> call before Phase 1 may start. No migration is authored by this document.*
 > Backlog: **[INS-055](../../future/BACKLOG.md)** (this effort). Sequenced **after**
 > [INS-008](../../future/BACKLOG.md) (see §8). Plan: `../plans/2026-08-01-inspect-company-model.md`.
 > Schema rationale + invariants: [../../reference/inspect-schema.md](../../reference/inspect-schema.md).
@@ -45,7 +57,7 @@ confirmed in writing."
 the override that would have invalidated them was not taken.
 
 Recorded during the React Native migration design session, where this epic was pulled **into Phase 0** of
-[the RN programme](2026-08-26-inspect-react-native-migration-design.md): Approach A freezes the
+[the RN programme](../../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md): Approach A freezes the
 Buyer/Supplier DTOs into `@inspect/shared-types` and `@inspect/api-client`, and a shipped app build cannot be
 force-updated the way a console is redeployed. Landing `Company` before that freeze means the contract the
 mobile client is built against is the final one, instead of needing an API compatibility window later.
