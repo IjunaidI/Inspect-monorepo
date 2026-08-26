@@ -1,15 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import type { AuditActorType as SharedAuditActorType } from '@inspect/shared-types';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { canonicalize } from '../tamper-proof/canonicalize';
 import { linkHash } from './audit-chain';
 
-export type AuditActorType =
-  | 'USER'
-  | 'PLATFORM_ADMIN'
-  | 'BUYER_GUEST'
-  | 'SYSTEM';
+/**
+ * Re-exported from `@inspect/shared-types` rather than redeclared (INS-008 /
+ * `.claude/rules/wire-contract.md`): the members are declared once, beside the
+ * other domain enums, and the local name is kept because ~15 call sites read it.
+ *
+ * INS-055 renamed the `BUYER_GUEST` member to `COMPANY_GUEST`. No code path has
+ * ever emitted it — `actorTypeFor` returns only USER, PLATFORM_ADMIN or SYSTEM —
+ * so no audit row can hold the old value.
+ */
+export type AuditActorType = SharedAuditActorType;
 
 export interface AuditAppendInput {
   orgId: string | null;
