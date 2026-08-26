@@ -29,9 +29,37 @@
 > (`db-invariants` 12/12 real, not vacuous) · `pnpm build` 3/3 · `prisma migrate diff` "No difference detected" ·
 > `openapi.json` regenerated (**`PLATFORM_ADMIN` is down to the 2 `/admin/orgs` operations** — exactly the
 > surface the mobile app excludes by design).
-> **Known-unverified, unchanged from the previous session:** CI has never run on Linux; the commits are
-> unpushed. Also note `pnpm test` at the root OOMs on this machine under Jest's parallel workers —
-> `jest --runInBand` is what was used throughout and exits 0 (relevant to [INS-085](future/BACKLOG.md)).
+> **Merged and closed out.** The work landed on `main` via `032e8ea` (no-ff merge of
+> `ins-055-company-model`, which is deleted). `main` is **9 commits ahead of `origin/main` and unpushed** —
+> that is the state the session was left in, not an oversight.
+>
+> **⚠️ NOT verified — the honest gaps, in the order they would bite:**
+> 1. **No manual console pass was performed.** Every claim above comes from automated suites. Nobody opened
+>    `pnpm dev` and clicked through the new Companies directory, the merged detail form, the two-party PO
+>    picker or the guests screen. The API surface is proven live by 147 integration tests; the *screens* are
+>    proven only by `tsc` + `next build` + the 32 Vitest tests, none of which render a page.
+> 2. **The dev database has no curated workspace.** All **104 orgs / 252 companies / 194 inspections** in it
+>    are integration-test fixtures (`E2E Org …`, `E2E Client …`) left by the suites; there is not one
+>    hand-made row. Anyone doing a manual pass must create an org + companies + PO first, or the console
+>    shows nothing but E2E noise.
+> 3. **CI has still never run on Linux.** Unproven there: `pnpm lint` (ESLint 9 flat configs), the OpenAPI
+>    staleness gate, and now the **three INS-055 migrations replaying from scratch** — including the ordering
+>    where migration B breaks the INS-014 triggers and migration C repairs them. That sequence is correct on
+>    this machine only because both were applied in order; a fresh replay is the thing to watch.
+> 4. **The PO party pickers do not actually rank by role.** `rankedFor()` in
+>    `purchase-orders/new/create-form.tsx` takes a `role` argument and ignores it, because `CompanyDto._count`
+>    is flattened across both edges and cannot separate them ([INS-087](future/BACKLOG.md)). Spec §0 P3 promised "rank by recently used in
+>    this role" as the replacement for capability flags; today both pickers sort by total PO count then name.
+>    Harmless, but it is a promise not kept — fixing it means exposing per-role counts on the DTO.
+>
+> **Environment gotchas that cost time this session** (all reproducible, none are code defects):
+> `pnpm` **9.15.9 is on PATH directly** — `npx -y pnpm@9.12.0` crashes with a V8 fatal error, and
+> `pnpm --filter @inspect/api exec jest` reports "Command jest not found"; use
+> `apps/api/node_modules/.bin/jest`. The **Prisma CLI needs the repo-root `.env` exported**
+> (`set -a && . ./.env && set +a`) — it does not read `../../.env` the way the API's `ConfigModule` does.
+> `prisma migrate reset` refuses to run for an AI agent without
+> `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=<the user's exact consent text>`, and **prior consent in the
+> conversation does not count** — it must be asked for each time.
 >
 > Prior entry: ** 2026-08-26 (RN migration designed + scaffolded; **Phase 0 substantially complete — 7 of 9
 > items closed**).** Approach A is specified ([INS-086](future/BACKLOG.md)) and Phase 0 — the hardening that makes
@@ -210,18 +238,30 @@ account. It gates EAS/app-store credentials, not the extraction, so Phase 1 does
 web **32 / 2**, integration **147 / 16 exit 0 with zero SKIP lines**, `pnpm type-check` 4/4, `pnpm lint` 0
 errors, `pnpm build` 3/3.
 
+**Four cheap things worth doing before Phase 1 — none is a blocker, all are quick:**
+1. **Click through the console once.** Nothing in INS-055 was manually verified; the screens changed a lot
+   (one Companies directory, a merged detail form, two-party PO pickers, the guests screen moved to
+   `/companies/:id/guests`). See the ⚠️ gaps in the header entry. The dev DB has **no curated workspace** —
+   all 104 orgs are `E2E Org …` fixtures — so create an org + two companies + a PO first, or the console
+   shows only test noise.
+2. **Push and let CI run.** 9 commits sit unpushed on `main`. Linux has never run `pnpm lint`, the OpenAPI
+   staleness gate, or the three INS-055 migrations replaying from scratch — and that replay is the one to
+   watch, because migration B breaks the INS-014 triggers and migration C repairs them.
+3. **Reseed or prune the dev DB** if you want a usable console. `prisma migrate reset` needs explicit,
+   per-invocation user consent (see the header entry).
+4. **Decide on the PO picker ranking** ([INS-087](future/BACKLOG.md)). `rankedFor()` ignores its `role` argument — spec §0 P3 promised
+   per-role ranking as the replacement for capability flags, and today it sorts by total PO count. Either
+   expose per-role counts on `CompanyDto._count` or drop the unused argument.
+
 **Two operational notes for whoever picks this up:**
-- **Run the API suites with `jest --runInBand`.** Root `pnpm test` OOMs under Jest's parallel workers on the
-  dev machine (`FATAL ERROR: Zone Allocation failed`) — this looks like the real cause of
-  [INS-085](future/BACKLOG.md)'s phantom Windows exit-134, which reproduced here as an OOM rather than a
-  teardown crash. In-band exits 0 every time.
+- **Run the API suites with `jest --runInBand`** (`apps/api/node_modules/.bin/jest`). Root `pnpm test` OOMs
+  under Jest's parallel workers on the dev machine (`FATAL ERROR: Zone Allocation failed`) — this looks like
+  the real cause of [INS-085](future/BACKLOG.md)'s phantom Windows exit-134, which reproduced here as an OOM
+  rather than a teardown crash. In-band exits 0 every time. Note `pnpm --filter @inspect/api exec jest`
+  reports "Command jest not found"; `pnpm` 9.15.9 is on PATH directly and `npx -y pnpm@9.12.0` crashes.
 - **Prisma CLI needs the repo-root `.env` exported** (`set -a && . ./.env && set +a`) — it does not read
   `../../.env` the way the API's `ConfigModule` does, and fails with `Environment variable not found:
   DATABASE_URL` otherwise.
-
-**Known-unverified, carried forward:** CI has still never run on Linux, and the branch is unpushed. The
-gates that have never run there are `pnpm lint` (ESLint 9 flat configs), the OpenAPI staleness check, and now
-the three INS-055 migrations replaying from scratch.
 
 - **🚧 React Native migration — design + scaffolding done, Phase 0 next (2026-08-26, [INS-086](future/BACKLOG.md)).**
   Approach A (shared logic core, UI per platform) is specified and the `.claude/` machinery to execute it
