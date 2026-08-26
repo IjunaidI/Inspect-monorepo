@@ -95,9 +95,10 @@
 >    column was an em-dash on every row, and **no catalog defect could be tagged at all** on the populate
 >    screen. Both are fixed — but populate is the screen Phase 3 ports to the phone, so anything still wrong
 >    there gets carried into the app. This is now the highest-value hour anyone can spend on this project.
-> 2. **The API has never run outside `localhost`** ([INS-090](future/BACKLOG.md)) — a deploy to a brand-new
->    production environment is under way as of 2026-08-27; the build-order blocker is fixed (`pnpm build:api`
->    / `pnpm build:web`), the rest of the deploy is not done. A phone cannot reach `localhost:3000`.
+> 2. **The API has never run outside `localhost`** ([INS-090](future/BACKLOG.md)) — a deploy to a **remote
+>    dev** environment is under way as of 2026-08-27 (there is still no production); the build-order blocker
+>    is fixed (`pnpm build:api` / `pnpm build:web`), the rest of the deploy is not. A phone cannot reach
+>    `localhost:3000`, so this is what gates Phase 2.
 > 3. **CI has still never run on Linux** — `pnpm lint`, the OpenAPI staleness gate, the three INS-055
 >    migrations replaying from scratch, and now `wire-contract.spec.ts`. **24 commits sit unpushed.**
 > 4. **The dev database has no curated workspace** — all 104 orgs are `E2E Org …` fixtures, so a manual pass
@@ -354,8 +355,10 @@ things nobody has done yet, three of which are not code.
 #### The mobile-readiness checklist, in dependency order
 
 **1. [INS-090](future/BACKLOG.md) — finish the deploy. `in-progress`, and the hard blocker.**
-A **brand-new production environment** exists and is being deployed to as of 2026-08-27. The first attempt hit
-the monorepo's build-order trap: `pnpm --filter @inspect/web build` builds **only** web, while the four shared
+A **remote dev environment** is being deployed to as of 2026-08-27 — **there is still no production
+anywhere**, and the database behind it is dev-only like the local one. It is nonetheless what unblocks Phase
+2, because a phone needs a reachable HTTPS origin and does not care that the environment is called dev. The
+first attempt hit the monorepo's build-order trap: `pnpm --filter @inspect/web build` builds **only** web, while the four shared
 packages ship `main: dist/index.js` with `dist/` gitignored — so in a clean Docker context they have never
 been built and the build dies on `Cannot find module '@inspect/shared-types'`. Turbo's
 `dependsOn: ["^build"]` is what normally orders that, and filtering one package bypasses turbo entirely.
@@ -364,12 +367,14 @@ been built and the build dies on `Cannot find module '@inspect/shared-types'`. T
 call those, never a bare `--filter <app> build`. Still to do: the container/Nixpacks config, `prisma migrate
 deploy` on release, and a reachable HTTPS origin. The full env + start contract is on the backlog item.
 
-**2. [INS-002](future/BACKLOG.md) — one part of this now matters for production.**
-Its scope has **narrowed**: because the prod environment is new and its secrets are generated fresh there,
-nothing in git history is being deployed, so this no longer gates the deploy. What remains is the old dev
-Railway project (rotate it or abandon it) — plus the one item that does carry forward: **mint a NEW Ed25519
-`REPORT_SIGNING_PRIVATE_KEY_PEM` for production.** A signing key is the tamper-proof guarantee; reusing one
-that has ever sat on a developer machine would let whoever holds it forge a valid report.
+**2. [INS-002](future/BACKLOG.md) — does NOT gate the deploy.**
+The target is a dev environment whose secrets are generated fresh there, so nothing from git history is being
+deployed. What remains is what always remained, and it is user-side: the old dev Railway credentials sit in
+git history unrotated — rotate that project or abandon it. **Mint a fresh Ed25519
+`REPORT_SIGNING_PRIVATE_KEY_PEM` for the remote environment anyway** (cheap, and it keeps dev-signed reports
+from ever being mistaken for trustworthy ones), and treat it as **mandatory** the day a real production
+environment appears: a signing key *is* the tamper-proof guarantee, so one that has sat on a developer
+machine would let whoever holds it forge a valid report.
 
 **3. Push, and let CI run. 24 commits sit unpushed.**
 Linux has never run `pnpm lint`, the OpenAPI staleness gate, the three INS-055 migrations replaying from

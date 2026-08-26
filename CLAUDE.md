@@ -8,20 +8,18 @@ runs an ISO 2859-1 / Z1.4 acceptance-sampling calc, a QA Manager makes the bindi
 per-buyer-branded PDF report is generated and **Ed25519-signed** so the buyer can verify it independently.
 MVP is **web-first** (admin/QA console + API); mobile camera capture is a deliberate Phase-2 follow-up.
 
-> ## ⚠️ SCOPED — the **dev scratch database** holds nothing of value. Production does.
+> ## ⚠️ TEMPORARY — pre-production: the databases hold nothing of value
 >
-> **As of 2026-08-27 a production environment exists and is being deployed to** ([INS-090](docs/future/BACKLOG.md)).
-> It is brand new and empty today, and it will hold real customer data. **Everything in this block applies
-> ONLY to the local/dev scratch database** — the one the repo-root `.env` points at.
+> **This project still has no production deployment.** There are now up to two environments, and **both are
+> dev**: the local stack (`docker-compose.dev.yml`) and a **remote dev environment** the API is being deployed
+> to ([INS-090](docs/future/BACKLOG.md)). Neither database holds anything important, and no decision should be
+> shaped by a wish to preserve either.
 >
-> **Never run any of it against production.** Before a destructive operation, check which `DATABASE_URL`
-> is actually loaded; if there is any doubt about which environment you are pointed at, stop and ask. A
-> `prisma migrate reset` is not recoverable, and the pre-production licence below was never a licence to
-> guess. Production migrations are `prisma migrate deploy` — forward-only, never `reset`, never a
-> clean-break migration that abandons rows.
+> One thing the remote environment does change: there is now **more than one database reachable from this
+> repo**. Before a destructive operation, check which `DATABASE_URL` is actually loaded — resetting the one
+> you did not mean to is now possible in a way it was not when everything was local.
 >
-> Against the **dev scratch database only**, no data is important and no decision should be shaped by a
-> wish to preserve it. There you do **not** need to weigh, hedge, or ask permission before:
+> Concretely, against either dev database you do **not** need to weigh, hedge, or ask permission before:
 > - dropping, recreating, truncating or reseeding any table;
 > - writing destructive or irreversible migrations — including the `Company` model's merge and
 >   table-drop phases ([INS-055](docs/future/BACKLOG.md) Phases 2 and 8);
@@ -37,9 +35,10 @@ MVP is **web-first** (admin/QA console + API); mobile camera capture is a delibe
 > frozen, verification must still pass) apply to reports the code produces *after* the change, even when
 > every historical row is thrown away.
 >
-> **Rewrite this block the moment production holds its first real customer data** — at that point the dev
-> licence above is the only part that should survive, and it should be stated as a property of one named
-> local database rather than of "the project".
+> **Remove this block before any real deployment or first real customer data.** When a production
+> environment appears, this licence must be restated as a property of the *named dev databases* rather than
+> of "the project", and production migrations become forward-only `prisma migrate deploy` — never `reset`,
+> never a clean-break migration that abandons rows.
 
 > **Start every session at [docs/STATUS.md](docs/STATUS.md)** — the source-of-truth dashboard. Open work is
 > [docs/future/BACKLOG.md](docs/future/BACKLOG.md) (`INS-NNN` ids). Requirements (frozen v1.0):
