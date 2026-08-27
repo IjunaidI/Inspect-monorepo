@@ -8,11 +8,15 @@ domain invariants in the repo-root `CLAUDE.md` are binding here — this file co
 `pnpm web dev` · `build` · `type-check`. Talks to the API at `INSPECT_API_URL`;
 falls back to demo data when the API is unreachable.
 
-> **Vitest since [INS-082](../../docs/future/BACKLOG.md)** — `pnpm web test` (32 tests across
-> `lib/api.test.ts` + `lib/roles.test.ts`), picked up by root `pnpm test`. It exists because `tsc` cannot
-> catch a behaviour change in `lib/api.ts`, which made it a blocking prerequisite for the shared-package
-> extraction. If one of those tests goes red during a refactor, it has found a real regression in the
-> role gate or `loadOrFallback`'s branch table — it is not a test to update.
+> **Vitest since [INS-082](../../docs/future/BACKLOG.md)** — `pnpm web test` (38 tests across
+> `lib/api.test.ts`, `lib/roles.test.ts` and `components/inspect/tokens.test.ts`), picked up by root
+> `pnpm test`. It exists because `tsc` cannot catch a behaviour change in `lib/api.ts`. **Its first 32 tests
+> were the acceptance instrument for the Phase 1 extraction and passed through it unchanged**; if one goes
+> red during a refactor it has found a real regression in the role gate or `loadOrFallback`'s branch table —
+> it is not a test to update.
+>
+> ⚠️ The config aliases `@inspect/*` to package **source**, so this suite cannot see a stale `dist` — and
+> equally cannot see a **missing** workspace dependency. `pnpm type-check` is the wiring gate, not this.
 
 ## Architecture
 
@@ -21,8 +25,11 @@ falls back to demo data when the API is unreachable.
 - **Reads are Server Components; writes are Server Actions.** The API bearer token stays server-side.
 - **Auth** — NextAuth Credentials (`lib/auth.ts`) POSTs to the API `/auth/login`, then GETs `/auth/me`. The
   API remains the canonical RBAC authority; UI role checks are convenience only.
-- **Data layer** — `lib/api.ts`: `apiGet`/`loadOrFallback` (live read with demo fallback),
-  `apiPost/Put/Patch/Delete` + `ApiError`, and unauthenticated `apiGetPublic`/`apiPostPublic`.
+- **Data layer** — HTTP lives in `@inspect/api-client` since [INS-086](../../docs/future/BACKLOG.md) Phase 1.
+  `lib/api.ts` is now the **Next adapter**: it builds the injected auth provider (one JWE decrypt yielding
+  both the bearer token and `X-Org-Id`), wraps the client as `apiGet`/`apiPost/Put/Patch/Delete`/
+  `apiGetPublic`/`apiPostPublic`, and keeps `loadOrFallback` — whose demo fallback and `/admin/orgs` redirect
+  are console-only. Wire types are aliases onto `@inspect/shared-types`; **declare no new DTO here.**
 - **The token lives only in the encrypted NextAuth cookie**, never on the session object
   ([INS-045](../../docs/future/BACKLOG.md)). `readSessionJwt()` detects the cookie name from the request
   because Auth.js derives the JWE salt from it — never assume the name, or the decrypt silently yields null.
@@ -47,6 +54,14 @@ Relevant when working alongside the mobile migration ([the design](../../docs/in
 | Tailwind classes, shadcn, Radix | No DOM |
 | `middleware.ts` | Edge-runtime routing |
 
-What **does** cross: the `Api*` types, `tokens.ts` values, `lib/roles.ts`, and the HTTP call sites — which is
-exactly what gets extracted into `@inspect/{shared-types,api-client,domain,design-tokens}`. When a rule moves
-into a shared package, **this app is re-pointed at it in the same change**. Never let mobile fork a copy.
+What **does** cross already lives in `@inspect/{shared-types,api-client,domain,design-tokens}` as of
+[INS-086](../../docs/future/BACKLOG.md) Phase 1: the wire DTOs, the palette and severity/role maps, the role
+hierarchy, and every HTTP call site **except** the login/refresh/me exchange in `lib/auth.ts`
+([INS-088](../../docs/future/BACKLOG.md), still open — it is edge-runtime coupled via `middleware.ts`).
+
+`components/inspect/tokens.ts` and `lib/roles.ts` still exist, but they now compose or re-export rather than
+own: `tokens.ts` adds only the Next font CSS variables and `mono` as `CSSProperties`; `roles.ts` keeps only
+`apiRoleToRoleKey`, which maps a role onto a badge key and is therefore presentation.
+
+When a rule moves into a shared package, **this app is re-pointed at it in the same change**. Never let
+mobile fork a copy.

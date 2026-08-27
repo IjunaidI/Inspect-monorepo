@@ -1,23 +1,28 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
+import {
+  createApiClient,
+  decodeJwtExp,
+  DEFAULT_ACCESS_TTL_MS,
+  type MeResult,
+  type RefreshedTokens,
+} from '@inspect/api-client';
 
 const API_URL = process.env.INSPECT_API_URL ?? 'http://localhost:3000';
 
-function decodeJwtExp(token: string): number | null {
-  try {
-    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(Buffer.from(b64, 'base64').toString()) as { exp?: number };
-    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
-  } catch {
-    return null;
-  }
-}
+/**
+ * A BARE client — no auth provider (INS-088).
+ *
+ * This is deliberately a second instance rather than the one in `lib/api.ts`.
+ * That one injects a provider built on `next/headers`, and **this module is
+ * pulled into the edge runtime by `middleware.ts`**, where `next/headers` is
+ * unavailable. A provider would also be useless here: login and refresh are
+ * what produce the credentials a provider would read.
+ */
+const client = createApiClient({ baseUrl: API_URL });
 
-export interface RefreshedApiTokens {
-  accessToken: string;
-  refreshToken: string;
-  accessTokenExpires: number;
-}
+/** Kept as an alias so existing imports of this name are untouched. */
+export type RefreshedApiTokens = RefreshedTokens;
 
 /**
  * Exchange a refresh token for a fresh API access token. Exported because the
@@ -26,28 +31,12 @@ export interface RefreshedApiTokens {
  * encrypted NextAuth JWT directly and must be able to renew an expired token
  * itself rather than relying on this module's `jwt` callback having run.
  * Returns null when the API rejects the refresh (caller decides the fallback).
- * Deliberately free of `next/headers` — middleware.ts imports this module and
- * runs on the edge runtime.
+ *
+ * INS-088: the exchange itself now lives in `@inspect/api-client`, so mobile
+ * uses the same one. This wrapper keeps the console's name for it.
  */
-export async function refreshApiAccessToken(refreshToken: unknown): Promise<RefreshedApiTokens | null> {
-  if (typeof refreshToken !== 'string' || !refreshToken) return null;
-  try {
-    const res = await fetch(`${API_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!res.ok) return null;
-    const issued = (await res.json()) as { accessToken?: string; refreshToken?: string };
-    if (!issued?.accessToken) return null;
-    return {
-      accessToken: issued.accessToken,
-      refreshToken: issued.refreshToken ?? refreshToken,
-      accessTokenExpires: decodeJwtExp(issued.accessToken) ?? (Date.now() + 15 * 60 * 1000),
-    };
-  } catch {
-    return null;
-  }
+export function refreshApiAccessToken(refreshToken: unknown): Promise<RefreshedApiTokens | null> {
+  return client.refresh(refreshToken);
 }
 
 async function refreshAccessToken(token: Record<string, unknown>) {
@@ -85,17 +74,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const password = credentials?.password as string | undefined;
         if (!email || !password) return null;
         try {
-          const res = await fetch(`${API_URL}/auth/login`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ email, password })
-          });
-          if (!res.ok) return null;
-          const { accessToken, refreshToken } = await res.json() as { accessToken: string; refreshToken: string };
-          const meRes = await fetch(`${API_URL}/auth/me`, {
-            headers: { Authorization: `Bearer ${accessToken}` }
-          });
-          const me = meRes.ok ? await meRes.json() as Record<string, unknown> : {};
+          const { accessToken, refreshToken } = await client.login(email, password);
+          // A failing /auth/me must NOT fail the login — the session still has
+          // a valid token pair, it just lands without role/org decoration.
+          const me: MeResult = await client.me(accessToken).catch(() => ({}));
           return {
             id: (me.userId as string) ?? email,
             email,
@@ -107,7 +89,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             // cross-tenant Platform Admin). Carried through so the console shell can
             // show it instead of falling through to the design-demo constant.
             orgName: (me.orgName as string | null) ?? null,
-            accessTokenExpires: decodeJwtExp(accessToken) ?? (Date.now() + 15 * 60 * 1000),
+            accessTokenExpires: decodeJwtExp(accessToken) ?? (Date.now() + DEFAULT_ACCESS_TTL_MS),
           } as never;
         } catch {
           return null;
@@ -127,7 +109,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           role: u.role,
           orgId: u.orgId,
           orgName: u.orgName ?? null,
-          accessTokenExpires: (u.accessTokenExpires as number | undefined) ?? (Date.now() + 15 * 60 * 1000),
+          accessTokenExpires: (u.accessTokenExpires as number | undefined) ?? (Date.now() + DEFAULT_ACCESS_TTL_MS),
           error: undefined,
         };
       }

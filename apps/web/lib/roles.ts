@@ -1,5 +1,18 @@
 import type { RoleKey } from '@/components/inspect/tokens';
-import type { InvitableRole } from '@inspect/shared-types';
+
+/**
+ * The console's role helpers (INS-086 Phase 1).
+ *
+ * The hierarchy check and the initials helper are platform-free and now live in
+ * `@inspect/domain`; they are re-exported here so the ~8 call sites that import
+ * from this module are untouched. `apiRoleAtLeast` keeps its name for the same
+ * reason.
+ *
+ * `apiRoleToRoleKey` stays: it maps an API role onto a BADGE key from the design
+ * tokens, which is presentation, not domain. Putting it in `@inspect/domain`
+ * would make the domain layer depend on the design layer.
+ */
+export { initialsFrom, roleAtLeast as apiRoleAtLeast } from '@inspect/domain';
 
 export function apiRoleToRoleKey(role?: string): RoleKey {
   switch (role) {
@@ -12,25 +25,4 @@ export function apiRoleToRoleKey(role?: string): RoleKey {
     default:
       return 'inspector';
   }
-}
-
-/** Two-letter initials from a name or email local-part. */
-export function initialsFrom(label: string): string {
-  const base = label.replace(/@.*/, '');
-  const parts = base.split(/[.\s_-]+/).filter(Boolean);
-  const a = parts[0]?.[0] ?? base[0] ?? '?';
-  const b = parts[1]?.[0] ?? '';
-  return (a + b).toUpperCase();
-}
-
-const API_ROLE_RANK: Record<string, number> = {
-  INSPECTOR: 1,
-  QA_MANAGER: 2,
-  ORG_OWNER: 3,
-  PLATFORM_ADMIN: 4,
-};
-
-/** Additive-hierarchy check on API role strings; unknown/missing role fails closed. */
-export function apiRoleAtLeast(role: string | undefined, min: InvitableRole): boolean {
-  return (API_ROLE_RANK[role ?? ''] ?? 0) >= API_ROLE_RANK[min];
 }

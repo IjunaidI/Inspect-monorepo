@@ -20,6 +20,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@inspect/domain':
+        specifier: workspace:^
+        version: link:../../packages/domain
       '@inspect/shared-types':
         specifier: workspace:^
         version: link:../../packages/shared-types
@@ -153,6 +156,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@inspect/api-client':
+        specifier: workspace:^
+        version: link:../../packages/api-client
+      '@inspect/design-tokens':
+        specifier: workspace:^
+        version: link:../../packages/design-tokens
+      '@inspect/domain':
+        specifier: workspace:^
+        version: link:../../packages/domain
       '@inspect/shared-types':
         specifier: workspace:^
         version: link:../../packages/shared-types
@@ -238,6 +250,24 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@20.17.6)(vite@8.2.2(@types/node@20.17.6)(jiti@1.21.7)(terser@5.47.1))
+
+  packages/api-client:
+    devDependencies:
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.19.19)(vite@8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1))
+
+  packages/design-tokens: {}
+
+  packages/domain:
+    dependencies:
+      '@inspect/shared-types':
+        specifier: workspace:^
+        version: link:../shared-types
+    devDependencies:
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.19.19)(vite@8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1))
 
   packages/shared-types: {}
 
@@ -7411,6 +7441,14 @@ snapshots:
     optionalDependencies:
       vite: 8.2.2(@types/node@20.17.6)(jiti@1.21.7)(terser@5.47.1)
 
+  '@vitest/mocker@4.1.11(vite@8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1))':
+    dependencies:
+      '@vitest/spy': 4.1.11
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1)
+
   '@vitest/pretty-format@4.1.11':
     dependencies:
       tinyrainbow: 3.1.1
@@ -11135,6 +11173,19 @@ snapshots:
       jiti: 1.21.7
       terser: 5.47.1
 
+  vite@8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1):
+    dependencies:
+      lightningcss: 1.33.0
+      picomatch: 4.0.7
+      postcss: 8.5.26
+      rolldown: 1.2.5
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 22.19.19
+      fsevents: 2.3.3
+      jiti: 2.7.0
+      terser: 5.47.1
+
   vitest@4.1.11(@types/node@20.17.6)(vite@8.2.2(@types/node@20.17.6)(jiti@1.21.7)(terser@5.47.1)):
     dependencies:
       '@vitest/expect': 4.1.11
@@ -11159,6 +11210,33 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 20.17.6
+    transitivePeerDependencies:
+      - msw
+
+  vitest@4.1.11(@types/node@22.19.19)(vite@8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1)):
+    dependencies:
+      '@vitest/expect': 4.1.11
+      '@vitest/mocker': 4.1.11(vite@8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1))
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/runner': 4.1.11
+      '@vitest/snapshot': 4.1.11
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
+      es-module-lexer: 2.1.0
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.4
+      pathe: 2.0.3
+      picomatch: 4.0.4
+      std-env: 4.2.0
+      tinybench: 2.9.0
+      tinyexec: 1.1.2
+      tinyglobby: 0.2.16
+      tinyrainbow: 3.1.1
+      vite: 8.2.2(@types/node@22.19.19)(jiti@2.7.0)(terser@5.47.1)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 22.19.19
     transitivePeerDependencies:
       - msw
 

@@ -5,9 +5,16 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
-> **Last updated: 2026-08-26** — ledger created. Nothing migrated yet; `apps/mobile` does not exist until
-> Phase 2. The capture row is **no longer blocked**: [INS-083](../future/BACKLOG.md) dropped populate to an
-> `INSPECTOR` floor with row-level scoping, so the app's headline screen is reachable by the role that will use it.
+> **Last updated: 2026-08-27** — routes corrected for [INS-055](../future/BACKLOG.md). The ledger was
+> written the same day the Company model shipped and still pointed at `/buyers/[id]`, `/suppliers/[id]` and
+> `GET /buyer-guests`, none of which exist; they are now `/companies/[id]`, `/companies/[id]/guests` and
+> `GET /company-guests`. Nothing is migrated yet; `apps/mobile` does not exist until Phase 2.
+> **Phase 1 is done** — `@inspect/{api-client,domain,design-tokens}` exist, so every row below now has a
+> shared client, shared tokens and a shared role gate to build against rather than reinventing them.
+> The capture row is **not blocked**: [INS-083](../future/BACKLOG.md) dropped populate to an `INSPECTOR`
+> floor with row-level scoping, so the app's headline screen is reachable by the role that will use it.
+> ⚠️ The `/login` row depends on [INS-088](../future/BACKLOG.md): the login/refresh/me exchange is still
+> hand-rolled in `apps/web/lib/auth.ts` rather than in `@inspect/api-client`.
 
 ## Status values
 
@@ -27,7 +34,7 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 | `/login` | `/login` | `POST /auth/login`, `GET /auth/me` | public | 2 | not-started | INS-086 |
 | `/inspections` | `/inspections` | `GET /inspections` | `INSPECTOR` | 2 | not-started | INS-086 |
 | `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*` | `INSPECTOR` ✅ | 3 | not-started | INS-086 |
-| `/dashboard` | `/dashboard` | `GET /dashboard/summary`, `GET /buyers`, `GET /suppliers` | `QA_MANAGER` | 4 | not-started | INS-086 |
+| `/dashboard` | `/dashboard` | `GET /dashboard/summary`, `GET /companies` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/[id]/review` | `/inspections/[id]/review` | `POST /inspections/:id/decision` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/[id]/report` | `/inspections/[id]/report` | `GET /reports/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
@@ -35,17 +42,22 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 | `/presets` | `/presets` | `GET /loop-presets` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/presets/[id]` | `/presets/[id]` | `GET /loop-presets/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/presets/new` | `/presets/new` | `POST /loop-presets`, `GET /defect-catalog` | `QA_MANAGER` | 4 | not-started | INS-086 |
-| `/buyers/[id]` | `/buyers/[id]` | `GET/PATCH /buyers/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
-| `/buyers/[id]/guests` | `/buyers/[id]/guests` | `GET/POST /buyer-guests` | `QA_MANAGER` | 4 | not-started | INS-086 |
-| `/suppliers/[id]` | `/suppliers/[id]` | `GET/PATCH /suppliers/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
+| `/companies/[id]` | `/companies/[id]` | `GET/PATCH /companies/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
+| `/companies/[id]/guests` | `/companies/[id]/guests` | `GET/POST /company-guests` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/products` `/products/new` `/products/[id]` | same | `GET/POST/PATCH /products` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/purchase-orders` `…/new` `…/[id]` | same | `GET/POST/PATCH /purchase-orders` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/users` | `/users` | `GET /users` (QA), `PATCH /users/:id/role` (owner) | `QA_MANAGER` / `ORG_OWNER` | 4 | not-started | INS-086 |
 | `/invite` | `/invite` | `GET/POST /invitations` | public | 4 | not-started | INS-086 |
 
-**Note on `/dashboard`:** the buyers and suppliers *directory* lives here as tabs (`directory-client.tsx`),
-not at `/buyers` or `/suppliers` — there are no list routes for those. On a phone this is very likely two
-separate screens rather than a tabbed desktop directory. Decide from the behaviour contract, not the URL.
+**Note on `/dashboard`:** the *company directory* lives here (`directory-client.tsx`), not at `/companies` —
+there is no list route. Since [INS-055](../future/BACKLOG.md) it is ONE list with a `kind` filter, not the
+old Buyers/Suppliers tab pair, because a company can be the client on one PO and the factory on another.
+On a phone this is very likely its own screen rather than a panel on the dashboard. Decide from the
+behaviour contract, not the URL.
+
+**Note on the guests screen:** guests attach to a company acting in its **client** role only — there is no
+factory-side portal. Report visibility keys on `clientCompanyId` AND `orgId`; a party-agnostic predicate
+would hand a factory's guest the client's signed report. That is a security boundary, not a filter.
 
 **Note on `/presets/new`:** the preset builder is the console's most complex authoring surface
 (loop items, severity-grouped defect chips, measurement fields, custom defect creation). Expect it to be the

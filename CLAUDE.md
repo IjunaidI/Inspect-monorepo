@@ -8,12 +8,18 @@ runs an ISO 2859-1 / Z1.4 acceptance-sampling calc, a QA Manager makes the bindi
 per-buyer-branded PDF report is generated and **Ed25519-signed** so the buyer can verify it independently.
 MVP is **web-first** (admin/QA console + API); mobile camera capture is a deliberate Phase-2 follow-up.
 
-> ## ⚠️ TEMPORARY — pre-production: the database holds nothing of value
+> ## ⚠️ TEMPORARY — pre-production: the databases hold nothing of value
 >
-> **This project is in development and has no production deployment.** The Railway database is a scratch
-> dev database. **No data in it is important**, and no decision should be shaped by a wish to preserve it.
+> **This project still has no production deployment.** There are now up to two environments, and **both are
+> dev**: the local stack (`docker-compose.dev.yml`) and a **remote dev environment** the API is being deployed
+> to ([INS-090](docs/future/BACKLOG.md)). Neither database holds anything important, and no decision should be
+> shaped by a wish to preserve either.
 >
-> Concretely, you do **not** need to weigh, hedge, or ask permission before:
+> One thing the remote environment does change: there is now **more than one database reachable from this
+> repo**. Before a destructive operation, check which `DATABASE_URL` is actually loaded — resetting the one
+> you did not mean to is now possible in a way it was not when everything was local.
+>
+> Concretely, against either dev database you do **not** need to weigh, hedge, or ask permission before:
 > - dropping, recreating, truncating or reseeding any table;
 > - writing destructive or irreversible migrations — including the `Company` model's merge and
 >   table-drop phases ([INS-055](docs/future/BACKLOG.md) Phases 2 and 8);
@@ -29,7 +35,10 @@ MVP is **web-first** (admin/QA console + API); mobile camera capture is a delibe
 > frozen, verification must still pass) apply to reports the code produces *after* the change, even when
 > every historical row is thrown away.
 >
-> **Remove this block before any real deployment or first real customer data.**
+> **Remove this block before any real deployment or first real customer data.** When a production
+> environment appears, this licence must be restated as a property of the *named dev databases* rather than
+> of "the project", and production migrations become forward-only `prisma migrate deploy` — never `reset`,
+> never a clean-break migration that abandons rows.
 
 > **Start every session at [docs/STATUS.md](docs/STATUS.md)** — the source-of-truth dashboard. Open work is
 > [docs/future/BACKLOG.md](docs/future/BACKLOG.md) (`INS-NNN` ids). Requirements (frozen v1.0):
@@ -43,13 +52,22 @@ single `pnpm install` at the root installs everything):
 
 - `apps/api/` — **NestJS 11 + Prisma 6** API (port **3000**, override via `API_PORT`). The RBAC authority + domain core.
 - `apps/web/` — **Next.js 15** App-Router console (port **3001**, hardcoded in its `dev`/`start` scripts). React 19, NextAuth v5, Tailwind, shadcn/ui.
-- `packages/shared-types/` — `@inspect/shared-types` (Zod contracts + enum unions). **Built but not yet wired into either app — see [INS-008](docs/future/BACKLOG.md).**
+- `packages/shared-types/` — `@inspect/shared-types`: the **wire contract** — enum unions, JSON-column
+  contracts, and every request/response DTO. Imported by both apps ([INS-008](docs/future/BACKLOG.md) done).
+- `packages/api-client/` — `@inspect/api-client`: one dependency-free `fetch` client, parameterised by base
+  URL and an **injected auth provider**. Owns HTTP, never auth — it must not read a cookie, `next/headers`
+  or `expo-secure-store`. See [`.claude/rules/wire-contract.md`](.claude/rules/wire-contract.md).
+- `packages/domain/` — `@inspect/domain`: platform-free rules with no I/O and no React. Holds the single
+  `ROLE_RANK` table that both the API's `RolesGuard` and the console read.
+- `packages/design-tokens/` — `@inspect/design-tokens`: the palette, font **stacks** and severity/role maps.
+  Deliberately free of CSS — `var(--font-sans)` and `CSSProperties` are composed in `apps/web`.
 
-Node ≥ 20, pnpm 9.12.0 (declared in root `package.json`).
+All four packages build to `dist/` and are consumed through it; `apps/web`'s Vitest aliases `@inspect/*` to
+package **source**, so a stale `dist` cannot fake a green suite. Node ≥ 20, pnpm 9.12.0 (root `package.json`).
 
-**Planned (React Native migration, [INS-086](docs/future/BACKLOG.md)) — do not assume these exist yet:**
-`apps/mobile/` (Expo, iOS + Android, arrives in Phase 2) and `packages/{api-client,domain,design-tokens}/`
-(extracted from `apps/web` in Phase 1). Design:
+**Planned (React Native migration, [INS-086](docs/future/BACKLOG.md)) — do not assume this exists yet:**
+`apps/mobile/` (Expo, iOS + Android, arrives in Phase 2). The three shared packages above landed in
+Phase 1 ([INS-086](docs/future/BACKLOG.md), 2026-08-27). Design:
 [docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md).
 Per-screen state lives in [docs/reference/screen-migration-map.md](docs/reference/screen-migration-map.md);
 the procedure is the `migrate-screen` skill.
@@ -62,12 +80,14 @@ Stack-specific conventions live next to the code and load on demand — [apps/ap
 project-root `CLAUDE.md` is re-injected after context compaction, and they are too important to silently
 drop out of a long session.
 
-> **Maturity reality (2026-07-11):** the pure domain core (AQL, tamper-proof crypto, audit-chain, auth
-> primitives) is unit-tested and solid (204 unit tests, verified 2026-08-01). The DB-bound surface — auth round-trip
+> **Maturity reality (2026-08-27):** the pure domain core (AQL, tamper-proof crypto, audit-chain, auth
+> primitives) is unit-tested and solid (656 unit tests across 42 suites). The DB-bound surface — auth round-trip
 > incl. refresh, CRUD create paths, the full inspection lifecycle, populate (incl. the S3 byte path), signed reports +
 > public verify — is **verified live**: the DB-backed integration suite (`pnpm api test:integration`) runs green against a
 > real Postgres/Redis, locally and in CI ([INS-001](docs/future/BACKLOG.md)/INS-009 closed). Update/delete paths
-> and several service internals still lack specs (INS-034/INS-007/INS-019/INS-021). See STATUS.md.
+> The integration suite reached **147/147** on 2026-08-27. Only [INS-034](docs/future/BACKLOG.md) (the `guest`
+> module's spec) remains of the old test-gap items. See STATUS.md — and note the console has **never been
+> exercised by hand**, which has already hidden two user-visible bugs.
 
 ## Common commands
 
@@ -75,15 +95,15 @@ Run from the **repo root** unless noted — Turbo fans tasks out across both app
 
 ### Root (Turbo)
 - `pnpm dev` — run API (`:3000`) + web (`:3001`) in watch mode together.
-- `pnpm build` — `nest build` + `next build` across the workspace.
-- `pnpm test` — runs each app's `test` (only `@inspect/api` has one: 204 Jest unit tests, no DB).
+- `pnpm build` — the four packages, then `nest build` + `next build` (6 tasks). **For a deploy use `pnpm build:api` / `pnpm build:web`** — see Gotchas.
+- `pnpm test` — `@inspect/api` (656 Jest unit tests, no DB), `@inspect/web` (38 Vitest), `@inspect/domain` (11), `@inspect/api-client` (29).
 - `pnpm type-check` — strict `tsc --noEmit` across both apps.
-- `pnpm lint` — **currently broken repo-wide** ([INS-048](docs/future/BACKLOG.md): ESLint 9 without a flat config; `next lint` deprecated). `pnpm format` — Prettier write.
+- `pnpm lint` — ESLint 9 flat configs for both apps, **a CI gate** ([INS-048](docs/future/BACKLOG.md) done; 0 errors, 1 known font warning). `pnpm format` — Prettier write.
 - `pnpm api <script>` / `pnpm web <script>` — shorthand for `pnpm --filter @inspect/api` / `@inspect/web`.
 
 ### API (`pnpm api <script>`, or `cd apps/api`)
 - `pnpm api dev` — `nest start --watch`. **Requires `DATABASE_URL` + `REDIS_URL`** or it throws on boot (see Gotchas).
-- `pnpm api test` — Jest unit tests (`src/**/*.spec.ts`, `testEnvironment: node`, **no DB**). 204 passing (2026-08-01).
+- `pnpm api test` — Jest unit tests (`src/**/*.spec.ts`, `testEnvironment: node`, **no DB**). 656 passing / 42 suites (2026-08-27). Use `node_modules/.bin/jest --runInBand` on Windows ([INS-085](docs/future/BACKLOG.md)).
 - `pnpm api test:integration` — DB-backed integration suite (`test/integration/`: negative RBAC matrix, token refresh, full core loop, tamper-evidence, byte upload). Needs a migrated+seeded `DATABASE_URL`+`REDIS_URL` (repo-root `.env` locally; service containers in CI — `.github/workflows/ci.yml`). The byte-upload spec self-skips when the configured `S3_ENDPOINT`/`S3_BUCKET` is unreachable or missing; `REQUIRE_STORAGE=1` (CI sets it) turns that skip into a hard failure.
 - `pnpm api prisma:migrate` — `prisma migrate dev` (apply/author migrations against `DATABASE_URL`).
 - `pnpm api prisma:generate` — regenerate the Prisma client (also runs on `postinstall`).
@@ -166,7 +186,8 @@ back them yet — tracked as [INS-010..INS-018](docs/future/BACKLOG.md)); when y
 - **The API won't boot without `DATABASE_URL` + `REDIS_URL`.** `CacheModule` throws `REDIS_URL is required`; Prisma needs `DATABASE_URL`. There is no dev-mode silent fallback — bring up `docker-compose.dev.yml` first.
 - **Verify DB-bound changes with the integration suite.** The core paths are proven live (INS-001 closed), but update/delete paths and service internals are thinner — run `pnpm api test:integration` (and extend it) rather than assuming "compiles" means "works." The bootstrap-admin password converges to `BOOTSTRAP_ADMIN_*` on every `prisma db seed` (by design — re-seed if login 401s after regenerating `.env`).
 - **One canonical schema.** `apps/api/prisma/schema.prisma` is the only Prisma schema. (The old root `LoopQC_schema.prisma` mirror was removed 2026-06-20 — don't recreate it.)
-- **`@inspect/shared-types` is built but unlinked** ([INS-008](docs/future/BACKLOG.md)) — both apps currently redeclare their own enums/DTOs, so the client/server contract can drift.
+- **Deploying? Use `pnpm build:api` / `pnpm build:web`, never `pnpm --filter <app> build`.** The four shared packages ship `main: dist/index.js` and `dist/` is gitignored, so in a clean checkout they have never been built. Turbo's `dependsOn: ["^build"]` orders that — but filtering a single package bypasses turbo, and the build dies on `Cannot find module '@inspect/shared-types'`. The root scripts wrap `--filter "@inspect/<app>..."`, where the trailing `...` means "and its dependencies".
+- **A shared package must be rebuilt before the API or `next build` sees a change** — they resolve `dist/`, and only `pnpm build`/`type-check` (which carry `dependsOn: ["^build"]`) rebuild it for you. `apps/web`'s Vitest is the exception: it aliases `@inspect/*` to `src`, which also means a **missing** workspace dependency still passes the web suite and only fails at `tsc`/`next build`. Trust type-check, not the suite, for wiring.
 - **Object storage is a managed S3-compatible bucket** (`S3_*` in the repo-root `.env`), verified live: presigned PUT/GET round-trip, private objects, permissive CORS. So the byte-upload spec now **runs** locally rather than skipping. CI still uses a MinIO container. Note managed endpoints answer `403` for *any* bucket name, so the suite's probe cannot prove a bucket exists there — a wrong `S3_BUCKET` surfaces as a failing presigned PUT, not a skip. Local `docker-compose.dev.yml` still requires Docker Desktop.
 - **Windows + pnpm:** if `pnpm` isn't on PATH, use `npx -y pnpm@9.12.0 <cmd>` or `apps/api/node_modules/.bin`. The API reads the **repo-root** `.env` (`../../.env`), not just `apps/api/.env`.
 

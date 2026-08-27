@@ -1,0 +1,22 @@
+{
+  "name": "@inspect/domain",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Platform-free Inspect domain rules (console, API, future mobile).",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "clean": "rimraf dist .turbo"
+  },
+  "dependencies": {
+    "@inspect/shared-types": "workspace:^"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
+}

@@ -59,7 +59,7 @@ export function CreateInspectionForm({ pos, presets, inspectors }: { pos: ApiPur
   }, [lotSize, aql]);
 
   if (pos.length === 0) {
-    return <div style={card}>No purchase orders yet. Create a buyer, supplier, product and PO first, then return here.</div>;
+    return <div style={card}>No purchase orders yet. Create two companies (the client and the factory), a product and a PO first, then return here.</div>;
   }
 
   return (

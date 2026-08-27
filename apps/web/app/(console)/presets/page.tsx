@@ -48,7 +48,7 @@ export default async function PresetsPage() {
     <div style={{ padding: '28px 32px' }}>
       <PageHead
         title="Loop Presets"
-        sub="Reusable inspection sequences. Attach to buyers or individual inspections."
+        sub="Reusable inspection sequences. Attach to a company as its default, or to an individual inspection."
         actions={<Btn kind="primary" icon={<Plus size={15} />} href="/presets/new">New Preset</Btn>}
       />
       <PresetsList presets={presets} live={live} />

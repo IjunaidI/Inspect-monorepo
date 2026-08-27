@@ -24,7 +24,7 @@ function formatInspectionType(type?: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** Supplier GPS is a JSON column — render "lat, lng" only when both keys exist. */
+/** Factory GPS is a JSON column — render "lat, lng" only when both keys exist. */
 function formatGps(gps: unknown): string | null {
   if (gps && typeof gps === 'object' && 'lat' in gps && 'lng' in gps) {
     const { lat, lng } = gps as { lat: unknown; lng: unknown };
@@ -104,7 +104,11 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
     tamperProof: report
       ? {
           contentHash: report.contentHash,
-          signedBy: report.generatedBy?.name,
+          // INS-089: nothing records WHO generated a report — Report has no
+          // generatedByUserId column. This read was `report.generatedBy?.name`,
+          // a field the API never sent, so the block has always shown '—'.
+          // Left explicit rather than silently undefined.
+          signedBy: null,
           signedAt: report.generatedAt,
         }
       : null,

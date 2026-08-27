@@ -104,7 +104,7 @@ export default async function InspectionsListPage({
               <input
                 name="q"
                 defaultValue={q ?? ''}
-                placeholder="Search PO, buyer, style…"
+                placeholder="Search PO, client, style…"
                 style={{ width: 280, height: 36, padding: '0 12px 0 36px', fontSize: 13, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
               />
             </form>

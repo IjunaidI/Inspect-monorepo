@@ -32,7 +32,7 @@ export default async function ReportsPage({
             <input
               name="q"
               defaultValue={q ?? ''}
-              placeholder="Search PO or buyer…"
+              placeholder="Search PO or client…"
               style={{ width: 280, height: 36, padding: '0 12px 0 36px', fontSize: 13, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 8, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
             />
           </form>
@@ -46,7 +46,7 @@ export default async function ReportsPage({
       ) : (
         <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '10px 20px', fontSize: 11, color: ui.sub, textTransform: 'uppercase', letterSpacing: 0.4, background: ui.fill, borderBottom: `1px solid ${ui.line}` }}>
-            <span>Report no.</span><span>PO</span><span>Buyer</span><span>Product</span><span>Generated</span><span>Verify</span><span>PDF</span>
+            <span>Report no.</span><span>PO</span><span>Client</span><span>Product</span><span>Generated</span><span>Verify</span><span>PDF</span>
           </div>
           {reports.map((r) => (
             <div key={r.id} style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${ui.lineSoft}` }}>
@@ -54,7 +54,7 @@ export default async function ReportsPage({
                 <Mono style={{ fontWeight: 600, color: ui.accent }}>IR-{r.id.slice(0, 8).toUpperCase()}</Mono>
               </Link>
               <Mono>{r.inspection?.purchaseOrder?.poNumber ?? '—'}</Mono>
-              <span>{r.buyer?.name ?? '—'}</span>
+              <span>{r.clientCompany?.name ?? '—'}</span>
               <span>{r.inspection?.product?.styleNumber ?? '—'}</span>
               <Mono style={{ color: ui.sub, fontSize: 12 }}>{r.generatedAt ? new Date(r.generatedAt).toISOString().slice(0, 10) : '—'}</Mono>
               {r.verificationToken ? (
