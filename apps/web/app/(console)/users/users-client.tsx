@@ -27,6 +27,11 @@ function initialsOf(name: string) {
 
 interface UserRow { id: string; initials: string; bg: string; name: string; email: string; role: RoleKey; apiRole: ApiUser['role']; status: StatusKey; last: string; you?: boolean }
 
+// Pinned locale (same as the dashboard's DATE_FMT): a bare toLocaleDateString()
+// differs between the server's locale and the browser's, which is a hydration
+// mismatch — the whole tree re-renders on the client.
+const DATE_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
 function mapUser(u: ApiUser, i: number): UserRow {
   return {
     id: u.id,
@@ -41,7 +46,7 @@ function mapUser(u: ApiUser, i: number): UserRow {
       : u.status === 'INVITED' ? 'invited'
       : u.status === 'SUSPENDED' ? 'suspended'
       : 'deactivated',
-    last: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : '—',
+    last: u.lastLoginAt ? DATE_FMT.format(new Date(u.lastLoginAt)) : '—',
   };
 }
 

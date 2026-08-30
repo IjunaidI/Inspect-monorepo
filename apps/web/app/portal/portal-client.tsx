@@ -236,7 +236,7 @@ export function PortalClient({
                   )}
                   {selected.pdfStorageKey ? (
                     <a
-                      href={`/api/reports/${selected.id}/pdf?token=${token}`}
+                      href={`/api/guest/reports/${encodeURIComponent(selected.id)}/pdf?token=${encodeURIComponent(token)}`}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 11px', borderRadius: 8, fontSize: 12.5, fontWeight: 550, border: `1px solid ${ui.line}`, background: '#fff', color: ui.ink, textDecoration: 'none' }}
                     >
                       <Download size={14} /> Download PDF

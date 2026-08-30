@@ -137,7 +137,7 @@ export function PresetsList({ presets: initial, live }: { presets: PresetRow[]; 
                 </>
               ) : (
                 <div style={{ fontSize: 12.5, color: ui.sub, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: ui.ink }}>{p.loopCount}</span> loops in this preset
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: ui.ink }}>{p.loopCount}</span> loop item{p.loopCount === 1 ? '' : 's'} · one image each
                 </div>
               )}
             </div>

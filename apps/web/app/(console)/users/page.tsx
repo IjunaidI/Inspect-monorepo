@@ -51,7 +51,7 @@ export default async function UsersPage({
         {([
           ['inspector', 'Populate & view their inspections'],
           ['qa', 'Inspector + make binding Pass / Fail / Hold'],
-          ['owner', 'QA + manage users, buyers, suppliers'],
+          ['owner', 'QA + manage users, companies, POs'],
         ] as [RoleKey, string][]).map(([r, desc]) => (
           <div key={r} style={{ flex: '1 1 240px', display: 'flex', gap: 10, alignItems: 'flex-start', padding: 14, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10 }}>
             <RoleBadge role={r} />

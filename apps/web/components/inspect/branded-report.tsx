@@ -27,7 +27,6 @@ export interface BrandedReportData {
     reportNo?: string | null;
     po: string;
     product: string;
-    sku?: string | null;
     factory: string;
     factoryLoc?: string | null;
     inspector?: string | null;
@@ -95,7 +94,6 @@ export function BrandedReport({
   const metaPairs: [string, string, boolean][] = [
     ['Purchase order', m.po, true],
     ['Product', m.product, false],
-    ['Style / SKU', m.sku ?? '—', true],
     ['Factory', [m.factory, m.factoryLoc].filter(Boolean).join(' · ') || '—', false],
     ['Inspector', m.inspector ?? '—', false],
     ['Inspection type', m.type, false],
@@ -286,7 +284,7 @@ export function BrandedReport({
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 10.5, color: ui.faint }}>Status</div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: ui.ink }}>Immutable · v1</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: ui.ink }}>Immutable</div>
           </div>
         </div>
         <div style={{ marginTop: 12, fontSize: 10.5, color: ui.faint, textAlign: 'center' }}>

@@ -319,7 +319,7 @@ export function PopulateWorkspace({
             </span>
           )}
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: ui.faint }}>
-            <Lock size={13} color={ui.faint} /> Upload limited to <RoleBadge role="platform" />
+            <Lock size={13} color={ui.faint} /> Upload requires <RoleBadge role="inspector" /> or above
           </span>
           <Btn
             kind="primary"

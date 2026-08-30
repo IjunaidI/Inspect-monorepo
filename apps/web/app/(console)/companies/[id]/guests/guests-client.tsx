@@ -21,6 +21,10 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// Pinned locale (same as the dashboard's DATE_FMT): a bare toLocaleDateString()
+// differs between the server's locale and the browser's — a hydration mismatch.
+const DATE_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
 const guestStatusStyle: Record<string, { label: string; fg: string; dot: string }> = {
   ACTIVE: { label: 'Active', fg: '#1F6B43', dot: '#1F8A4C' },
   SUSPENDED: { label: 'Revoked', fg: '#DC2626', dot: '#DC2626' },
@@ -40,13 +44,13 @@ function GuestRow({ guest, companyId }: { guest: ApiCompanyGuest; companyId: str
         </span>
       </td>
       <td style={{ padding: '12px 20px', fontSize: 12, color: expired ? '#DC2626' : ui.sub }}>
-        {expired ? 'Expired' : `Expires ${new Date(guest.tokenExpiresAt).toLocaleDateString()}`}
+        {expired ? 'Expired' : `Expires ${DATE_FMT.format(new Date(guest.tokenExpiresAt))}`}
       </td>
       <td style={{ padding: '12px 20px', fontSize: 12, color: ui.sub }}>
-        {guest.lastAccessAt ? new Date(guest.lastAccessAt).toLocaleDateString() : '—'}
+        {guest.lastAccessAt ? DATE_FMT.format(new Date(guest.lastAccessAt)) : '—'}
       </td>
       <td style={{ padding: '12px 20px', fontSize: 12, color: ui.faint }}>
-        {new Date(guest.createdAt).toLocaleDateString()}
+        {DATE_FMT.format(new Date(guest.createdAt))}
       </td>
       <td style={{ padding: '12px 20px', textAlign: 'right' }}>
         {/* No per-row magic-link copy: the list endpoint deliberately never returns

@@ -110,7 +110,7 @@ export default async function VerifyPage({
                   </div>
                 ))}
                 <div style={{ marginTop: 8, fontSize: 11.5, color: '#8A95A3', lineHeight: 1.5 }}>
-                  This verifies the signed JSON record. PDF byte verification available after INS-003 lands.
+                  This verifies the signed JSON record — the canonical, tamper-evident form of this report. The PDF is a rendering of it.
                 </div>
               </div>
             </div>
