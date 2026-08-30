@@ -1,6 +1,39 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-08-27 — [INS-086](future/BACKLOG.md) **Phase 1 SHIPPED, merged and pushed**.**
+> **Last verified: 2026-08-31 — [INS-086](future/BACKLOG.md) Phase 2 scaffold BUILT (`apps/mobile` exists) +
+> the [INS-090](future/BACKLOG.md) Dockerfiles fixed.** Landed on `main` via a no-ff merge of
+> `ins-086-phase2-mobile-scaffold` (3 commits: the Dockerfile fix, the scaffold, the docs).
+> **What landed:**
+> **(1) Both Dockerfiles were May-17 relics** that did exactly what `717c5d8` diagnosed — copied only the app,
+> never `packages/`, and built with a bare `--filter <app> build`. Rewritten to the verified contract:
+> copy `packages/`, FULL `pnpm install --frozen-lockfile` (the shared packages build with bare `tsc` resolved
+> from the ROOT devDependencies, so a filtered install leaves tsc missing), build via `pnpm build:api` /
+> `build:web`, openssl for Prisma on slim, and `.dockerignore` moved to the repo root where the root build
+> context actually reads it. Verified as far as this machine allows (all `packages/*/dist` deleted →
+> `pnpm build:api` green); **Docker is not installed here, so the image build is proven by the next deploy.**
+> **(2) `apps/mobile` scaffolded per the handoff** — Expo SDK 57 (current template), expo-router, RN 0.86,
+> `@inspect/mobile` in the workspace with all four shared packages. `/login` and `/inspections` (read-only
+> list) are written; `src/lib/session.ts` is the ONLY new auth code — a SecureStore `AuthProvider` with the
+> console's 60s refresh skew; the exchange, DTOs, tokens and role gate are all imports. `orgId` is always
+> null (D1). Ledger rows flipped to in-progress.
+> **(3) The spec §7 React footgun fired, as a TYPE break:** mobile's `@types/react` 19.2.18 won pnpm's
+> hidden hoist and broke the CONSOLE's type-check (lucide d.ts vs 19.0.0). Fixed the way the handoff
+> prescribed — **React pinned once at the root** (`pnpm.overrides`: react/react-dom 19.2.3, @types ~19.2.2);
+> web moved 19.0.0→19.2.3 and its 38-test acceptance suite passed UNCHANGED. The same hoist mechanism let
+> eslint-config-expo's `eslint-plugin-react-hooks@7` shadow the bare-name resolution web's FlatCompat uses
+> (3 phantom lint errors on untouched files); web now pins `eslint-plugin-react-hooks@5.2.0` locally, and
+> mobile's new code complies with the stricter v7 rule instead of suppressing it.
+> **(4) Toolchain findings Phase 2 existed to make:** SDK 57 runs under pnpm's ISOLATED installs — no
+> `nodeLinker: hoisted`, no hand-written `metro.config.js`; and Metro consumes the shared packages' CJS
+> `dist/` fine (plan decision D1 validated) — `expo export` bundles all five routes green.
+> **Verified:** type-check **11/11** · lint **3/3, 0 errors** (1 known font warning) · build **6/6** ·
+> web **38/3 UNCHANGED** · api unit **656/42** (`--runInBand`) · domain **11/2** · api-client **29/2** ·
+> `expo export` green. **NOT verified:** anything on a device — the EAS physical-device acceptance is still
+> blocked on [INS-090](future/BACKLOG.md) (no reachable origin); the integration suite was not re-run (no
+> API-side change); **CI has still never been read from this machine** (`gh` is unauthenticated — user-side);
+> and the manual console click-through remains undone and remains the highest-value hour available.
+>
+> Prior entry: **2026-08-27 — [INS-086](future/BACKLOG.md) **Phase 1 SHIPPED, merged and pushed**.**
 > Merged to `main` as `6ad5a41`; `main` is in sync with `origin/main`. **Ready for handoff: the next task is
 > Phase 2, scaffolding `apps/mobile` — see the HANDOFF block under Active work.** CI ran for the first time
 > on that push and **its result has not been read from this machine**; confirm it before building on top.
@@ -282,6 +315,10 @@
 > (multi-tenant B2B SaaS; web-first MVP, mobile deferred). Requirements: [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md).
 
 ## Tests
+- **Mobile: no test runner yet** (2026-08-31, [INS-086](future/BACKLOG.md) Phase 2 scaffold). Verified by
+  `pnpm type-check` (11 tasks now cover it), `pnpm lint` (expo flat config) and a green `expo export`
+  bundle — the same "tsc is the wiring gate" caveat as web applies. Add a runner with the first
+  behaviour-bearing screen (Phase 3's capture loop), not before.
 - **Web (Vitest, unit): 38 passing across 3 suites** (measured 2026-08-27 at [INS-086](future/BACKLOG.md)
   Phase 1 close). `apps/web/lib/roles.test.ts` (12), `apps/web/lib/api.test.ts` (20) and the new
   `apps/web/components/inspect/tokens.test.ts` (6). **The first 32 are the acceptance instrument for the
@@ -351,6 +388,13 @@
 ## Active work
 
 ### ▶️ HANDOFF — start here: [INS-086](future/BACKLOG.md) Phase 2, scaffold `apps/mobile`
+
+> **⚠️ Update 2026-08-31: the scaffold below is DONE** on branch `ins-086-phase2-mobile-scaffold` — steps 1–6
+> executed (with the React pin landing as `pnpm.overrides` after the footgun fired in types), the
+> `AuthProvider` + `/login` + `/inspections` written, the Dockerfiles fixed for [INS-090](future/BACKLOG.md).
+> **What Phase 2 still needs to close:** the [INS-090](future/BACKLOG.md) deploy to a reachable HTTPS origin
+> (user-side: run the Railway deploy against the rewritten Dockerfiles), an Expo/EAS account (user-side), and
+> the physical-device acceptance. The section is kept for its context; treat the steps as executed.
 
 **State on handoff (2026-08-27):** Phase 1 is merged (`6ad5a41`) and **pushed** — `main` is in sync with
 `origin/main`, working tree clean. Gates on the merged tree: api **656/42**, web **38/3**, domain **11/2**,

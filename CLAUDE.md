@@ -52,6 +52,11 @@ single `pnpm install` at the root installs everything):
 
 - `apps/api/` — **NestJS 11 + Prisma 6** API (port **3000**, override via `API_PORT`). The RBAC authority + domain core.
 - `apps/web/` — **Next.js 15** App-Router console (port **3001**, hardcoded in its `dev`/`start` scripts). React 19, NextAuth v5, Tailwind, shadcn/ui.
+- `apps/mobile/` — **Expo SDK 57** (expo-router, RN 0.86) field app ([INS-086](docs/future/BACKLOG.md) Phase 2,
+  scaffolded 2026-08-31). Auth lives in a SecureStore `AuthProvider` (`src/lib/session.ts`); everything else
+  is imported from the shared packages. No test runner yet — `type-check`/`lint` are its gates. **React is
+  pinned once at the root** (`pnpm.overrides`: 19.2.3) — do not add a second version anywhere in the
+  workspace. Rules: [.claude/rules/migration-discipline.md](.claude/rules/migration-discipline.md).
 - `packages/shared-types/` — `@inspect/shared-types`: the **wire contract** — enum unions, JSON-column
   contracts, and every request/response DTO. Imported by both apps ([INS-008](docs/future/BACKLOG.md) done).
 - `packages/api-client/` — `@inspect/api-client`: one dependency-free `fetch` client, parameterised by base
@@ -65,9 +70,9 @@ single `pnpm install` at the root installs everything):
 All four packages build to `dist/` and are consumed through it; `apps/web`'s Vitest aliases `@inspect/*` to
 package **source**, so a stale `dist` cannot fake a green suite. Node ≥ 20, pnpm 9.12.0 (root `package.json`).
 
-**Planned (React Native migration, [INS-086](docs/future/BACKLOG.md)) — do not assume this exists yet:**
-`apps/mobile/` (Expo, iOS + Android, arrives in Phase 2). The three shared packages above landed in
-Phase 1 ([INS-086](docs/future/BACKLOG.md), 2026-08-27). Design:
+**React Native migration ([INS-086](docs/future/BACKLOG.md)):** `apps/mobile` exists as of Phase 2
+(2026-08-31); its on-device acceptance is still blocked on [INS-090](docs/future/BACKLOG.md). The three
+shared packages above landed in Phase 1 ([INS-086](docs/future/BACKLOG.md), 2026-08-27). Design:
 [docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md).
 Per-screen state lives in [docs/reference/screen-migration-map.md](docs/reference/screen-migration-map.md);
 the procedure is the `migrate-screen` skill.

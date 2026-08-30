@@ -21,6 +21,14 @@
     "prettier": "^3.4.2",
     "typescript": "^5.7.2"
   },
+  "pnpm": {
+    "overrides": {
+      "react": "19.2.3",
+      "react-dom": "19.2.3",
+      "@types/react": "~19.2.2",
+      "@types/react-dom": "~19.2.2"
+    }
+  },
   "engines": {
     "node": ">=20.0.0"
   }

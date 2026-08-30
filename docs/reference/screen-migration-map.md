@@ -5,10 +5,13 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
-> **Last updated: 2026-08-27** — routes corrected for [INS-055](../future/BACKLOG.md). The ledger was
-> written the same day the Company model shipped and still pointed at `/buyers/[id]`, `/suppliers/[id]` and
-> `GET /buyer-guests`, none of which exist; they are now `/companies/[id]`, `/companies/[id]/guests` and
-> `GET /company-guests`. Nothing is migrated yet; `apps/mobile` does not exist until Phase 2.
+> **Last updated: 2026-08-31** — **`apps/mobile` exists** (Phase 2 scaffold: Expo SDK 57, expo-router,
+> `@inspect/mobile` in the workspace). `/login` and `/inspections` are written and verified by
+> type-check + lint + a green `expo export` bundle — but **not on a device**, so their rows stay
+> `in-progress` until the EAS acceptance runs against a reachable API ([INS-090](../future/BACKLOG.md)).
+> The auth provider is `apps/mobile/src/lib/session.ts` (SecureStore; the exchange itself stays in
+> `@inspect/api-client`). Prior update 2026-08-27: routes corrected for [INS-055](../future/BACKLOG.md)
+> (`/companies/[id]`, `/companies/[id]/guests`, `GET /company-guests`).
 > **Phase 1 is done** — `@inspect/{api-client,domain,design-tokens}` exist, so every row below now has a
 > shared client, shared tokens and a shared role gate to build against rather than reinventing them.
 > The capture row is **not blocked**: [INS-083](../future/BACKLOG.md) dropped populate to an `INSPECTOR`
@@ -36,8 +39,8 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 
 | Web route | RN route | Key API | Role floor | Phase | Status | Item |
 |---|---|---|---|---|---|---|
-| `/login` | `/login` | `POST /auth/login`, `GET /auth/me` | public | 2 | not-started | INS-086 |
-| `/inspections` | `/inspections` | `GET /inspections` | `INSPECTOR` | 2 | not-started | INS-086 |
+| `/login` | `/login` | `POST /auth/login`, `GET /auth/me` | public | 2 | in-progress (built 2026-08-31; device acceptance blocked on INS-090) | INS-086 |
+| `/inspections` | `/inspections` | `GET /inspections` | `INSPECTOR` | 2 | in-progress (built 2026-08-31; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*` | `INSPECTOR` ✅ | 3 | not-started | INS-086 |
 | `/dashboard` | `/dashboard` | `GET /dashboard/summary`, `GET /companies` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | not-started | INS-086 |
