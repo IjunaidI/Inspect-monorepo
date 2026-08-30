@@ -2,7 +2,9 @@
 
 > **Last verified: 2026-08-31 — [INS-086](future/BACKLOG.md) Phase 2 scaffold BUILT (`apps/mobile` exists) +
 > the [INS-090](future/BACKLOG.md) Dockerfiles fixed.** Landed on `main` via a no-ff merge of
-> `ins-086-phase2-mobile-scaffold` (3 commits: the Dockerfile fix, the scaffold, the docs).
+> `ins-086-phase2-mobile-scaffold` (3 commits: the Dockerfile fix, the scaffold, the docs) and **pushed** as
+> `45510d7` — `main` is in sync with `origin/main`, working tree clean, branch deleted. That push also
+> delivered the previously-unpushed handoff commit, so **CI now has fresh runs to read** (see the handoff).
 > **What landed:**
 > **(1) Both Dockerfiles were May-17 relics** that did exactly what `717c5d8` diagnosed — copied only the app,
 > never `packages/`, and built with a bare `--filter <app> build`. Rewritten to the verified contract:
@@ -383,18 +385,63 @@
 | Reports & verification | working-with-gaps | `reports.service` signed-report generation + **public `GET /reports/verify/:token` verified live** (2026-06-20 smoke). **2026-07-11 security review: the Ed25519-signed canonical now covers the defect list + evidence, quantity/carton verification, notes and decision attribution (INS-038 done — previously alterable under a valid signature), is jsonb-round-trip-normalized, and generate() is now idempotency-safe under concurrency (INS-043 done).** **All four gaps this row used to list are closed** — the PDF binary renders (INS-003), the service has a unit spec (INS-019), delivery sends (INS-020) and `canonicalSnapshot` is non-nullable (INS-046). **2026-08-27:** the canonical payload is versioned (v1 and v2 both verify `valid:true`) and read through the single `readCanonicalParties()`. Open: **nothing records WHO signed** — `Report` has no `generatedByUserId`, so the tamper-proof block shows '—' ([INS-089](future/BACKLOG.md)). | [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md) | [INS-089](future/BACKLOG.md) |
 | Guest portal | working-with-gaps | Magic-link guest **backend verified live** (2026-06-20 smoke). **Web portal wired (2026-06-28, INS-025)**: `/portal?token=TOKEN` reads the token server-side, fetches `GET /guest/reports?token=…` (unauthenticated), renders buyer-branded report list sidebar + `BrandedReport` detail panel; invalid/expired token shows an error card; "Verify" link → `/r/:verificationToken`; "Download PDF" enabled when `pdfStorageKey` set (INS-003 done — the PDF renders). | [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md) | — *(none open)* |
 | Web console | working-with-gaps | Next.js 15 console; all major screens wired: operator-loop spine (INS-026/027/028), inspections lifecycle (INS-023/017/032/033), loop presets builder (INS-024), workspace directory (2026-06-28), **guest portal + invite flow (2026-06-28, INS-025/029/030)**: `/portal` live token auth + buyer report list + branded report view; `/invite?token=…` accept form activates account + redirects to login; `/users` inline Invite form with copyable link; per-row role `<select>` live-patches role; Deactivate action via MoreVertical. Shell NAV has Products + Purchase Orders. Photo byte PUT gated on MinIO (INS-023 infra). **Write helpers (apiPost/Put/Patch/Delete) confirmed live + used across every server action → INS-022 done (2026-07-11).** **2026-07-25 (INS-079): Platform Admin now has a working console** — `/admin/orgs` (list, create-org-with-first-owner-invite, Enter workspace), an httpOnly cookie carrying the assumed org (`X-Org-Id` attached only in `apiGet`/`apiSend`), scope-aware nav, a non-dismissible "operating inside «Org»" banner, role-aware middleware routing, and a console `error.tsx` 403 safety net (no-org 403s now redirect server-side from `loadOrFallback` instead of crashing the render) — closing INS-078. **Every gap this row used to list is closed:** list counts (INS-031), PDF rendering (INS-003), the raw API JWT is no longer on the client-visible session (INS-045 — it stays in the encrypted NextAuth cookie), and the shell shows the real org name (INS-080). **2026-08-27 ([INS-086](future/BACKLOG.md) Phase 1):** one Companies directory replaces the Buyers/Suppliers tabs, `lib/api.ts` is a thin Next adapter over `@inspect/api-client`, and `tokens.ts`/`roles.ts` compose from shared packages. Two live bugs found and fixed by the wire-contract audit: the reports list's client column was an em-dash on every row, and **no catalog defect could be tagged at all** on populate. Open: [INS-087](future/BACKLOG.md) picker ranking — and **the console has still never been clicked through by a human**. | [done/specs/2026-06-06-inspect-mvp-requirements-design.md](done/specs/2026-06-06-inspect-mvp-requirements-design.md) | [INS-087](future/BACKLOG.md) |
-| Infra & CI | working-with-gaps | Stack **boots and drives the full loop green** against the Railway managed Postgres+Redis (2026-06-20, 25-step smoke; `/health` db+redis up); `.env.example` scrubbed (INS-002, live-cred rotation pending). **2026-07-11: 36-test integration suite green vs the live DB + GitHub Actions CI (containerized Postgres/Redis/MinIO) — INS-009 done; INS-001 closed.** **2026-08-27 ([INS-086](future/BACKLOG.md) Phase 1): the workspace is now FOUR packages** — `shared-types` (the whole wire contract, INS-008 closed), `api-client` (HTTP behind an injected auth provider), `domain` (the single `ROLE_RANK`), `design-tokens`. All build to `dist/`; `apps/web`'s Vitest aliases them to `src`. `pnpm build` 6 tasks, `type-check` 10, `lint` 0 errors. **The integration suite reached 147/147 on 2026-08-27** after Prisma's interactive-transaction timeout was raised from the 5s default to 15s (`P2028` was killing `submit()` at 5292ms against the remote DB); it had gone 129/147 then 146/147 before that. Still: local MinIO needs Docker; **CI has never run on Linux** and **Phase 1 is entirely unpushed** (merged to `main` as `6ad5a41`; 18 commits); and **the API is deployed nowhere** — no Dockerfile, no `railway.json`, no deploy workflow, which is the hard blocker for a phone ([INS-090](future/BACKLOG.md)). | [reference/inspect-build-index.md](reference/inspect-build-index.md) | [INS-002](future/BACKLOG.md), [INS-085](future/BACKLOG.md) |
+| Infra & CI | working-with-gaps | Stack **boots and drives the full loop green** against the Railway managed Postgres+Redis (2026-06-20, 25-step smoke; `/health` db+redis up); `.env.example` scrubbed (INS-002, live-cred rotation pending). **2026-07-11: 36-test integration suite green vs the live DB + GitHub Actions CI (containerized Postgres/Redis/MinIO) — INS-009 done; INS-001 closed.** **2026-08-27 ([INS-086](future/BACKLOG.md) Phase 1): the workspace is now FOUR packages** — `shared-types` (the whole wire contract, INS-008 closed), `api-client` (HTTP behind an injected auth provider), `domain` (the single `ROLE_RANK`), `design-tokens`. All build to `dist/`; `apps/web`'s Vitest aliases them to `src`. `pnpm build` 6 tasks, `type-check` 10, `lint` 0 errors. **The integration suite reached 147/147 on 2026-08-27** after Prisma's interactive-transaction timeout was raised from the 5s default to 15s (`P2028` was killing `submit()` at 5292ms against the remote DB); it had gone 129/147 then 146/147 before that. **2026-08-31 ([INS-086](future/BACKLOG.md) Phase 2): `apps/mobile` joined the workspace** (type-check 11 tasks, lint 3; no build task — Metro bundles at run time) and **both Dockerfiles were rewritten to the verified monorepo contract** (`pnpm build:api`/`build:web`, packages copied, root `.dockerignore`); React is pinned once at the root (`pnpm.overrides`: 19.2.3). Still: local MinIO needs Docker (and Docker is not installed on the dev machine, so the images are unproven until a deploy runs); **no CI result has ever been read** (`gh` unauthenticated; the 2026-08-31 push gave it fresh runs); and **the API still has no reachable origin** — the Dockerfiles are fixed but the Railway deploy has not run, which is the hard blocker for a phone ([INS-090](future/BACKLOG.md)). | [reference/inspect-build-index.md](reference/inspect-build-index.md) | [INS-002](future/BACKLOG.md), [INS-085](future/BACKLOG.md) |
 
 ## Active work
 
-### ▶️ HANDOFF — start here: [INS-086](future/BACKLOG.md) Phase 2, scaffold `apps/mobile`
+### ▶️ HANDOFF — start here: close [INS-086](future/BACKLOG.md) Phase 2 (deploy → device), then Phase 3
 
-> **⚠️ Update 2026-08-31: the scaffold below is DONE** on branch `ins-086-phase2-mobile-scaffold` — steps 1–6
-> executed (with the React pin landing as `pnpm.overrides` after the footgun fired in types), the
-> `AuthProvider` + `/login` + `/inspections` written, the Dockerfiles fixed for [INS-090](future/BACKLOG.md).
-> **What Phase 2 still needs to close:** the [INS-090](future/BACKLOG.md) deploy to a reachable HTTPS origin
-> (user-side: run the Railway deploy against the rewritten Dockerfiles), an Expo/EAS account (user-side), and
-> the physical-device acceptance. The section is kept for its context; treat the steps as executed.
+**State on handoff (2026-08-31):** the Phase 2 *scaffold* is merged (`45510d7`) and pushed — `main` in sync,
+tree clean. `apps/mobile` exists (SDK 57, `/login` + `/inspections` written, SecureStore `AuthProvider`,
+React pinned once at the root) and both Dockerfiles now follow the verified monorepo build contract. Gates
+on the merged tree: type-check **11/11** · lint **3/3, 0 errors** · build **6/6** · web **38/3** ·
+api **656/42** · domain **11/2** · api-client **29/2** · `expo export` green. What Phase 2 still lacks is
+everything that needs the outside world, in this order:
+
+1. **Read CI.** `gh` is unauthenticated on this machine (`gh auth login`, or set `GH_TOKEN`) — user-side.
+   The 2026-08-31 push gave CI its first runs since Phase 1 merged; nobody has ever read a result. Linux has
+   never executed `pnpm lint`, the OpenAPI staleness gate, the INS-055 migrations from scratch, or
+   `wire-contract.spec.ts` — and now also the mobile type-check/lint tasks and the React 19.2.3 pin.
+2. **Run the [INS-090](future/BACKLOG.md) deploy** (user-side: Railway account). The Dockerfiles are fixed —
+   point the API service at `apps/api/Dockerfile` with the **repo root as build context**; release step
+   `pnpm --filter @inspect/api exec prisma migrate deploy` (+ seed once); required env is listed at the
+   bottom of the Dockerfile (mint a **fresh Ed25519 signing key** for the environment, per INS-002). Accept:
+   `GET https://<host>/health` shows db+redis up from off the local network, and a login round-trip works
+   from a **phone browser** before any native code runs.
+3. **Device acceptance** (user-side: an Expo/EAS account). Point `EXPO_PUBLIC_INSPECT_API_URL` at the
+   deployed origin, EAS-build, and render the inspections list on a physical device — that is spec §6's
+   Phase 2 acceptance. Then flip the `/login` + `/inspections` ledger rows to `done` and mark Phase 2 closed
+   in [INS-086](future/BACKLOG.md). (The app can be *driven earlier* on a LAN address / simulator — useful,
+   but not the acceptance: it leaves TLS, CORS, cold starts and token lifetime over a slow link untested.)
+4. **Before Phase 3: click through the console once** (~1 hour, still never done, still the highest-value
+   hour on the project). Populate is the screen Phase 3 ports and it is where the catalog-defect bug hid.
+   Create an org + two companies + a product + a PO first — every org in the dev DB is an `E2E …` fixture.
+5. **Phase 3** — the capture loop (camera, offline photo queue) via the `migrate-screen` skill; the ledger
+   row is `/inspections/[id]/populate` → `/inspections/[id]/capture`. Add mobile's first test runner with
+   this phase, not before: the capture rules (slot 409 → retake, submit blocked while the queue is
+   non-empty, hash-at-capture) are exactly the behaviour a suite must pin.
+
+**Carry-forward constraints:** React is pinned once at the root (`pnpm.overrides` — never add a second
+version; the CI assertion from handoff step 4 is still unwritten). Web pins `eslint-plugin-react-hooks@5.2.0`
+locally because pnpm's `*eslint*` public-hoist lets whichever version wins shadow bare-name plugin
+resolution — remove that pin only by deliberately migrating web to the v7 rules. Mobile has no test runner;
+`type-check`/`lint`/`expo export` are its only gates.
+
+#### Operational notes (unchanged from 2026-08-27, all still true)
+
+- API suites: `apps/api/node_modules/.bin/jest --runInBand` (root `pnpm test` OOMs Jest's parallel workers).
+- Integration suite: ~14 min, needs the repo-root `.env` exported; re-run a failing suite in isolation
+  before blaming a change.
+- `pnpm install` runs `prisma generate` (EPERM while any node process holds the engine —
+  `--ignore-scripts` when the schema hasn't changed).
+- Shared packages must be **rebuilt** before the API/`next build`/Metro sees a change; only
+  `pnpm build`/`type-check` order that for you. Trust `type-check` for wiring, never a Vitest suite.
+
+### Prior handoff (2026-08-27, executed 2026-08-31) — Phase 2 scaffold steps
+
+> **⚠️ Executed 2026-08-31** — steps 1–6 done (the React pin landed as `pnpm.overrides` after the footgun
+> fired in types), the `AuthProvider` + `/login` + `/inspections` written, the Dockerfiles fixed for
+> [INS-090](future/BACKLOG.md). Kept for context; the surviving facts live in `apps/mobile/README.md`.
 
 **State on handoff (2026-08-27):** Phase 1 is merged (`6ad5a41`) and **pushed** — `main` is in sync with
 `origin/main`, working tree clean. Gates on the merged tree: api **656/42**, web **38/3**, domain **11/2**,
