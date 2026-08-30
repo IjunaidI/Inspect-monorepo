@@ -13,8 +13,13 @@
 > shared client, shared tokens and a shared role gate to build against rather than reinventing them.
 > The capture row is **not blocked**: [INS-083](../future/BACKLOG.md) dropped populate to an `INSPECTOR`
 > floor with row-level scoping, so the app's headline screen is reachable by the role that will use it.
-> ⚠️ The `/login` row depends on [INS-088](../future/BACKLOG.md): the login/refresh/me exchange is still
-> hand-rolled in `apps/web/lib/auth.ts` rather than in `@inspect/api-client`.
+> ✅ [INS-088](../future/BACKLOG.md) is **closed**, so the `/login` row is unblocked: `client.login()`,
+> `client.me(token)` and `client.refresh()` live in `@inspect/api-client` and `decodeJwtExp` is `Buffer`-free,
+> so it runs in a React Native bundle. Mobile supplies a SecureStore-backed `AuthProvider`, **not** the
+> exchange itself.
+>
+> ⚠️ Every row below is still blocked on [INS-090](../future/BACKLOG.md) for its *on-device* acceptance: the
+> API has no reachable origin yet, so a physical device cannot talk to it.
 
 ## Status values
 

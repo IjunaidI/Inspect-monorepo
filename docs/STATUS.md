@@ -1,6 +1,9 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-08-27 ([INS-086](future/BACKLOG.md) **Phase 1 SHIPPED** — the logic core is extracted).**
+> **Last verified: 2026-08-27 — [INS-086](future/BACKLOG.md) **Phase 1 SHIPPED, merged and pushed**.**
+> Merged to `main` as `6ad5a41`; `main` is in sync with `origin/main`. **Ready for handoff: the next task is
+> Phase 2, scaffolding `apps/mobile` — see the HANDOFF block under Active work.** CI ran for the first time
+> on that push and **its result has not been read from this machine**; confirm it before building on top.
 > `@inspect/{api-client,domain,design-tokens}` now exist alongside `shared-types`, and `apps/web` is
 > re-pointed at all three. The seam that matters is `createApiClient({ baseUrl, auth })`: HTTP no longer
 > reaches into `next/headers` / `next-auth/jwt` itself but receives an **injected auth provider**, so the
@@ -100,7 +103,9 @@
 >    is fixed (`pnpm build:api` / `pnpm build:web`), the rest of the deploy is not. A phone cannot reach
 >    `localhost:3000`, so this is what gates Phase 2.
 > 3. **CI has still never run on Linux** — `pnpm lint`, the OpenAPI staleness gate, the three INS-055
->    migrations replaying from scratch, and now `wire-contract.spec.ts`. **24 commits sit unpushed.**
+>    migrations replaying from scratch, and now `wire-contract.spec.ts`. **Phase 1 was pushed on 2026-08-27**
+>    (`main` in sync with `origin/main`), so CI has now had its first chance to run — **its result has not been
+>    read from this machine**, and confirming it green is the first thing to do.
 > 4. **The dev database has no curated workspace** — all 104 orgs are `E2E Org …` fixtures, so a manual pass
 >    needs an org + two companies + a product + a PO created first.
 > 5. **The PO party pickers still do not rank by role** ([INS-087](future/BACKLOG.md)).
@@ -345,77 +350,104 @@
 
 ## Active work
 
-### ▶️ NEXT SESSION STARTS HERE — the road to a mobile app
+### ▶️ HANDOFF — start here: [INS-086](future/BACKLOG.md) Phase 2, scaffold `apps/mobile`
 
-**Phase 1 is done.** `@inspect/{api-client,domain,design-tokens}` exist, both apps are re-pointed, and the
-console behaves identically. **The backlog is nearly empty** — 6 open items, one of them superseded and one
-the epic itself. What stands between here and a working app is therefore **not** feature work; it is four
-things nobody has done yet, three of which are not code.
+**State on handoff (2026-08-27):** Phase 1 is merged (`6ad5a41`) and **pushed** — `main` is in sync with
+`origin/main`, working tree clean. Gates on the merged tree: api **656/42**, web **38/3**, domain **11/2**,
+api-client **29/2**, integration **147/147**, type-check **10/10**, lint **0 errors**, build **6/6**.
+The backlog has **7 open items** and only two matter: the deploy and this epic.
 
-#### The mobile-readiness checklist, in dependency order
+#### The immediate task
 
-**1. [INS-090](future/BACKLOG.md) — finish the deploy. `in-progress`, and the hard blocker.**
-A **remote dev environment** is being deployed to as of 2026-08-27 — **there is still no production
-anywhere**, and the database behind it is dev-only like the local one. It is nonetheless what unblocks Phase
-2, because a phone needs a reachable HTTPS origin and does not care that the environment is called dev. The
-first attempt hit the monorepo's build-order trap: `pnpm --filter @inspect/web build` builds **only** web, while the four shared
-packages ship `main: dist/index.js` with `dist/` gitignored — so in a clean Docker context they have never
-been built and the build dies on `Cannot find module '@inspect/shared-types'`. Turbo's
-`dependsOn: ["^build"]` is what normally orders that, and filtering one package bypasses turbo entirely.
-**Fixed at the root:** `pnpm build:api` and `pnpm build:web` wrap `--filter "@inspect/<app>..."` — the trailing
-`...` means *and its dependencies* — both verified from a state with every `dist/` deleted. Deploy configs must
-call those, never a bare `--filter <app> build`. Still to do: the container/Nixpacks config, `prisma migrate
-deploy` on release, and a reachable HTTPS origin. The full env + start contract is on the backlog item.
+Create the Expo app, get auth working, render the inspections list. **Phase 2's acceptance (spec §6) is one
+read-only screen on a PHYSICAL DEVICE via EAS** — deliberately small, because the toolchain is where RN
+monorepo projects die and that is worth discovering with one screen at risk rather than twenty.
 
-**2. [INS-002](future/BACKLOG.md) — does NOT gate the deploy.**
-The target is a dev environment whose secrets are generated fresh there, so nothing from git history is being
-deployed. What remains is what always remained, and it is user-side: the old dev Railway credentials sit in
-git history unrotated — rotate that project or abandon it. **Mint a fresh Ed25519
-`REPORT_SIGNING_PRIVATE_KEY_PEM` for the remote environment anyway** (cheap, and it keeps dev-signed reports
-from ever being mistaken for trustworthy ones), and treat it as **mandatory** the day a real production
-environment appears: a signing key *is* the tamper-proof guarantee, so one that has sat on a developer
-machine would let whoever holds it forge a valid report.
+**Setup, verified against Expo's current monorepo guide (2026-08-27) — do NOT work from memory here, several
+of these changed recently:**
 
-**3. Push, and let CI run. All of Phase 1 is unpushed** (merged as `6ad5a41`, 18 commits).
-Linux has never run `pnpm lint`, the OpenAPI staleness gate, the three INS-055 migrations replaying from
-scratch (migration B breaks the INS-014 triggers and C repairs them — that ordering is only proven on this
-machine), or the new `wire-contract.spec.ts`. CI is also the honest read on integration stability, because it
-runs against containerized Postgres rather than the remote dev database.
+1. `pnpm create expo-app apps/mobile`. Name it `@inspect/mobile`, `private: true`. The root
+   `pnpm-workspace.yaml` already globs `apps/*`, so it joins the workspace with no config change.
+2. **Do not hand-write `metro.config.js`.** SDK 52+ configures Metro for monorepos automatically via
+   `expo/metro-config`. If a template ships `watchFolders`, `resolver.nodeModulesPath`,
+   `resolver.extraNodeModules` or `resolver.disableHierarchicalLookup`, **delete them** and
+   `npx expo start --clear`. Hand-rolled monorepo Metro config is now the bug, not the fix.
+3. **pnpm linking depends on the SDK version.** SDK **54+** supports pnpm's isolated installs directly. On
+   **SDK 53 or earlier**, add `nodeLinker: hoisted` to `pnpm-workspace.yaml` — and note that changes linking
+   for the whole workspace, so re-run every suite afterwards before assuming it was free.
+4. **Pin React once at the root** (spec §7's named footgun — a duplicate React in the workspace). Expo's doc
+   shows a `resolutions` block; pnpm's own mechanism is `pnpm.overrides`. **Check which the installed pnpm
+   honours rather than trusting either** — then have CI assert a single resolved React version.
+5. Add the workspace deps: `@inspect/{api-client,domain,design-tokens,shared-types}`, all `workspace:^`
+   (matching the existing convention — never a version range, or it may resolve a published package).
+6. Give it `type-check` and `lint` scripts so root `pnpm type-check` / `pnpm lint` cover it. Turbo picks them
+   up from the `apps/*` glob automatically.
 
-**4. Click through the console once. This is no longer a nicety.**
-Two sessions of automated green have now hidden two user-visible breakages that one pass would have caught in
-a minute: the reports list's client column was an em-dash on every row, and **no catalog defect could be
-tagged at all** on the populate screen. Both are fixed — but populate is precisely the screen Phase 3 ports to
-the phone, so anything still wrong there gets carried into the app. The dev DB has **no curated workspace**
-(all 104 orgs are `E2E Org …` fixtures), so create an org + two companies + a product + a PO first.
+#### What to write, and what NOT to
 
-#### Then Phase 2 itself
+**Write the `AuthProvider` — not the auth exchange.** The exchange already exists and is shared:
 
-Expo skeleton → auth → the inspections list on a real device. What is already in place for it:
+```ts
+client.login(email, password)  // -> { accessToken, refreshToken }
+client.me(accessToken)         // -> { userId, email, role, orgId, orgName }
+client.refresh(refreshToken)   // -> fresh pair + expiry, or null; never throws
+decodeJwtExp(token)            // Buffer-free, works in an RN bundle
+```
 
-- **The HTTP client is done, including auth.** `client.login()`, `client.me(token)` and `client.refresh()`
-  live in `@inspect/api-client` ([INS-088](future/BACKLOG.md) closed), and `decodeJwtExp` is `Buffer`-free so
-  it runs in a React Native bundle. **Phase 2 supplies the `AuthProvider`, not the exchange** — a
-  SecureStore-backed one, mirroring what `apps/web/lib/api.ts` does with the NextAuth cookie.
-- **The app can reach everything it needs.** `openapi.json` confirms the only `PLATFORM_ADMIN` operations
-  left in the entire API are `GET`/`POST /admin/orgs` — exactly the surface the app excludes by design — and
-  all 13 populate/catalog operations read `INSPECTOR`.
-- **The contract is frozen and now guarded.** `Company` with `clientCompanyId`/`factoryCompanyId` is final
-  (decision D5: a shipped app build cannot be force-updated), and `wire-contract.spec.ts` fails the build if a
-  DTO names a field the API does not send.
+Mirror `apps/web/lib/api.ts`'s `nextAuthContext()`: one function returning `{ token, orgId }`, backed by
+`expo-secure-store` instead of the NextAuth cookie. **`orgId` is always null on mobile** — org assumption is
+Platform-Admin-only and the app has no Platform Admin mode (decision D1). Then:
 
-Two things to decide with the code in front of you:
-- **Revisit `dist` packaging (plan decision D1).** All four packages build to `dist/` because `ts-jest` will
-  not transform TypeScript inside `node_modules`. Metro is the first consumer that would genuinely benefit
-  from source-as-entry, so weigh it here — but keep `@inspect/domain` on `dist`, since `apps/api` consumes it.
-- **Pin React once at the root** and have CI assert a single resolved version. A duplicate React in the
-  workspace is Expo's documented monorepo footgun (§7).
+```ts
+const client = createApiClient({ baseUrl: API_URL, auth: secureStoreAuthProvider });
+const inspections = await client.get<InspectionDto[]>('/inspections');
+```
 
-#### Not blocking, pick up when convenient
+**Import, do not re-create:** every wire DTO from `@inspect/shared-types`, `roleAtLeast` / `initialsFrom`
+from `@inspect/domain`, and `palette` / `severity` / `roles` / the font stacks from `@inspect/design-tokens`
+(compose them into `StyleSheet` the way `apps/web` composes them into CSS — the package is deliberately
+CSS-free). **Never import from `apps/web`,** and never add a second `fetch` call site.
 
-[INS-089](future/BACKLOG.md) record who signed a report (needs a schema change; the tamper-proof block shows
-'—' today) · [INS-087](future/BACKLOG.md) PO picker role ranking · [INS-034](future/BACKLOG.md) the `guest`
-module's missing spec · [INS-085](future/BACKLOG.md) the Windows Jest OOM (use `--runInBand`).
+**Permanently web-only — do not port, do not add mobile routes for:** `/admin/orgs`, `/portal`,
+`/r/[token]`. See `.claude/rules/migration-discipline.md`, which loads automatically for `apps/mobile/**`.
+
+#### The one real blocker
+
+[INS-090](future/BACKLOG.md) — **the API still has no reachable origin.** A deploy to a remote dev
+environment is in progress and the build-order blocker is fixed (`pnpm build:api`), but until it is done a
+physical device cannot reach the API, so Phase 2 cannot be *finished*. It can be *started*: point
+`INSPECT_API_URL` at the dev machine's LAN address and work on the simulator or a phone on the same wifi.
+Just do not mistake that for the acceptance — it leaves TLS, CORS, cold starts and token lifetime over a
+slow link untested, which is exactly what Phase 2 exists to flush out. **An Expo/EAS account is user-side**
+and needed for the device build.
+
+#### Do this before Phase 3, not after
+
+**Click through the console once.** Phase 3 ports populate to the phone, and populate is where the
+catalog-defect bug was hiding — every severity group rendered empty, so no catalog defect could be tagged at
+all. Porting a screen nobody has driven by hand carries its bugs into native, where they cost far more.
+Budget an hour, and create an org + two companies + a product + a PO first: all 104 orgs in the dev DB are
+`E2E Org …` fixtures.
+
+#### Decisions taken 2026-08-27 (do not re-litigate)
+
+- **The monorepo stays.** `wire-contract.spec.ts` only works because `schema.prisma` and the DTOs live in one
+  repo; the re-point rule (§4.4) is atomic only in one repo; and a shipped app build cannot be force-updated,
+  so contract drift is *more* expensive with mobile, not less. Revisit only if a separate team owns mobile.
+- **Graphify evaluated and deferred.** It is a code knowledge-graph/indexer, not a change tracker — the
+  parity job is already done, and enforced, by the screen ledger plus `wire-contract.spec.ts`. If adopted
+  later, gitignore its generated `graph.json` / `GRAPH_REPORT.md`: a committed snapshot is a new stale
+  artifact, which is the problem this session spent its time removing.
+- **Packaging stays `dist`-based** (plan decision D1). Metro consumes the CJS builds fine, so change nothing
+  up front; revisit source-as-entry only if it actually hurts, and keep `@inspect/domain` on `dist` because
+  `apps/api` consumes it through `ts-jest`.
+
+#### Also open, none of it blocking
+
+[INS-089](future/BACKLOG.md) record who signed a report (needs a schema change) ·
+[INS-002](future/BACKLOG.md) rotate the old dev credentials, and mint a fresh Ed25519 signing key ·
+[INS-087](future/BACKLOG.md) PO picker role ranking · [INS-034](future/BACKLOG.md) the `guest` module's spec ·
+[INS-085](future/BACKLOG.md) the Windows Jest OOM (use `--runInBand`).
 
 #### Operational notes for whoever picks this up
 
