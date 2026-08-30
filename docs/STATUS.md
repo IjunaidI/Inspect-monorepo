@@ -1,8 +1,8 @@
 # Project Status — Inspect
 
 > **Last verified: 2026-08-31 — [INS-086](future/BACKLOG.md) Phase 2 scaffold BUILT (`apps/mobile` exists) +
-> the [INS-090](future/BACKLOG.md) Dockerfiles fixed.** Work sits on branch `ins-086-phase2-mobile-scaffold`
-> (2 commits, unmerged); note `main` also carries one unpushed docs commit (`8b241aa`, the handoff itself).
+> the [INS-090](future/BACKLOG.md) Dockerfiles fixed.** Landed on `main` via a no-ff merge of
+> `ins-086-phase2-mobile-scaffold` (3 commits: the Dockerfile fix, the scaffold, the docs).
 > **What landed:**
 > **(1) Both Dockerfiles were May-17 relics** that did exactly what `717c5d8` diagnosed — copied only the app,
 > never `packages/`, and built with a bare `--filter <app> build`. Rewritten to the verified contract:
