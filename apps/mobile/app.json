@@ -33,7 +33,13 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Inspect uses the camera to capture inspection evidence photos."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

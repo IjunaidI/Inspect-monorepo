@@ -4,3 +4,9 @@
  */
 export { ROLE_RANK, roleAtLeast } from './roles';
 export { initialsFrom } from './text';
+export {
+  LOCKED_STATUSES,
+  SUBMITTABLE_STATUSES,
+  DECIDABLE_STATUSES,
+  isLockedStatus,
+} from './inspection-status';

@@ -78,6 +78,27 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Spec §7's named footgun (INS-086): a second React in the workspace
+      # breaks hooks at runtime and lets the wrong @types/react win type-checks.
+      # The root pnpm.overrides pins one version; this asserts the pin actually
+      # held across the whole linked tree (not the .pnpm store, which may keep
+      # orphaned dirs). Checks every workspace package at every depth.
+      - name: Exactly one React resolves
+        run: |
+          node -e "
+          const { execSync } = require('node:child_process');
+          const out = JSON.parse(execSync('pnpm ls -r react react-dom --depth Infinity --json', { maxBuffer: 64 * 1024 * 1024 }).toString());
+          const versions = { react: new Set(), 'react-dom': new Set() };
+          const walk = (deps) => { for (const [name, info] of Object.entries(deps ?? {})) { if (versions[name]) versions[name].add(info.version); walk(info.dependencies); } };
+          for (const pkg of out) { walk(pkg.dependencies); walk(pkg.devDependencies); }
+          let ok = true;
+          for (const [name, set] of Object.entries(versions)) {
+            console.log(name, '->', [...set].join(', ') || '(not found)');
+            if (set.size !== 1) ok = false;
+          }
+          if (!ok) { console.error('Expected exactly one resolved version of react and react-dom across the workspace — the root pnpm.overrides pin failed'); process.exit(1); }
+          "
+
       # MinIO needs a start command, so it can't be a GitHub service container.
       # REQUIRE_STORAGE=1 (above) makes the byte-path spec HARD-FAIL when storage
       # or the bucket is missing, so a MinIO failure fails the job either way;
@@ -129,6 +150,11 @@ jobs:
 
       - name: Unit tests (API)
         run: pnpm --filter @inspect/api test
+
+      # The Vitest suites (web 38, domain, api-client, mobile capture-core)
+      # were never run by CI before 2026-08-31 — only the API's Jest suite was.
+      - name: Unit tests (web, packages, mobile)
+        run: pnpm exec turbo run test --filter=!@inspect/api
 
       - name: Integration tests (API)
         run: pnpm --filter @inspect/api test:integration

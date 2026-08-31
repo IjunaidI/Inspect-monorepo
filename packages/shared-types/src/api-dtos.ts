@@ -193,6 +193,12 @@ export interface AqlPreviewDto {
 }
 
 // ── Populate API shapes ──
+/** Body of POST /inspections/:id/populate/photos/presign. */
+export interface PresignInput {
+  /** File extension for the storage key (default 'jpg'). */
+  ext?: string;
+}
+
 export interface PresignResultDto {
   storageKey: string;
   uploadUrl: string;

@@ -12,13 +12,12 @@ import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
 import { cycleState } from '../inspections/cycle-state';
-import type { DefectSeverity } from '@inspect/shared-types';
+import type { DefectSeverity, PresignInput } from '@inspect/shared-types';
+import { LOCKED_STATUSES } from '@inspect/domain';
 
 type Severity = DefectSeverity;
 
-export interface PresignInput {
-  ext?: string;
-}
+export type { PresignInput } from '@inspect/shared-types';
 export interface RegisterPhotoInput {
   storageKey: string;
   contentHash: string;
@@ -60,15 +59,11 @@ export interface AddMeasurementInput {
 }
 
 // Once submitted, an inspection is immutable (spec §9); corrections require a
-// new re-inspection. Populate is only allowed before submission.
-const LOCKED = new Set([
-  'SUBMITTED',
-  'UNDER_REVIEW',
-  'APPROVED',
-  'REPORT_ISSUED',
-  'REJECTED',
-  'HOLD',
-]);
+// new re-inspection. Populate is only allowed before submission. The set is
+// declared ONCE in @inspect/domain (INS-086 Phase 3) so the mobile capture
+// screen renders a locked inspection read-only from the same rule this guard
+// enforces.
+const LOCKED = new Set<string>(LOCKED_STATUSES);
 
 @Injectable()
 export class PopulateService {

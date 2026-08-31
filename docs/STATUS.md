@@ -1,6 +1,37 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-08-31 (second session) — the console CLICK-THROUGH finally happened** (handoff step 4;
+> **Last verified: 2026-08-31 (third session) — [INS-086](future/BACKLOG.md) Phase 3 BUILT: the capture
+> loop exists at `apps/mobile` `/inspections/[id]/capture`.** A full-screen guided camera (expo-camera)
+> shows one slot at a time; capture hashes the bytes on-device (expo-crypto sha256) BEFORE anything else
+> touches them, stashes them app-private (expo-file-system's new File API) and enqueues; the offline queue
+> (spec §5.1) drains presign→PUT→register with a `clientRequestId` minted once and stable across retries;
+> a 409 on a filled slot becomes a retained `conflict` a human resolves (keep-mine-as-retake via the
+> retake endpoint, or discard-mine) — never a silent drop; and **submit is blocked while the queue is
+> non-empty**. Defect tags (catalog grouped by `defaultSeverity` + custom, gated on the slot's server
+> photo exactly like the API), per-unit measurements (save-on-blur, upsert-idempotent), discard-unit, the
+> end-loop gate naming the incomplete unit and its missing items, and a **read-only locked state the web
+> screen never had** (from the new shared rule) are all in. **Decisions live in the pure
+> `src/lib/capture-core.ts`, and mobile's FIRST test runner exists: Vitest, 15 tests** pinning exactly the
+> rules the prior handoff named — hash-at-capture required, conflict-never-drop, stable clientRequestId,
+> and the queue/partial/no-complete submit gate. **Re-pointed in the same change (§4.4):** the
+> LOCKED/SUBMITTABLE/DECIDABLE status-transition sets moved to `@inspect/domain`
+> (`inspection-status.ts`, +4 tests → domain 15/3) with both API services importing them, and
+> `PresignInput` moved to `@inspect/shared-types` (wire-contract guard allowlisted, mutation-proven — it
+> failed until listed). **CI grew two teeth:** the spec §7 single-resolved-React assertion (checks the
+> linked tree via `pnpm ls -r --json`, not the `.pnpm` store, which keeps orphaned pre-pin dirs locally),
+> and a step running the web/domain/api-client/mobile Vitest suites — **CI had only ever run the API's
+> Jest suite; the 38 web tests had never run on Linux**. Deviation recorded: TanStack Query (spec §5) is
+> deliberately not introduced yet — Phase 2/3 screens use the established plain-state pattern, and the
+> queue has its own persistence; adopt when a screen actually needs caching. Also: `railway` CLI installed
+> but unauthenticated (`railway login` is the one remaining user-side step for INS-090); **`eas` IS
+> authenticated** (donanlumina), so step 3 is one command once an origin exists.
+> **Verified:** type-check **11/11** · lint **0 errors** · api unit **656/42** (wire-contract guard
+> extended) · web **38/3** · domain **15/3** · api-client **29/2** · **mobile 15/1 (new)** ·
+> `expo export` green, **6 routes** incl. `/inspections/[id]/capture`. **NOT verified:** anything on a
+> device (still INS-090); the integration suite was not re-run locally (the API change is a
+> constant-for-constant re-point; CI's containerized run covers it on push).
+>
+> Prior entry: **2026-08-31 (second session) — the console CLICK-THROUGH finally happened** (handoff step 4;
 > a real Chrome driven end-to-end against the live stack — every screen rendered and every write real, though
 > a human hands-on pass on a touch device is still worth an hour before Phase 3 freezes the UX). The full loop
 > ran green in the browser for the first time: admin login → org created (**Acme Apparel Group** — the dev DB
@@ -459,10 +490,12 @@ everything that needs the outside world, in this order:
    product `ACM-2026-TEE-CLASSIC`, PO-2026-ACM-0001, a 3-item preset, and one full APPROVED inspection with
    a signed, publicly-verified report. A human hands-on pass (touch, feel, judgment) is still worth an hour,
    but it no longer gates Phase 3; the two populate observations in the top entry do feed the Phase 3 port.
-5. **Phase 3** — the capture loop (camera, offline photo queue) via the `migrate-screen` skill; the ledger
-   row is `/inspections/[id]/populate` → `/inspections/[id]/capture`. Add mobile's first test runner with
-   this phase, not before: the capture rules (slot 409 → retake, submit blocked while the queue is
-   non-empty, hash-at-capture) are exactly the behaviour a suite must pin.
+5. **Phase 3** — ✅ **built 2026-08-31** (third session, via the `migrate-screen` skill): the capture loop
+   exists with the offline queue, and mobile's first test runner (Vitest, 15 tests over the pure
+   `capture-core.ts`) pins exactly the named rules — slot 409 → retained conflict, submit blocked while
+   the queue is non-empty, hash-at-capture. See the top entry. **Phase 3's own acceptance (spec §6 — an
+   inspector completes a multi-cycle inspection on a phone, offline for part of it, and submits) still
+   needs the deploy**, so steps 2–3 above now gate BOTH phases' on-device acceptance.
 
 **Carry-forward constraints:** React is pinned once at the root (`pnpm.overrides` — never add a second
 version; the CI assertion from handoff step 4 is still unwritten). Web pins `eslint-plugin-react-hooks@5.2.0`

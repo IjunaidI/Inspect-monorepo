@@ -1,4 +1,5 @@
 import type { DefectSeverity } from '@inspect/shared-types';
+import { DECIDABLE_STATUSES, SUBMITTABLE_STATUSES } from '@inspect/domain';
 import {
   BadRequestException,
   Injectable,
@@ -47,8 +48,10 @@ export interface UpdateInspectionInput {
   lotSize?: number;
 }
 
-const SUBMITTABLE = new Set(['DRAFT', 'ASSIGNED', 'IN_PROGRESS']);
-const DECIDABLE = new Set(['SUBMITTED', 'UNDER_REVIEW', 'HOLD']);
+// Declared once in @inspect/domain (INS-086 Phase 3) — shared with the mobile
+// capture screen so both platforms and this guard read one transition table.
+const SUBMITTABLE = new Set<string>(SUBMITTABLE_STATUSES);
+const DECIDABLE = new Set<string>(DECIDABLE_STATUSES);
 
 @Injectable()
 export class InspectionsService {

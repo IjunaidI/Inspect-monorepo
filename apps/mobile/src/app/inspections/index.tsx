@@ -142,7 +142,13 @@ export default function Inspections() {
           )
         }
         renderItem={({ item }) => (
-          <View style={styles.row}>
+          // Every row opens capture — a locked inspection renders there
+          // read-only (the screen owns that state), mirroring the API's
+          // "viewable after submit" behaviour.
+          <Pressable
+            style={styles.row}
+            onPress={() => router.push(`/inspections/${item.id}/capture`)}
+          >
             <View style={styles.rowTop}>
               <Text style={styles.po} numberOfLines={1}>
                 {item.purchaseOrder?.poNumber ?? '—'}
@@ -157,7 +163,7 @@ export default function Inspections() {
               {(item.inspectionType ?? '').replace(/_/g, ' ')}
               {item.createdAt ? `  ·  ${new Date(item.createdAt).toLocaleDateString()}` : ''}
             </Text>
-          </View>
+          </Pressable>
         )}
       />
     </SafeAreaView>

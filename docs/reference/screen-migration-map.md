@@ -5,7 +5,15 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
-> **Last updated: 2026-08-31** — **`apps/mobile` exists** (Phase 2 scaffold: Expo SDK 57, expo-router,
+> **Last updated: 2026-08-31 (Phase 3)** — **the capture screen exists**: `/inspections/[id]/capture`
+> (guided full-screen camera, one slot at a time) with the spec §5.1 offline photo queue —
+> hash-at-capture, presign→PUT→register drain with a stable `clientRequestId`, 409→conflict for a human,
+> submit blocked while the queue is non-empty — plus a read-only locked state the web screen never had.
+> Decisions live in the pure `src/lib/capture-core.ts`; **mobile's first test runner is Vitest (15 tests)
+> over exactly that module.** The LOCKED/SUBMITTABLE/DECIDABLE status sets moved to `@inspect/domain` with
+> the API re-pointed in the same change. Verified by type-check + lint + tests + a green `expo export`
+> (6 routes) — **not on a device** ([INS-090](../future/BACKLOG.md)).
+> Prior update (Phase 2 scaffold): `apps/mobile` exists (Expo SDK 57, expo-router,
 > `@inspect/mobile` in the workspace). `/login` and `/inspections` are written and verified by
 > type-check + lint + a green `expo export` bundle — but **not on a device**, so their rows stay
 > `in-progress` until the EAS acceptance runs against a reachable API ([INS-090](../future/BACKLOG.md)).
@@ -41,7 +49,7 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 |---|---|---|---|---|---|---|
 | `/login` | `/login` | `POST /auth/login`, `GET /auth/me` | public | 2 | in-progress (built 2026-08-31; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections` | `/inspections` | `GET /inspections` | `INSPECTOR` | 2 | in-progress (built 2026-08-31; device acceptance blocked on INS-090) | INS-086 |
-| `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*` | `INSPECTOR` ✅ | 3 | not-started | INS-086 |
+| `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*`, `POST /inspections/:id/submit` | `INSPECTOR` ✅ | 3 | in-progress (built 2026-08-31: guided camera + offline queue + submit gate; device acceptance blocked on INS-090) | INS-086 |
 | `/dashboard` | `/dashboard` | `GET /dashboard/summary`, `GET /companies` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/[id]/review` | `/inspections/[id]/review` | `POST /inspections/:id/decision` | `QA_MANAGER` | 4 | not-started | INS-086 |
