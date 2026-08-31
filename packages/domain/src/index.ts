@@ -8,5 +8,7 @@ export {
   LOCKED_STATUSES,
   SUBMITTABLE_STATUSES,
   DECIDABLE_STATUSES,
+  REPORTABLE_STATUSES,
+  REINSPECTABLE_STATUSES,
   isLockedStatus,
 } from './inspection-status';

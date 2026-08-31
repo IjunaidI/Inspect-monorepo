@@ -1,6 +1,25 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-08-31 (third session) — [INS-086](future/BACKLOG.md) Phase 3 BUILT: the capture
+> **Last verified: 2026-08-31 (third session, continued) — Phase 4 began: the MOBILE CORE LOOP IS
+> CLOSED.** Two more screens ported via the `migrate-screen` procedure: **`/inspections/new`** (QA
+> creates — PO/preset/inspector modal pickers, live 300ms-debounced AQL preview, idempotent create with a
+> per-mount `clientRequestId`, then straight to review; deliberately better than the web contract's own
+> gap list — real initial loading state, real error+retry instead of catch-to-empty, pre-submit gating)
+> and **`/inspections/[id]/review`** (AQL result per class, submit-for-review, the QA decision form with
+> its required note, 403-vs-404 told apart, linked re-inspection carrying the original AQL plan via
+> `supersedesInspectionId`). Capture's submit now lands on review, so an inspector can go
+> list → capture → submit → decision → re-inspect entirely on the phone. **The §4.4 re-point rule caught
+> real drift:** the web review page held FIVE local status Sets; `REPORTABLE`/`REINSPECTABLE` moved into
+> `@inspect/domain` (now 5 shared transition sets + `isLockedStatus`, 16 tests) and the web page now reads
+> the package — three surfaces, one table. **EAS is production-ready-adjacent:** `eas.json` written
+> (development/LAN · preview/APK · production profiles), the project created and linked as
+> `@donanlumina/inspect` (projectId in `app.json`), Android camera permission scoped (no RECORD_AUDIO) —
+> after the INS-090 deploy, the device build is `eas build --profile preview --platform android` with the
+> real origin replacing `CHANGE_ME` in `eas.json`. **Verified:** type-check **11/11** · lint **0 errors**
+> · api **656/42** · web **38/3** · domain **16/3** · mobile **15/1** · `expo export` green, **8 routes**.
+> **NOT verified:** anything on a device (INS-090 — `railway login` is the one user-side step left).
+>
+> Prior entry: **2026-08-31 (third session) — [INS-086](future/BACKLOG.md) Phase 3 BUILT: the capture
 > loop exists at `apps/mobile` `/inspections/[id]/capture`.** A full-screen guided camera (expo-camera)
 > shows one slot at a time; capture hashes the bytes on-device (expo-crypto sha256) BEFORE anything else
 > touches them, stashes them app-private (expo-file-system's new File API) and enqueues; the offline queue

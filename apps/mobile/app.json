@@ -17,7 +17,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "web": {
       "output": "static",
@@ -37,13 +40,21 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Inspect uses the camera to capture inspection evidence photos."
+          "cameraPermission": "Inspect uses the camera to capture inspection evidence photos.",
+          "recordAudioAndroid": false
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a1932974-69dd-43a4-bad0-e97bd0c5f928"
+      }
+    },
+    "owner": "donanlumina"
   }
 }

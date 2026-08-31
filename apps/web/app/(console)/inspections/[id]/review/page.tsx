@@ -6,12 +6,22 @@ import { Btn, Mono, PageHead, SeverityTag } from '@/components/inspect/shell';
 import { severity, ui, type SeverityKey } from '@/components/inspect/tokens';
 import { DecisionForm, SubmitForReview } from './decision-panel';
 import { ReInspectButton } from './re-inspect-button';
+import {
+  DECIDABLE_STATUSES,
+  REINSPECTABLE_STATUSES,
+  REPORTABLE_STATUSES,
+  SUBMITTABLE_STATUSES,
+} from '@inspect/domain';
 
-const SUBMITTABLE = new Set(['DRAFT', 'ASSIGNED', 'IN_PROGRESS']);
-const DECIDABLE = new Set(['SUBMITTED', 'UNDER_REVIEW', 'HOLD']);
-const POPULATABLE = new Set(['DRAFT', 'ASSIGNED', 'IN_PROGRESS']);
-const REPORTABLE = new Set(['APPROVED', 'REPORT_ISSUED']);
-const REINSPECTABLE = new Set(['REJECTED', 'HOLD']);
+// The status transition sets are declared ONCE in @inspect/domain (INS-086
+// Phase 3/4) — the API's guards and the mobile review screen read the same
+// tables, so the three surfaces cannot drift.
+const SUBMITTABLE = new Set<string>(SUBMITTABLE_STATUSES);
+const DECIDABLE = new Set<string>(DECIDABLE_STATUSES);
+// Populate is legal exactly while submit still is — the lock boundary.
+const POPULATABLE = new Set<string>(SUBMITTABLE_STATUSES);
+const REPORTABLE = new Set<string>(REPORTABLE_STATUSES);
+const REINSPECTABLE = new Set<string>(REINSPECTABLE_STATUSES);
 const CLASSES: SeverityKey[] = ['critical', 'major', 'minor'];
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {

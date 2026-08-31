@@ -5,7 +5,14 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
-> **Last updated: 2026-08-31 (Phase 3)** — **the capture screen exists**: `/inspections/[id]/capture`
+> **Last updated: 2026-08-31 (Phase 4 begins)** — **the mobile core loop is closed**: `/inspections/new`
+> (QA creates: PO/preset/inspector pickers, live debounced AQL preview off `GET /inspections/aql-preview`,
+> idempotent create → review) and `/inspections/[id]/review` (AQL result table, submit-for-review, the
+> QA decision form with its required note, linked re-inspection carrying the original AQL plan) are built.
+> Capture's submit now lands on review. The review status machine reads `@inspect/domain`'s shared sets —
+> and the WEB review page was re-pointed at them in the same change (it held five local copies;
+> `REPORTABLE`/`REINSPECTABLE` moved up to the package). `expo export` bundles **8 routes**.
+> Prior update (Phase 3): **the capture screen exists**: `/inspections/[id]/capture`
 > (guided full-screen camera, one slot at a time) with the spec §5.1 offline photo queue —
 > hash-at-capture, presign→PUT→register drain with a stable `clientRequestId`, 409→conflict for a human,
 > submit blocked while the queue is non-empty — plus a read-only locked state the web screen never had.
@@ -51,8 +58,8 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 | `/inspections` | `/inspections` | `GET /inspections` | `INSPECTOR` | 2 | in-progress (built 2026-08-31; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*`, `POST /inspections/:id/submit` | `INSPECTOR` ✅ | 3 | in-progress (built 2026-08-31: guided camera + offline queue + submit gate; device acceptance blocked on INS-090) | INS-086 |
 | `/dashboard` | `/dashboard` | `GET /dashboard/summary`, `GET /companies` | `QA_MANAGER` | 4 | not-started | INS-086 |
-| `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | not-started | INS-086 |
-| `/inspections/[id]/review` | `/inspections/[id]/review` | `POST /inspections/:id/decision` | `QA_MANAGER` | 4 | not-started | INS-086 |
+| `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | in-progress (built 2026-08-31: PO/preset/inspector pickers, live AQL preview, idempotent create; device acceptance blocked on INS-090) | INS-086 |
+| `/inspections/[id]/review` | `/inspections/[id]/review` | `POST /inspections/:id/decision` | view: any · decide: `QA_MANAGER` | 4 | in-progress (built 2026-08-31: AQL result, submit-for-review, decision form, linked re-inspection; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections/[id]/report` | `/inspections/[id]/report` | `GET /reports/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/reports` | `/reports` | `GET /reports` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/presets` | `/presets` | `GET /loop-presets` | `QA_MANAGER` | 4 | not-started | INS-086 |

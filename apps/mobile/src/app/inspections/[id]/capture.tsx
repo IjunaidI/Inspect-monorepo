@@ -297,7 +297,7 @@ export default function Capture() {
     });
     if (ok) {
       Alert.alert('Submitted', 'The inspection is now with QA for review.');
-      router.replace('/inspections');
+      router.replace(`/inspections/${inspectionId}/review`);
     }
   }
 

@@ -3,6 +3,8 @@ import { INSPECTION_STATUSES } from '@inspect/shared-types';
 import {
   DECIDABLE_STATUSES,
   LOCKED_STATUSES,
+  REINSPECTABLE_STATUSES,
+  REPORTABLE_STATUSES,
   SUBMITTABLE_STATUSES,
   isLockedStatus,
 } from './inspection-status';
@@ -19,6 +21,20 @@ describe('inspection status rules', () => {
 
   it('every decidable status is a locked one (decision happens after submit)', () => {
     for (const s of DECIDABLE_STATUSES) expect(LOCKED_STATUSES).toContain(s);
+  });
+
+  it('reportable and re-inspectable statuses are locked, post-decision states', () => {
+    for (const s of [...REPORTABLE_STATUSES, ...REINSPECTABLE_STATUSES]) {
+      expect(LOCKED_STATUSES).toContain(s);
+      // Neither overlaps SUBMITTABLE — a report or correction never exists
+      // while the loop can still be populated.
+      expect(SUBMITTABLE_STATUSES).not.toContain(s);
+    }
+    // A reportable inspection is decided; it is never simultaneously the
+    // correction path (REJECTED/HOLD).
+    for (const s of REPORTABLE_STATUSES) {
+      expect(REINSPECTABLE_STATUSES).not.toContain(s);
+    }
   });
 
   it('isLockedStatus is false exactly for the submittable statuses', () => {

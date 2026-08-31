@@ -34,6 +34,15 @@ export const DECIDABLE_STATUSES: readonly InspectionStatus[] = [
   'HOLD',
 ];
 
+/** Statuses in which the signed report exists (or can be generated). */
+export const REPORTABLE_STATUSES: readonly InspectionStatus[] = ['APPROVED', 'REPORT_ISSUED'];
+
+/**
+ * Statuses from which a linked re-inspection (`supersedesInspectionId`) is the
+ * correction path — the immutability rule's other half.
+ */
+export const REINSPECTABLE_STATUSES: readonly InspectionStatus[] = ['REJECTED', 'HOLD'];
+
 /**
  * True when the inspection can no longer be populated. Takes a loose string on
  * purpose — status comes off a wire DTO; an unknown value locks (fail closed).

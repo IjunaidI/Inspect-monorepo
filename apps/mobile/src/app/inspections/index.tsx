@@ -1,5 +1,6 @@
 import { ApiError } from '@inspect/api-client';
 import { palette, severity } from '@inspect/design-tokens';
+import { roleAtLeast } from '@inspect/domain';
 import type { InspectionDto } from '@inspect/shared-types';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -111,6 +112,15 @@ export default function Inspections() {
             </Text>
           ) : null}
         </View>
+        {roleAtLeast(identity?.role, 'QA_MANAGER') ? (
+          <Pressable
+            onPress={() => router.push('/inspections/new')}
+            hitSlop={8}
+            style={{ marginRight: 16 }}
+          >
+            <Text style={styles.signOut}>New</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={onSignOut} hitSlop={8}>
           <Text style={styles.signOut}>Sign out</Text>
         </Pressable>
