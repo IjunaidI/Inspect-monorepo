@@ -1,6 +1,23 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02 (third slice) — Phase 4 sweep: `/companies/[id]` IS ON THE PHONE.** The
+> **Last verified: 2026-09-02 (fourth slice) — Phase 4 sweep: `/companies/[id]/guests` IS ON THE
+> PHONE.** Invite with TTL chips (7/30/90; the API's 1–365 clamp untouched), the **one-time** magic
+> link with copy via expo-clipboard — the origin comes from `EXPO_PUBLIC_INSPECT_WEB_URL` because a
+> device has no `window.location`; unset, the screen says so and offers the raw token rather than
+> composing a wrong link — revoke behind a native confirm, and honest states throughout (the web page
+> has NO role gate of its own; every swallowed 403 renders as "not found" or "no guests yet").
+> **Wire-contract cleanup:** the invite response was typed INLINE in a web server action — the exact
+> drift the rule forbids; `InviteGuestInput` + `CompanyGuestInviteDto` now live in shared-types with
+> the API service and web action re-pointed. **Web fix:** the revoke button discarded its `{error}`
+> exactly like the archive button had — both now surface. **INS-085 reproduced** on this machine's
+> parallel Jest run ("Deriving bits failed" in the four scrypt-exercising suites + 2 worker crashes,
+> 608/656 ran); the serial `--runInBand` re-run is **656/656** — annotated, not chased; Linux CI is the
+> honest read. The user has confirmed device verification happens ONCE, after Phase 4 completes —
+> the sweep proceeds without per-screen device checks. **Verified:** type-check **11/11** · lint **0
+> errors** · api **656/42 (serial)** · web **38/3** · domain **28/5** · api-client **29/2** · mobile
+> **15/1** · `expo export` green, **14 routes**. New dep: `expo-clipboard ~57.0.1`.
+>
+> Prior entry: **2026-09-02 (third slice) — Phase 4 sweep: `/companies/[id]` IS ON THE PHONE.** The
 > merged INS-055 edit form (branding for the client role, address/GPS for the factory role), the
 > tri-state `logoUrl` write semantics (untouched → field omitted, removed → explicit `null`; logo
 > UPLOAD deferred — needs `expo-image-picker`, recorded in the ledger), the half-a-GPS-pair rule caught

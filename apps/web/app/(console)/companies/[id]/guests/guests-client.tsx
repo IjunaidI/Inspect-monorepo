@@ -32,6 +32,9 @@ const guestStatusStyle: Record<string, { label: string; fg: string; dot: string 
 
 function GuestRow({ guest, companyId }: { guest: ApiCompanyGuest; companyId: string }) {
   const [pending, start] = useTransition();
+  // A failed revoke used to be silently discarded — the button just stopped
+  // spinning. Surface the server action's {error} like every other mutation.
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const expired = new Date(guest.tokenExpiresAt) < new Date();
   const ss = guestStatusStyle[guest.status] ?? { label: guest.status, fg: ui.sub, dot: ui.faint };
 
@@ -55,10 +58,21 @@ function GuestRow({ guest, companyId }: { guest: ApiCompanyGuest; companyId: str
       <td style={{ padding: '12px 20px', textAlign: 'right' }}>
         {/* No per-row magic-link copy: the list endpoint deliberately never returns
             the token — a fresh link exists only in the invite-success state above. */}
-        <button onClick={() => start(async () => { await revokeCompanyGuest(companyId, guest.id); })} disabled={pending}
+        <button
+          onClick={() =>
+            start(async () => {
+              setRevokeError(null);
+              const result = await revokeCompanyGuest(companyId, guest.id);
+              if (result?.error) setRevokeError(result.error);
+            })
+          }
+          disabled={pending}
           style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #FECACA', borderRadius: 6, background: '#FEF2F2', color: '#DC2626', cursor: pending ? 'default' : 'pointer', fontFamily: 'inherit', opacity: pending ? 0.6 : 1 }}>
           {pending ? '…' : 'Revoke'}
         </button>
+        {revokeError ? (
+          <div style={{ fontSize: 11.5, color: ui.danger, marginTop: 4 }}>{revokeError}</div>
+        ) : null}
       </td>
     </tr>
   );

@@ -1,7 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { apiPost, apiDelete, ApiError, type ApiCompanyGuest } from '@/lib/api';
+import type { CompanyGuestInviteDto } from '@inspect/shared-types';
+import { apiPost, apiDelete, ApiError } from '@/lib/api';
 
 const msg = (e: unknown, fallback: string) =>
   e instanceof ApiError || e instanceof Error ? e.message : fallback;
@@ -20,10 +21,7 @@ export const inviteCompanyGuest = async (
   if (expiresInDays) body.ttlDays = Number(expiresInDays);
 
   try {
-    const res = await apiPost<{ guest: ApiCompanyGuest; token: string; emailSent: boolean }>(
-      `/companies/${companyId}/guests`,
-      body,
-    );
+    const res = await apiPost<CompanyGuestInviteDto>(`/companies/${companyId}/guests`, body);
     revalidatePath(`/companies/${companyId}/guests`);
     return {
       data: { token: res.token, expiresAt: res.guest.tokenExpiresAt, emailSent: res.emailSent },

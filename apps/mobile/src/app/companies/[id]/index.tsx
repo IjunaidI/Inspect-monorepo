@@ -411,6 +411,13 @@ export default function CompanyDetail() {
           <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
         </Pressable>
 
+        <Pressable
+          onPress={() => router.push(`/companies/${company.id}/guests`)}
+          hitSlop={4}
+        >
+          <Text style={styles.link}>Manage guests →</Text>
+        </Pressable>
+
         {!company.archivedAt ? (
           <View style={styles.dangerCard}>
             <Text style={styles.dangerTitle}>Archive company</Text>

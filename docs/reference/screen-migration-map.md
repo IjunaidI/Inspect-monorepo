@@ -5,7 +5,15 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
-> **Last updated: 2026-09-02 (Phase 4 sweep, continued)** — **`/companies/[id]` is ported**: the merged
+> **Last updated: 2026-09-02 (Phase 4 sweep, continued)** — **`/companies/[id]/guests` is ported**:
+> invite (TTL chips 7/30/90, server clamp 1–365 preserved), the ONE-TIME magic link with copy
+> (expo-clipboard; the origin comes from `EXPO_PUBLIC_INSPECT_WEB_URL` since a device has no
+> window.location — unset, the screen says so and offers the raw token), revoke behind a native
+> confirm, and honest forbidden/error states (the web page has NO role gate and masks 403s as
+> "not found"/"no guests yet"). The invite wire shapes moved to shared-types
+> (`InviteGuestInput`, `CompanyGuestInviteDto`) with web + API re-pointed, and the web revoke
+> button's silently-discarded error now surfaces. The company detail screen links here.
+> Earlier same day — **`/companies/[id]` ported**: the merged
 > INS-055 edit form (branding for the client role, address/GPS for the factory role), the tri-state
 > `logoUrl` write semantics (untouched → omitted, removed → explicit null; UPLOAD deferred pending
 > expo-image-picker), the half-a-GPS-pair client rule, archive with a native confirm, and an
@@ -88,7 +96,7 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 | `/presets/[id]` | `/presets/[id]` | `GET /loop-presets/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/presets/new` | `/presets/new` | `POST /loop-presets`, `GET /defect-catalog` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/companies/[id]` | `/companies/[id]` | `GET/PATCH/DELETE /companies/:id`, `POST /companies/:id/restore` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: edit form incl. tri-state logo remove + GPS pair rule, archive w/ confirm, archived banner + restore the web page lacks; logo UPLOAD deferred — needs expo-image-picker; device acceptance blocked on INS-090) | INS-086 |
-| `/companies/[id]/guests` | `/companies/[id]/guests` | `GET/POST /company-guests` | `QA_MANAGER` | 4 | not-started | INS-086 |
+| `/companies/[id]/guests` | `/companies/[id]/guests` | `GET/POST /companies/:companyId/guests`, `DELETE /company-guests/:id` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: invite w/ TTL chips + one-time magic link (copy via expo-clipboard; origin from EXPO_PUBLIC_INSPECT_WEB_URL, honest fallback when unset), revoke w/ confirm, real forbidden/error states the web lacks; device acceptance blocked on INS-090) | INS-086 |
 | `/products` `/products/new` `/products/[id]` | same | `GET/POST/PATCH /products` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/purchase-orders` `…/new` `…/[id]` | same | `GET/POST/PATCH /purchase-orders` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/users` | `/users` | `GET /users` (QA), `PATCH /users/:id/role` (owner) | `QA_MANAGER` / `ORG_OWNER` | 4 | not-started | INS-086 |

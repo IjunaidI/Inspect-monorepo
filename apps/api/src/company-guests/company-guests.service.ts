@@ -19,10 +19,10 @@ const SAFE_SELECT = {
   createdAt: true,
 } as const;
 
-export interface InviteGuestInput {
-  email: string;
-  ttlDays?: number;
-}
+// The wire shape lives in the shared package (INS-086 §4.4); re-exported so
+// the controller's existing import keeps working.
+export type { InviteGuestInput } from '@inspect/shared-types';
+import type { InviteGuestInput } from '@inspect/shared-types';
 
 /**
  * INS-055 — invite-only guests, attached to a company acting in its CLIENT role

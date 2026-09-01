@@ -105,3 +105,21 @@ export interface CompanyGuestDto {
   tokenExpiresAt: string;
   createdAt: string;
 }
+
+/** Body of POST /companies/:companyId/guests. `ttlDays` is clamped server-side to 1–365 (INS-053). */
+export interface InviteGuestInput {
+  email: string;
+  ttlDays?: number;
+}
+
+/**
+ * POST /companies/:companyId/guests result — the ONLY moment the magic-link
+ * token is readable. List reads never return it (write-once by design), so a
+ * client that wants to show it again cannot; re-inviting the same email
+ * rotates it instead.
+ */
+export interface CompanyGuestInviteDto {
+  guest: CompanyGuestDto;
+  token: string;
+  emailSent: boolean;
+}
