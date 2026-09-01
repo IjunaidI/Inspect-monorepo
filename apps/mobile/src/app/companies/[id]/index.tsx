@@ -35,7 +35,7 @@ import {
 } from 'react-native';
 
 import { OptionPicker } from '@/components/option-picker';
-import { client, loadIdentity, signOut } from '@/lib/session';
+import { client, loadIdentity } from '@/lib/session';
 
 /** The one shape the API accepts for primaryColor (INS-077) — a live hint only. */
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;

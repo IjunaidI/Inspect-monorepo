@@ -31,6 +31,24 @@ export interface ProductDto {
   _count?: RelationCounts;
 }
 
+/** Body of POST /products. */
+export interface CreateProductInput {
+  styleNumber: string;
+  description?: string | null;
+}
+
+/** Body of PATCH /products/:id. */
+export interface UpdateProductInput {
+  styleNumber?: string;
+  /**
+   * INS-074: `undefined` means "not supplied — leave unchanged"; an explicit
+   * `null` (or an empty/whitespace-only string) means "clear the column".
+   * Prisma treats `undefined` as a no-op, so a client MUST send `null` to
+   * empty a description — otherwise it can never be cleared.
+   */
+  description?: string | null;
+}
+
 // ── The unified counterparty (INS-055) ───────────────────────────────────────
 //
 // `Company` replaces `Buyer` + `Supplier`. Trade role is a property of the

@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { AuthUser } from '../auth/auth-user';
 
@@ -151,5 +155,42 @@ describe('ProductsService.create description normalisation (INS-074)', () => {
       service.create('orgA', ACTOR, { styleNumber: '   ', description: 'x' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProductsService duplicate styleNumber → 409 (not a raw 500)', () => {
+  const p2002 = () => {
+    const err = new Error('Unique constraint failed') as Error & {
+      code: string;
+    };
+    err.code = 'P2002';
+    return err;
+  };
+
+  it('create maps P2002 to a ConflictException naming the style number', async () => {
+    const { service, create } = makeService();
+    create.mockRejectedValueOnce(p2002() as never);
+    await expect(
+      service.create('orgA', ACTOR, { styleNumber: 'ST-1' }),
+    ).rejects.toMatchObject({
+      constructor: ConflictException,
+      message: expect.stringContaining('ST-1'),
+    });
+  });
+
+  it('update maps P2002 to a ConflictException', async () => {
+    const { service, update } = makeService();
+    update.mockRejectedValueOnce(p2002() as never);
+    await expect(
+      service.update('orgA', ACTOR, 'p1', { styleNumber: 'ST-1' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('does not swallow a non-P2002 failure into a 409', async () => {
+    const { service, create } = makeService();
+    create.mockRejectedValueOnce(new Error('connection reset') as never);
+    await expect(
+      service.create('orgA', ACTOR, { styleNumber: 'ST-1' }),
+    ).rejects.toThrow('connection reset');
   });
 });

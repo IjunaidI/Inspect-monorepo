@@ -19,7 +19,7 @@
  * it rather than erroring.
  */
 import { ApiError } from '@inspect/api-client';
-import { palette, severity as severityTint } from '@inspect/design-tokens';
+import { palette } from '@inspect/design-tokens';
 import { roleAtLeast } from '@inspect/domain';
 import type {
   CompanyDto,

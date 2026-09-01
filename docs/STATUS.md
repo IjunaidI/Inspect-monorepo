@@ -1,6 +1,20 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02 (fourth slice) — Phase 4 sweep: `/companies/[id]/guests` IS ON THE
+> **Last verified: 2026-09-02 (fifth slice) — Phase 4 sweep: the `/products` SURFACE IS ON THE
+> PHONE** (list + create + detail/edit). The list uses the API's `q`/`includeArchived`/`take`/`skip`
+> — parameters the web list never sent despite the API supporting them; edit honours the INS-074
+> tri-state (this form always supplies `description`: trimmed text or explicit `null`); archive sits
+> behind a native confirm (the web archives on a bare click, no undo); an archived product gets a
+> banner + Restore — `POST /products/:id/restore` was DEAD CODE on the console, no entry point called
+> it. **Real API bug fixed on the way (found by the contract pass):** a duplicate style number leaked
+> Prisma's P2002 as a raw, unhandled **500**; `ProductsService.create/update` now map it to a **409**
+> naming the style number (the orgs-service idiom), pinned by 3 new unit tests — **api suite 659/42**.
+> `CreateProductInput`/`UpdateProductInput` moved to `@inspect/shared-types` (the service re-exports,
+> INS-074's comment travels with them). Dashboard hub links to Products. **Verified:** type-check
+> **11/11** · lint **0 errors** · api **659/42 (serial — INS-085)** · `expo export` green, **17
+> routes** (mobile/web/domain/api-client suites unaffected by this slice; CI re-runs them all).
+>
+> Prior entry: **2026-09-02 (fourth slice) — Phase 4 sweep: `/companies/[id]/guests` IS ON THE
 > PHONE.** Invite with TTL chips (7/30/90; the API's 1–365 clamp untouched), the **one-time** magic
 > link with copy via expo-clipboard — the origin comes from `EXPO_PUBLIC_INSPECT_WEB_URL` because a
 > device has no `window.location`; unset, the screen says so and offers the raw token rather than

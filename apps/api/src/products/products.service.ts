@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -8,20 +9,16 @@ import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
 
-export interface CreateProductInput {
-  styleNumber: string;
-  description?: string | null;
-}
-export interface UpdateProductInput {
-  styleNumber?: string;
-  /**
-   * INS-074: `undefined` means "not supplied — leave unchanged"; an explicit
-   * `null` (or an empty/whitespace-only string) means "clear the column".
-   * Prisma treats `undefined` as a no-op, so the console MUST send `null` to
-   * empty a description — otherwise it can never be cleared.
-   */
-  description?: string | null;
-}
+// The wire shapes live in the shared package (INS-086 §4.4); re-exported so
+// existing imports keep working.
+export type {
+  CreateProductInput,
+  UpdateProductInput,
+} from '@inspect/shared-types';
+import type {
+  CreateProductInput,
+  UpdateProductInput,
+} from '@inspect/shared-types';
 
 /**
  * Normalise a submitted description to what the column should hold: trimmed
@@ -91,11 +88,31 @@ export class ProductsService {
     return row;
   }
 
+  /**
+   * `@@unique([orgId, styleNumber])` makes the duplicate come back as P2002,
+   * which must read as a 409 naming the style number — not leak as a raw 500
+   * (the console rendered Prisma's message verbatim before this).
+   */
+  private rethrowDuplicateStyle(e: unknown, styleNumber: string): never {
+    if ((e as { code?: string }).code === 'P2002') {
+      throw new ConflictException(
+        `A product with style number "${styleNumber}" already exists`,
+      );
+    }
+    throw e;
+  }
+
   async create(orgId: string, actor: AuthUser, input: CreateProductInput) {
     if (!input?.styleNumber?.trim()) {
       throw new BadRequestException('styleNumber is required');
     }
     // INS-006: audit inside the business transaction.
+    return this.runCreate(orgId, actor, input).catch((e: unknown) =>
+      this.rethrowDuplicateStyle(e, input.styleNumber.trim()),
+    );
+  }
+
+  private runCreate(orgId: string, actor: AuthUser, input: CreateProductInput) {
     return this.prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
@@ -128,6 +145,17 @@ export class ProductsService {
     input: UpdateProductInput,
   ) {
     await this.get(orgId, id);
+    return this.runUpdate(orgId, actor, id, input).catch((e: unknown) =>
+      this.rethrowDuplicateStyle(e, input.styleNumber?.trim() ?? ''),
+    );
+  }
+
+  private runUpdate(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    input: UpdateProductInput,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const product = await tx.product.update({
         where: { id },
