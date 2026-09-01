@@ -5,6 +5,7 @@ import { Download, Eye, ExternalLink, Lock, Search } from 'lucide-react';
 import { Mono } from '@/components/inspect/shell';
 import { BrandedReport, type BrandedReportData } from '@/components/inspect/branded-report';
 import { severity, ui } from '@/components/inspect/tokens';
+import { reportNumber } from '@inspect/domain';
 import { readCanonicalParties } from '@inspect/shared-types';
 import type { ApiGuestReport, ApiGuestReportPhoto } from '@/lib/api';
 
@@ -70,7 +71,7 @@ function mapToReportData(
     client: { name: client.name, initials: initialsOf(client.name), color: client.color },
     meta: {
       // Synthetic display id — no reportNo column exists (documented as synthetic).
-      reportNo: `IR-${r.id.slice(0, 8).toUpperCase()}`,
+      reportNo: reportNumber(r.id),
       po: snap.poNumber ?? '—',
       product: snap.product?.styleNumber ?? snap.product?.description ?? '—',
       factory: parties.factory?.name ?? '—',

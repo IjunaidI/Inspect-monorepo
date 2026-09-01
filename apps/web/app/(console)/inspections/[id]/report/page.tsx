@@ -1,3 +1,4 @@
+import { conclusionFrom, formatGps, formatInspectionType, reportNumber } from '@inspect/domain';
 import { apiGet, apiPost, type ApiInspection, type ApiReport } from '@/lib/api';
 import { BrandedReport, type BrandedReportData } from '@/components/inspect/branded-report';
 
@@ -7,30 +8,6 @@ function initials(name: string): string {
     .filter(Boolean)
     .map((w) => w[0].toUpperCase())
     .join('');
-}
-
-function mapConclusion(decision?: string | null): 'pass' | 'fail' | 'hold' | 'pending' {
-  if (decision === 'PASS') return 'pass';
-  if (decision === 'FAIL') return 'fail';
-  if (decision === 'HOLD') return 'hold';
-  // No decision recorded yet — never fabricate a verdict (INS-056).
-  return 'pending';
-}
-
-/** Prisma enum → readable label: PRE_SHIPMENT → "Pre shipment". */
-function formatInspectionType(type?: string): string {
-  if (!type) return '—';
-  const words = type.replace(/_/g, ' ').toLowerCase();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-/** Factory GPS is a JSON column — render "lat, lng" only when both keys exist. */
-function formatGps(gps: unknown): string | null {
-  if (gps && typeof gps === 'object' && 'lat' in gps && 'lng' in gps) {
-    const { lat, lng } = gps as { lat: unknown; lng: unknown };
-    return `${lat}, ${lng}`;
-  }
-  return null;
 }
 
 function mapToReportData(inspection: ApiInspection, report: ApiReport | null): BrandedReportData {
@@ -78,7 +55,7 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
     },
     meta: {
       // Synthetic display id — no reportNo column exists (documented as synthetic).
-      reportNo: report ? `IR-${report.id.slice(0, 8).toUpperCase()}` : undefined,
+      reportNo: report ? reportNumber(report.id) : undefined,
       po: inspection.purchaseOrder?.poNumber ?? '—',
       product: inspection.product?.styleNumber ?? '—',
       factory: inspection.factoryCompany?.name ?? '—',
@@ -89,7 +66,7 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
       inspector: inspection.assignedInspector?.name ?? null,
       gps: formatGps(inspection.factoryCompany?.gps),
     },
-    conclusion: mapConclusion(r?.qaDecision),
+    conclusion: conclusionFrom(r?.qaDecision),
     qaRemarks: r?.qaRemarks,
     samplingPlan: cs
       ? {

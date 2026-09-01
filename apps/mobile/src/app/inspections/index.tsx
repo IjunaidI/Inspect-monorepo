@@ -113,13 +113,22 @@ export default function Inspections() {
           ) : null}
         </View>
         {roleAtLeast(identity?.role, 'QA_MANAGER') ? (
-          <Pressable
-            onPress={() => router.push('/inspections/new')}
-            hitSlop={8}
-            style={{ marginRight: 16 }}
-          >
-            <Text style={styles.signOut}>New</Text>
-          </Pressable>
+          <>
+            <Pressable
+              onPress={() => router.push('/reports')}
+              hitSlop={8}
+              style={{ marginRight: 16 }}
+            >
+              <Text style={styles.signOut}>Reports</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => router.push('/inspections/new')}
+              hitSlop={8}
+              style={{ marginRight: 16 }}
+            >
+              <Text style={styles.signOut}>New</Text>
+            </Pressable>
+          </>
         ) : null}
         <Pressable onPress={onSignOut} hitSlop={8}>
           <Text style={styles.signOut}>Sign out</Text>

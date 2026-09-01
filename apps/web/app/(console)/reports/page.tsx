@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { FileCheck2, Search } from 'lucide-react';
+import { reportNumber } from '@inspect/domain';
 import { apiGet, type ApiReportListItem } from '@/lib/api';
 import { Mono, PageHead } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
@@ -51,7 +52,7 @@ export default async function ReportsPage({
           {reports.map((r) => (
             <div key={r.id} style={{ display: 'grid', gridTemplateColumns: cols, alignItems: 'center', padding: '14px 20px', borderBottom: `1px solid ${ui.lineSoft}` }}>
               <Link href={`/inspections/${r.inspectionId}/report`} style={{ textDecoration: 'none' }}>
-                <Mono style={{ fontWeight: 600, color: ui.accent }}>IR-{r.id.slice(0, 8).toUpperCase()}</Mono>
+                <Mono style={{ fontWeight: 600, color: ui.accent }}>{reportNumber(r.id)}</Mono>
               </Link>
               <Mono>{r.inspection?.purchaseOrder?.poNumber ?? '—'}</Mono>
               <span>{r.clientCompany?.name ?? '—'}</span>

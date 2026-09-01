@@ -316,10 +316,12 @@ export default function Review() {
         )}
 
         {REPORTABLE.has(insp.status) ? (
-          <Text style={styles.hint}>
-            The signed report exists — view and verify it in the console (the report screen ports in
-            a later phase).
-          </Text>
+          <Pressable
+            onPress={() => router.push(`/inspections/${inspectionId}/report`)}
+            hitSlop={8}
+          >
+            <Text style={styles.reportLink}>View the signed report →</Text>
+          </Pressable>
         ) : null}
         {REINSPECTABLE.has(insp.status) && canDecide ? (
           <Pressable
@@ -373,6 +375,7 @@ const styles = StyleSheet.create({
   recoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reco: { fontSize: 18, fontWeight: '800' },
   hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
+  reportLink: { color: palette.accent, fontSize: 14, fontWeight: '600', paddingVertical: 4 },
   classRow: {
     flexDirection: 'row',
     alignItems: 'center',

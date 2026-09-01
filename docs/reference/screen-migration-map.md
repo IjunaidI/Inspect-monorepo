@@ -5,7 +5,14 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
-> **Last updated: 2026-08-31 (Phase 4 begins)** — **the mobile core loop is closed**: `/inspections/new`
+> **Last updated: 2026-09-02 (Phase 4 sweep)** — **the report surface is ported**: `/reports` (debounced
+> search, pull-to-refresh, error/401/403/empty told apart — the web page conflates all four into
+> "No reports yet") and `/inspections/[id]/report` (live preview for any role, the idempotent generate
+> fired only for QA_MANAGER+, tamper-proof block, **Open PDF** via the presigned `GET /reports/:id/pdf` —
+> an action the web screen lacks entirely). Review now links to the report. §4.4 re-points:
+> `reportNumber()` (three web copies), `conclusionFrom`, `formatInspectionType`, `formatGps` →
+> `@inspect/domain`; `ReportPdfDownloadDto` → shared-types. `expo export` bundles **10 routes**.
+> Prior update (Phase 4 begins) — **the mobile core loop is closed**: `/inspections/new`
 > (QA creates: PO/preset/inspector pickers, live debounced AQL preview off `GET /inspections/aql-preview`,
 > idempotent create → review) and `/inspections/[id]/review` (AQL result table, submit-for-review, the
 > QA decision form with its required note, linked re-inspection carrying the original AQL plan) are built.
@@ -60,8 +67,8 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 | `/dashboard` | `/dashboard` | `GET /dashboard/summary`, `GET /companies` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | in-progress (built 2026-08-31: PO/preset/inspector pickers, live AQL preview, idempotent create; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections/[id]/review` | `/inspections/[id]/review` | `POST /inspections/:id/decision` | view: any · decide: `QA_MANAGER` | 4 | in-progress (built 2026-08-31: AQL result, submit-for-review, decision form, linked re-inspection; device acceptance blocked on INS-090) | INS-086 |
-| `/inspections/[id]/report` | `/inspections/[id]/report` | `GET /reports/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
-| `/reports` | `/reports` | `GET /reports` | `QA_MANAGER` | 4 | not-started | INS-086 |
+| `/inspections/[id]/report` | `/inspections/[id]/report` | `POST /inspections/:id/report` (idempotent), `GET /inspections/:id`, `GET /reports/:id/pdf` | view: any · signed report: `QA_MANAGER` | 4 | in-progress (built 2026-09-02: live preview + signed report, QA-gated generate, Open PDF via presigned URL; device acceptance blocked on INS-090) | INS-086 |
+| `/reports` | `/reports` | `GET /reports` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: debounced search, distinct error/401/403/empty states; device acceptance blocked on INS-090) | INS-086 |
 | `/presets` | `/presets` | `GET /loop-presets` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/presets/[id]` | `/presets/[id]` | `GET /loop-presets/:id` | `QA_MANAGER` | 4 | not-started | INS-086 |
 | `/presets/new` | `/presets/new` | `POST /loop-presets`, `GET /defect-catalog` | `QA_MANAGER` | 4 | not-started | INS-086 |

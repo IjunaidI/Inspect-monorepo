@@ -85,6 +85,7 @@ const COMPUTED = new Set([
   'CycleStateDto',
   // Presign + public verification results.
   'PresignResultDto',
+  'ReportPdfDownloadDto',
   'VerifyResultDto',
   // Public invitation lookup: a deliberately narrowed projection (INS-054).
   'InvitationLookupDto',

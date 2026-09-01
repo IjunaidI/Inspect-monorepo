@@ -1,6 +1,35 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-08-31 (third session, continued) — Phase 4 began: the MOBILE CORE LOOP IS
+> **Last verified: 2026-09-02 — Phase 4 sweep continues: the REPORT SURFACE IS ON THE PHONE.** Two more
+> screens via the `migrate-screen` procedure. **`/reports`**: card list with debounced (300ms) search on
+> PO/client, pull-to-refresh, and — deliberately better than the web page, whose blanket
+> `.catch(() => [])` renders network failure, 401, 403 and the Platform-Admin no-org 403 all as "No
+> reports yet" — four distinct states (error+retry · 401→login · 403→forbidden card · true empty).
+> **`/inspections/[id]/report`**: live preview for any authenticated role; the idempotent
+> `POST /inspections/:id/report` fired **only for QA_MANAGER+** (the web fires it blind on every load and
+> swallows the 403 into a misleading "not yet generated" banner); 403/404/not-approved are three states;
+> a pre-generation preview shows "—" for the report date, not today; per-class Accept/Reject reads the
+> **server's** `aqlResult.perClass[].outcome` (the web page re-derives `found >= re` locally — recorded
+> below, not copied); photo evidence grouped by loop item with presigned thumbs, measurements grouped by
+> unit, tamper-proof block with the content hash — and **Open PDF** (`GET /reports/:id/pdf` → presigned
+> URL via `Linking`), an action that exists nowhere on the web screen. Review's "ports in a later phase"
+> hint became a real link, and the inspections header gained a QA-gated Reports entry. **§4.4 re-points,
+> all caught real forks:** `reportNumber()` existed in THREE web files (reports list, report page,
+> portal) — now once in `@inspect/domain`; `conclusionFrom` (the INS-056 never-fabricate-a-verdict map),
+> `formatInspectionType` and `formatGps` moved with it (domain suite now **24 tests / 5 files**);
+> `ReportPdfDownloadDto` added to `@inspect/shared-types` (wire-contract guard allowlisted) and the API's
+> `pdfDownload` return is typed by it. Mobile also gained an optional `EXPO_PUBLIC_INSPECT_WEB_URL` for
+> future outbound links to the web-only public verify page (unset ⇒ affordance hidden).
+> **Verified:** type-check **11/11** · lint **0 errors** · api **656/42** · web **38/3** · domain
+> **24/5** · api-client **29/2** · mobile **15/1** · `expo export` green, **10 routes**. **NOT
+> verified:** anything on a device (INS-090 — `railway login` is still the one user-side step).
+> **Observations, not fixed:** the web report page renders from the LIVE inspection row, not the signed
+> `canonicalSnapshot` — a company rename after signing makes the displayed report diverge from what
+> `contentHash` covers (worth an item); it also re-derives a per-class verdict client-side instead of
+> reading the server's `outcome`; and `ReportDto` carries no `verificationToken`, so neither platform can
+> link a QA user to the public verify page from the report itself.
+>
+> Prior entry: **2026-08-31 (third session, continued) — Phase 4 began: the MOBILE CORE LOOP IS
 > CLOSED.** Two more screens ported via the `migrate-screen` procedure: **`/inspections/new`** (QA
 > creates — PO/preset/inspector modal pickers, live 300ms-debounced AQL preview, idempotent create with a
 > per-mount `clientRequestId`, then straight to review; deliberately better than the web contract's own

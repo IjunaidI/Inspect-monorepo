@@ -7,6 +7,7 @@ import {
 import { createPublicKey } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import { canonicalVersionOf, photoHashesOf } from '@inspect/shared-types';
+import type { ReportPdfDownloadDto } from '@inspect/shared-types';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -376,7 +377,10 @@ export class ReportsService {
    * Short-lived presigned GET URL for a report's stored PDF, org-scoped.
    * 404 when the report is not in the caller's tenant (never leak existence).
    */
-  async pdfDownload(orgId: string, reportId: string) {
+  async pdfDownload(
+    orgId: string,
+    reportId: string,
+  ): Promise<ReportPdfDownloadDto> {
     const report = await this.prisma.report.findFirst({
       where: { id: reportId, orgId },
       select: { id: true, pdfStorageKey: true, generatedAt: true },

@@ -4,6 +4,13 @@
  */
 export { ROLE_RANK, roleAtLeast } from './roles';
 export { initialsFrom } from './text';
+export { reportNumber } from './report-number';
+export {
+  conclusionFrom,
+  formatGps,
+  formatInspectionType,
+  type ReportConclusion,
+} from './report-display';
 export {
   LOCKED_STATUSES,
   SUBMITTABLE_STATUSES,

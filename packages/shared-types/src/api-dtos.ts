@@ -337,6 +337,16 @@ export interface ReportListItemDto {
   } | null;
 }
 
+/**
+ * GET /reports/:id/pdf (INS-003) — a short-lived presigned GET URL, never the
+ * PDF bytes through the API. Same design as photo viewing (INS-049).
+ */
+export interface ReportPdfDownloadDto {
+  reportId: string;
+  url: string;
+  expiresInSeconds: number;
+}
+
 export interface VerifyResultDto {
   valid: boolean;
   hashMatches: boolean;
