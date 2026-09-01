@@ -29,6 +29,9 @@ const isAbsoluteUrl = (v: string) => /^https?:\/\//i.test(v);
 export function EditCompanyForm({ company, presets }: { company: ApiCompany; presets: ApiLoopPreset[] }) {
   const [state, action, pending] = useActionState(updateCompany, {});
   const [archivePending, startArchive] = useTransition();
+  // A failed archive used to be silently discarded — the button just stopped
+  // spinning. Surface the server action's {error} like every other mutation.
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   // ── Logo (INS-072) ────────────────────────────────────────────
   // `logoKey` is the DURABLE value submitted with the form: an object key from
@@ -265,8 +268,19 @@ export function EditCompanyForm({ company, presets }: { company: ApiCompany; pre
       <div style={{ marginTop: 24, padding: '18px 20px', background: '#FFF8F8', border: '1px solid #FECACA', borderRadius: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, color: ui.danger }}>Archive company</div>
         <div style={{ fontSize: 12.5, color: ui.sub, marginBottom: 12 }}>Archiving removes this company from the active list. Historical purchase orders, inspections and reports are preserved.</div>
+        {archiveError ? (
+          <div style={{ fontSize: 12.5, color: ui.danger, marginBottom: 10 }}>{archiveError}</div>
+        ) : null}
         <button
-          onClick={() => startArchive(async () => { await archiveCompany(company.id); })}
+          onClick={() =>
+            startArchive(async () => {
+              setArchiveError(null);
+              const result = await archiveCompany(company.id);
+              // A successful archive redirects and never returns; a return
+              // value is always the failure shape.
+              if (result?.error) setArchiveError(result.error);
+            })
+          }
           disabled={archivePending}
           style={{ height: 34, padding: '0 14px', borderRadius: 8, fontSize: 13, fontWeight: 500, fontFamily: 'inherit', border: '1px solid #FECACA', background: '#FEF2F2', color: ui.danger, cursor: archivePending ? 'default' : 'pointer', opacity: archivePending ? 0.6 : 1 }}
         >

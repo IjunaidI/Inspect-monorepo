@@ -16,8 +16,8 @@
  * - Fallback avatar colour keys on a hash of the company id (shared
  *   `hashIndex`), so it cannot change between pages — the web bug this
  *   session fixed at the same time.
- * - Read-only v1: create/edit/archive stay on the web until
- *   `/companies/[id]` ports; rows are not yet tappable.
+ * - Create stays web-only for now; a row opens `/companies/[id]` for
+ *   edit/archive/restore.
  * - Pagination is a "Load more" append (same 50-row pages, same full-page
  *   heuristic for "there may be more").
  */
@@ -257,7 +257,10 @@ export default function Companies() {
             const color =
               item.primaryColor || brandFallbacks[hashIndex(item.id, brandFallbacks.length)];
             return (
-              <View style={[styles.row, item.archivedAt ? styles.rowArchived : null]}>
+              <Pressable
+                style={[styles.row, item.archivedAt ? styles.rowArchived : null]}
+                onPress={() => router.push(`/companies/${item.id}`)}
+              >
                 {/* INS-072: render logoViewUrl only — logoUrl is a raw object key. */}
                 {item.logoViewUrl ? (
                   <Image source={{ uri: item.logoViewUrl }} style={styles.avatar} />
@@ -287,7 +290,7 @@ export default function Companies() {
                     {item.archivedAt ? '  ·  Archived' : ''}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             );
           }}
         />

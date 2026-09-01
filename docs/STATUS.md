@@ -1,6 +1,24 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02 (continued) — Phase 4 sweep: the DASHBOARD IS ON THE PHONE, and the company
+> **Last verified: 2026-09-02 (third slice) — Phase 4 sweep: `/companies/[id]` IS ON THE PHONE.** The
+> merged INS-055 edit form (branding for the client role, address/GPS for the factory role), the
+> tri-state `logoUrl` write semantics (untouched → field omitted, removed → explicit `null`; logo
+> UPLOAD deferred — needs `expo-image-picker`, recorded in the ledger), the half-a-GPS-pair rule caught
+> client-side (the one shape the API cannot tell from a deliberate clear), archive behind a native
+> confirm, and an **archived banner + restore action** — the web form renders no trace of the archived
+> state and silently allows edits (that API-side "archived is editable" gap is recorded below as an open
+> observation). Directory rows now open the detail screen. **Fixed on the WEB in the same change (found
+> by the contract pass):** the archive button discarded its server action's `{error}` — a failed archive
+> just stopped spinning; it now surfaces inline. Mobile's `OptionPicker` was extracted to
+> `src/components/option-picker.tsx` (new.tsx re-pointed) instead of forking into a second screen.
+> **Verified:** type-check **11/11** · lint **0 errors** · api **656/42** · web **38/3** · domain
+> **28/5** · api-client **29/2** · mobile **15/1** · `expo export` green, **13 routes**. **NOT
+> verified:** anything on a device (INS-090). **Open observations:** `GET/PATCH /companies/:id` place no
+> guard on `archivedAt` — an archived company is silently editable on both platforms (decide: block,
+> warn, or accept; mobile at least shows the banner); logo upload on mobile awaits an expo-image-picker
+> decision.
+>
+> Prior entry: **2026-09-02 (continued) — Phase 4 sweep: the DASHBOARD IS ON THE PHONE, and the company
 > directory is its own `/companies` screen.** Mobile **`/dashboard`** is the QA hub: the four status
 > tiles, pass rate + DPHU (null renders "—", never 0% — INS-068), entity counts, and links to the
 > directory, reports and inspections; the inspections header link swapped Reports→Dashboard since the hub
