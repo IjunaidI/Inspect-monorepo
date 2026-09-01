@@ -179,6 +179,9 @@ export default function Dashboard() {
           <Pressable onPress={() => router.push('/purchase-orders')} hitSlop={4}>
             <Text style={styles.navLink}>Purchase orders →</Text>
           </Pressable>
+          <Pressable onPress={() => router.push('/presets')} hitSlop={4}>
+            <Text style={styles.navLink}>Loop presets →</Text>
+          </Pressable>
           <Pressable onPress={() => router.push('/users')} hitSlop={4}>
             <Text style={styles.navLink}>Team (Org Owner) →</Text>
           </Pressable>

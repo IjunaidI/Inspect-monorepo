@@ -1,6 +1,19 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02 (seventh slice) — Phase 4 sweep: `/users` AND `/invite` ARE ON THE
+> **Last verified: 2026-09-02 (eighth slice) — Phase 4 sweep: the PRESET READ SCREENS ARE ON THE
+> PHONE.** `/presets`: card list with search and the INS-081 copy (loop ITEMS, one image each —
+> never "loops"). `/presets/[id]`: the loop-global defect tags (severity-chipped) and measurement
+> sheet rendered ONCE above the ordered items — items **explicitly sorted by `position`** (the web
+> page trusts wire order); presigned reference thumbnails with "unavailable" (presign failed /
+> foreign key) kept distinct from "none"; archive behind a native confirm, safe because inspections
+> freeze their `loopPresetSnapshot` (there is no restore endpoint, said plainly in the confirm).
+> 403/404/network are three states — the web collapses every failure into `notFound()`. Deviations
+> recorded in the ledger: archive moved from the web's row-menu-with-alert() to the detail screen;
+> Duplicate arrives with the builder. Dashboard hub links to Loop presets. **Verified:** type-check
+> **11/11** · lint **0 errors** · `expo export` green, **24 routes**. **ONE ledger row remains:**
+> `/presets/new` — the builder, the console's most complex authoring surface, deliberately last.
+>
+> Prior entry: **2026-09-02 (seventh slice) — Phase 4 sweep: `/users` AND `/invite` ARE ON THE
 > PHONE.** `/users` (UI floor ORG_OWNER, mirroring the web's redirect; the API's QA-floor list stays
 > the authority): roster with id-hashed avatar colours, invite with role chips + the
 > `EXPO_PUBLIC_INSPECT_WEB_URL`-composed link and clipboard copy, role change / deactivate /
