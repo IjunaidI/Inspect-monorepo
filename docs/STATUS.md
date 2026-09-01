@@ -1,6 +1,22 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02 (fifth slice) — Phase 4 sweep: the `/products` SURFACE IS ON THE
+> **Last verified: 2026-09-02 (sixth slice) — Phase 4 sweep: the `/purchase-orders` SURFACE IS ON
+> THE PHONE** (list + two-party create + edit + delete). Create feeds BOTH party pickers from the one
+> company list (INS-055 — role lives on the edge), ranked by the NEW shared
+> `rankCompaniesByActivity` in `@inspect/domain` — web's `rankedFor` re-pointed at it, so the
+> INS-087 "one place to change when per-role counts land" is now actually one place — with the
+> self-dealing pre-check mirrored client-side and the API's 400 as authority. Detail renders
+> parties/product immutable (the API's `UpdatePurchaseOrderInput` accepts only poNumber/qty); delete
+> sits behind a native confirm and surfaces the API's friendly 400 when inspections reference the
+> PO. Picker loads are real error+retry states — the web's silently-empty selects were not ported.
+> **The products P2002 bug had an identical twin here, found by the contract pass and fixed:**
+> duplicate `poNumber` (`@@unique([orgId, poNumber])`) leaked as a raw 500 → now a **409** naming
+> the PO number, +2 unit tests. `CreatePurchaseOrderInput`/`UpdatePurchaseOrderInput` moved to
+> shared-types (wire-contract allowlisted, service re-exports). **Verified:** type-check **11/11** ·
+> lint **0 errors** · domain **29/6** · PO+wire-contract specs **37/2 (serial)** · `expo export`
+> green, **20 routes**.
+>
+> Prior entry: **2026-09-02 (fifth slice) — Phase 4 sweep: the `/products` SURFACE IS ON THE
 > PHONE** (list + create + detail/edit). The list uses the API's `q`/`includeArchived`/`take`/`skip`
 > — parameters the web list never sent despite the API supporting them; edit honours the INS-074
 > tri-state (this form always supplies `description`: trimmed text or explicit `null`); archive sits

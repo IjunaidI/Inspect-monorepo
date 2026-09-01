@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useMemo, useState } from 'react';
+import { rankCompaniesByActivity } from '@inspect/domain';
 import { Btn } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
 import type { ApiCompany, ApiProduct } from '@/lib/api';
@@ -20,14 +21,10 @@ const input = { width: '100%', height: 36, padding: '0 10px', fontSize: 13, font
  * hint; every company stays selectable in either slot.
  */
 function rankedFor(companies: ApiCompany[], _role: 'client' | 'factory') {
-  // `_count` is already flattened across both edges by the API, so it cannot
-  // separate the roles; fall back to overall activity, then name. When the API
-  // starts returning per-role counts this is the one place to change.
-  return [...companies].sort(
-    (a, b) =>
-      (b._count?.purchaseOrders ?? 0) - (a._count?.purchaseOrders ?? 0) ||
-      a.name.localeCompare(b.name),
-  );
+  // The comparator lives in @inspect/domain (INS-086 §4.4) so mobile shares
+  // it; per-role ranking is still blocked on per-role counts (INS-087) and
+  // the package is the one place to change when they land.
+  return rankCompaniesByActivity(companies);
 }
 
 export function CreatePurchaseOrderForm({ companies, products }: { companies: ApiCompany[]; products: ApiProduct[] }) {

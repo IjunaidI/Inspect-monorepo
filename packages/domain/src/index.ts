@@ -4,6 +4,7 @@
  */
 export { ROLE_RANK, roleAtLeast } from './roles';
 export { hashIndex, initialsFrom } from './text';
+export { rankCompaniesByActivity } from './company-ranking';
 export { reportNumber } from './report-number';
 export {
   conclusionFrom,

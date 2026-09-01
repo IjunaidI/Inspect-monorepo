@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PurchaseOrdersService } from './purchase-orders.service';
 import { AuthUser } from '../auth/auth-user';
 
@@ -239,6 +243,33 @@ describe('PurchaseOrdersService.create write', () => {
         entityType: 'PurchaseOrder',
       }),
       expect.objectContaining({ purchaseOrder: expect.anything() }),
+    );
+  });
+});
+
+describe('PurchaseOrdersService duplicate poNumber -> 409 (not a raw 500)', () => {
+  const p2002 = () => {
+    const err = new Error('Unique constraint failed') as Error & {
+      code: string;
+    };
+    err.code = 'P2002';
+    return err;
+  };
+
+  it('create maps P2002 to a ConflictException naming the PO number', async () => {
+    const h = makeService();
+    h.poCreate.mockRejectedValueOnce(p2002() as never);
+    await expect(h.service.create(ORG, ACTOR, VALID)).rejects.toMatchObject({
+      constructor: ConflictException,
+      message: expect.stringContaining('PO-1001'),
+    });
+  });
+
+  it('does not swallow a non-P2002 failure into a 409', async () => {
+    const h = makeService();
+    h.poCreate.mockRejectedValueOnce(new Error('connection reset') as never);
+    await expect(h.service.create(ORG, ACTOR, VALID)).rejects.toThrow(
+      'connection reset',
     );
   });
 });

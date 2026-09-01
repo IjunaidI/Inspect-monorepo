@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,17 +14,16 @@ import { actorTypeFor } from '../audit/actor-type';
  * to this edge, not to the Company row, so the same company can be the client
  * here and the factory on another PO.
  */
-export interface CreatePurchaseOrderInput {
-  poNumber: string;
-  clientCompanyId: string;
-  factoryCompanyId: string;
-  productId: string;
-  totalQuantity?: number;
-}
-export interface UpdatePurchaseOrderInput {
-  poNumber?: string;
-  totalQuantity?: number;
-}
+// The wire shapes live in the shared package (INS-086 §4.4); re-exported so
+// existing imports keep working.
+export type {
+  CreatePurchaseOrderInput,
+  UpdatePurchaseOrderInput,
+} from '@inspect/shared-types';
+import type {
+  CreatePurchaseOrderInput,
+  UpdatePurchaseOrderInput,
+} from '@inspect/shared-types';
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -80,6 +80,30 @@ export class PurchaseOrdersService {
       input.productId,
     );
     // INS-006: audit inside the business transaction.
+    return this.runCreate(orgId, actor, input).catch((e: unknown) =>
+      this.rethrowDuplicatePoNumber(e, input.poNumber.trim()),
+    );
+  }
+
+  /**
+   * `@@unique([orgId, poNumber])` makes the duplicate come back as P2002,
+   * which must read as a 409 naming the PO number — not leak as a raw 500
+   * (same fix as ProductsService's styleNumber).
+   */
+  private rethrowDuplicatePoNumber(e: unknown, poNumber: string): never {
+    if ((e as { code?: string }).code === 'P2002') {
+      throw new ConflictException(
+        `A purchase order numbered "${poNumber}" already exists`,
+      );
+    }
+    throw e;
+  }
+
+  private runCreate(
+    orgId: string,
+    actor: AuthUser,
+    input: CreatePurchaseOrderInput,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const po = await tx.purchaseOrder.create({
         data: {
@@ -120,6 +144,17 @@ export class PurchaseOrdersService {
     input: UpdatePurchaseOrderInput,
   ) {
     await this.get(orgId, id);
+    return this.runUpdate(orgId, actor, id, input).catch((e: unknown) =>
+      this.rethrowDuplicatePoNumber(e, input.poNumber?.trim() ?? ''),
+    );
+  }
+
+  private runUpdate(
+    orgId: string,
+    actor: AuthUser,
+    id: string,
+    input: UpdatePurchaseOrderInput,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const po = await tx.purchaseOrder.update({
         where: { id },

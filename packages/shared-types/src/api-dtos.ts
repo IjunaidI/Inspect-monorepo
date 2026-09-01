@@ -186,6 +186,21 @@ export interface PurchaseOrderDto {
   factoryCompany?: { id: string; name: string } | null;
   product?: { id: string; styleNumber: string } | null;
 }
+/** Body of POST /purchase-orders. A PO is explicitly two-party (INS-055). */
+export interface CreatePurchaseOrderInput {
+  poNumber: string;
+  clientCompanyId: string;
+  factoryCompanyId: string;
+  productId: string;
+  totalQuantity?: number;
+}
+
+/** Body of PATCH /purchase-orders/:id — the parties are immutable after create. */
+export interface UpdatePurchaseOrderInput {
+  poNumber?: string;
+  totalQuantity?: number;
+}
+
 export interface AqlPreviewDto {
   sampleSizeCodeLetter: string;
   sampleSize: number;

@@ -92,6 +92,8 @@ const COMPUTED = new Set([
   // POST /admin/orgs — an org plus its first invitation, composed at the call.
   'CreatedOrgDto',
   // Request bodies.
+  'CreatePurchaseOrderInput',
+  'UpdatePurchaseOrderInput',
   'PresignInput',
   'RegisterPhotoInput',
   'RetakePhotoInput',
