@@ -8,25 +8,13 @@ import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
 
-type AqlLevelInput = 'I' | 'II' | 'III' | 'S1' | 'S2' | 'S3' | 'S4';
-
-export interface PresetItemInput {
-  itemName: string;
-  description?: string;
-  /** Storage key under orgs/<orgId>/presets/ — one reference illustration per item. */
-  referenceImageUrl?: string;
-}
-export interface CreateLoopPresetInput {
-  name: string;
-  description?: string;
-  aqlLevel?: AqlLevelInput;
-  /** INS-081: the ordered single-image capture points that make up this loop. */
-  items: PresetItemInput[];
-  /** Loop-global (INS-081): the sheet filled once per cycle. */
-  measurementFields?: Array<{ label: string; unit?: string }>;
-  /** Loop-global (INS-081): the taggable defect list for the whole loop. */
-  allowedDefectCatalogIds?: string[];
-}
+// The wire shapes live in the shared package (INS-086 §4.4); re-exported so
+// existing imports keep working.
+export type {
+  CreateLoopPresetInput,
+  PresetItemInput,
+} from '@inspect/shared-types';
+import type { CreateLoopPresetInput } from '@inspect/shared-types';
 
 @Injectable()
 export class LoopPresetsService {

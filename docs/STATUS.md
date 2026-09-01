@@ -1,6 +1,29 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02 (eighth slice) — Phase 4 sweep: the PRESET READ SCREENS ARE ON THE
+> **Last verified: 2026-09-02 (ninth slice) — PHASE 4 IS CODE-COMPLETE: every screen-migration
+> ledger row is BUILT.** The final row, **`/presets/new`** — the console's most complex authoring
+> surface — is on the phone as a single-pane builder: ordered loop items with up/down reorder
+> (position = array order, exactly the API's contract), the loop-global defect chips
+> severity-grouped and rendered as REAL Pressables (closing the a11y observation recorded in the
+> 2026-08-31 click-through), inline custom-defect creation with its own error slot (the web reuses
+> the preset save-error slot), the per-unit measurement sheet, INS-076 version guidance ("same name
+> → next version, decided server-side"), and `?from=` duplicate seeding that shows a notice when the
+> seed fails (the web silently starts blank). Presets list gained New; detail gained "Duplicate into
+> a new version". **Wire cleanup:** `CreateLoopPresetInput`/`PresetItemInput`/`CreateDefectInput`/
+> `AqlLevelInput` moved to shared-types (services re-export; guard allowlisted). **Deferred, both
+> recorded:** reference-image upload and the company-logo upload — the two expo-image-picker items.
+> **Verified:** type-check **11/11** · lint **0 errors** · loop-presets/defect-catalog/wire-contract
+> specs green (serial) · `expo export` green, **25 routes**. **What the INS-086 epic now waits on —
+> exactly one thing:** the single on-device acceptance pass (user decision 2026-09-02): `railway
+> login` → the INS-090 deploy → real origin into `eas.json` (`EXPO_PUBLIC_INSPECT_API_URL`, plus
+> `EXPO_PUBLIC_INSPECT_WEB_URL` for magic/invite links) → `eas build --profile preview --platform
+> android`. **Session rollup (2026-09-02, nine slices):** 20 mobile screens/routes now exist; six
+> live WEB bugs fixed (row-index avatar colours, discarded archive error, discarded revoke error,
+> initialsOf fork, reportNumber×3 fork, blind report-generate POST) and two API 500-leaks became
+> 409s (duplicate styleNumber, duplicate poNumber); domain grew to 29 tests across 6 files;
+> ~14 wire shapes moved into shared-types.
+>
+> Prior entry: **2026-09-02 (eighth slice) — Phase 4 sweep: the PRESET READ SCREENS ARE ON THE
 > PHONE.** `/presets`: card list with search and the INS-081 copy (loop ITEMS, one image each —
 > never "loops"). `/presets/[id]`: the loop-global defect tags (severity-chipped) and measurement
 > sheet rendered ONCE above the ordered items — items **explicitly sorted by `position`** (the web

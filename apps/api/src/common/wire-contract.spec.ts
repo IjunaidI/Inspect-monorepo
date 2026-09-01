@@ -94,6 +94,9 @@ const COMPUTED = new Set([
   // Request bodies.
   'CreatePurchaseOrderInput',
   'UpdatePurchaseOrderInput',
+  'CreateLoopPresetInput',
+  'PresetItemInput',
+  'CreateDefectInput',
   'InviteUserInput',
   'CreateMemberInput',
   'AcceptInvitationInput',

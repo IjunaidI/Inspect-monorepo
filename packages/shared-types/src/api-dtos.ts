@@ -113,6 +113,33 @@ export interface LoopPresetDetailDto extends LoopPresetDto {
   allowedDefects: AllowedDefectDto[];
 }
 
+/** AQL inspection levels; the MVP engine implements General Level II only (INS-052). */
+export type AqlLevelInput = 'I' | 'II' | 'III' | 'S1' | 'S2' | 'S3' | 'S4';
+
+/** One ordered single-image capture point in POST /loop-presets (INS-081). */
+export interface PresetItemInput {
+  itemName: string;
+  description?: string;
+  /** Storage key under orgs/<orgId>/presets/ — never a presigned URL. */
+  referenceImageUrl?: string;
+}
+
+/** Body of POST /loop-presets — one loop; tags and the sheet are loop-global. */
+export interface CreateLoopPresetInput {
+  name: string;
+  description?: string;
+  aqlLevel?: AqlLevelInput;
+  items: PresetItemInput[];
+  measurementFields?: Array<{ label: string; unit?: string }>;
+  allowedDefectCatalogIds?: string[];
+}
+
+/** Body of POST /defect-catalog — a custom org defect. */
+export interface CreateDefectInput {
+  name: string;
+  defaultSeverity: DefectSeverity;
+}
+
 export interface DefectCatalogDto {
   id: string;
   name: string;

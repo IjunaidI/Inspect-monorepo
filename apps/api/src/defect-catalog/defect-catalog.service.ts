@@ -8,14 +8,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { actorTypeFor } from '../audit/actor-type';
-import type { DefectSeverity } from '@inspect/shared-types';
 
-type Severity = DefectSeverity;
-
-export interface CreateDefectInput {
-  name: string;
-  defaultSeverity: Severity;
-}
+// The wire shape lives in the shared package (INS-086 §4.4); re-exported so
+// the controller's existing import keeps working.
+export type { CreateDefectInput } from '@inspect/shared-types';
+import type { CreateDefectInput } from '@inspect/shared-types';
 
 @Injectable()
 export class DefectCatalogService {

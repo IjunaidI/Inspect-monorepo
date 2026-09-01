@@ -227,6 +227,14 @@ export default function PresetDetail() {
           ))}
         </View>
 
+        {/* INS-076: presets are immutable — Duplicate is the only edit path. */}
+        <Pressable
+          onPress={() => router.push(`/presets/new?from=${preset.id}`)}
+          hitSlop={4}
+        >
+          <Text style={styles.link}>Duplicate into a new version →</Text>
+        </Pressable>
+
         <View style={styles.dangerCard}>
           <Text style={styles.dangerTitle}>Archive preset</Text>
           <Text style={styles.hint}>

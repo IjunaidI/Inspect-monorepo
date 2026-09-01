@@ -5,7 +5,16 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
-> **Last updated: 2026-09-02 (Phase 4 sweep, continued)** — **`/companies/[id]/guests` is ported**:
+> **Last updated: 2026-09-02 — EVERY PHASE 4 ROW IS BUILT.** The final row (`/presets/new`, the
+> builder) landed: single-pane authoring — ordered items with up/down reorder, loop-global
+> severity-grouped defect chips as REAL Pressables (fixing the recorded a11y gap), inline custom
+> defect creation, the measurement sheet, INS-076 version guidance, and `?from=` duplicate seeding
+> that surfaces its failure instead of silently starting blank. Reference-image upload and the
+> company-logo upload are the two deferred expo-image-picker items. **Every row below is now
+> `in-progress (built)` and blocked ONLY on the single on-device acceptance pass**
+> ([INS-090](../future/BACKLOG.md) deploy → set the real origin in `eas.json` →
+> `eas build --profile preview --platform android`), per the user's decision to verify once after
+> Phase 4 completes. Earlier same day — **`/companies/[id]/guests` ported**:
 > invite (TTL chips 7/30/90, server clamp 1–365 preserved), the ONE-TIME magic link with copy
 > (expo-clipboard; the origin comes from `EXPO_PUBLIC_INSPECT_WEB_URL` since a device has no
 > window.location — unset, the screen says so and offers the raw token), revoke behind a native
@@ -94,7 +103,7 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 | `/reports` | `/reports` | `GET /reports` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: debounced search, distinct error/401/403/empty states; device acceptance blocked on INS-090) | INS-086 |
 | `/presets` | `/presets` | `GET /loop-presets` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: search, INS-081 item-count copy; archive moved to detail; Duplicate arrives with the builder; device acceptance blocked on INS-090) | INS-086 |
 | `/presets/[id]` | `/presets/[id]` | `GET /loop-presets/:id`, `DELETE /loop-presets/:id` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: loop-global tags/measurements above ordered items (position-sorted), presigned reference thumbs w/ distinct unavailable state, archive w/ confirm; device acceptance blocked on INS-090) | INS-086 |
-| `/presets/new` | `/presets/new` | `POST /loop-presets`, `GET /defect-catalog` | `QA_MANAGER` | 4 | not-started | INS-086 |
+| `/presets/new` | `/presets/new` | `POST /loop-presets`, `GET /defect-catalog`, `POST /defect-catalog`, `GET /loop-presets/:from` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: single-pane builder — ordered items w/ up/down reorder, loop-global severity-grouped defect chips (REAL Pressables — fixes the recorded a11y gap) + custom defect creation, measurement sheet, ?from= duplicate w/ a visible failure notice, INS-076 version hint; reference-image upload deferred (expo-image-picker); device acceptance blocked on INS-090) | INS-086 |
 | `/companies/[id]` | `/companies/[id]` | `GET/PATCH/DELETE /companies/:id`, `POST /companies/:id/restore` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: edit form incl. tri-state logo remove + GPS pair rule, archive w/ confirm, archived banner + restore the web page lacks; logo UPLOAD deferred — needs expo-image-picker; device acceptance blocked on INS-090) | INS-086 |
 | `/companies/[id]/guests` | `/companies/[id]/guests` | `GET/POST /companies/:companyId/guests`, `DELETE /company-guests/:id` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: invite w/ TTL chips + one-time magic link (copy via expo-clipboard; origin from EXPO_PUBLIC_INSPECT_WEB_URL, honest fallback when unset), revoke w/ confirm, real forbidden/error states the web lacks; device acceptance blocked on INS-090) | INS-086 |
 | `/products` `/products/new` `/products/[id]` | same | `GET/POST/PATCH/DELETE /products`, `POST /products/:id/restore` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: list w/ the server q/archived/paging the WEB never used, create, edit w/ INS-074 null-clear, archive w/ confirm + archived banner + restore (dead code on the console); duplicate styleNumber now a 409 API-side; device acceptance blocked on INS-090) | INS-086 |

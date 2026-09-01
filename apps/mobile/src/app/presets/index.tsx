@@ -115,7 +115,12 @@ export default function Presets() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <Text style={styles.title}>Loop presets</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>Loop presets</Text>
+          <Pressable onPress={() => router.push('/presets/new')} hitSlop={8}>
+            <Text style={styles.newLink}>New</Text>
+          </Pressable>
+        </View>
         {rows !== null ? (
           <Text style={styles.subtitle}>
             {visible.length} preset{visible.length === 1 ? '' : 's'}
@@ -160,7 +165,7 @@ export default function Presets() {
               <Text style={styles.empty}>
                 {term
                   ? `No presets match “${q.trim()}”.`
-                  : 'No presets yet — create one in the console.'}
+                  : 'No presets yet. Add one with “New”.'}
               </Text>
             )
           }
@@ -202,7 +207,9 @@ const styles = StyleSheet.create({
     backgroundColor: palette.panel,
     gap: 8,
   },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
+  newLink: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   subtitle: { color: palette.sub, fontSize: 13 },
   search: {
     height: 40,
