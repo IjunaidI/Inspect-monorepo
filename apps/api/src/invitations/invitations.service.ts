@@ -9,11 +9,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { hashPassword } from '../auth/password';
 import { AuditService } from '../audit/audit.service';
 
-export interface AcceptInvitationInput {
-  token: string;
-  name?: string;
-  password: string;
-}
+// The wire shape lives in the shared package (INS-086 §4.4); re-exported so
+// the controller's existing import keeps working.
+export type { AcceptInvitationInput } from '@inspect/shared-types';
+import type { AcceptInvitationInput } from '@inspect/shared-types';
 
 /** Accept an invite: set the password and activate the User (spec §3). Public. */
 @Injectable()

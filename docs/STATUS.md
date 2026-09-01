@@ -1,6 +1,23 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02 (sixth slice) — Phase 4 sweep: the `/purchase-orders` SURFACE IS ON
+> **Last verified: 2026-09-02 (seventh slice) — Phase 4 sweep: `/users` AND `/invite` ARE ON THE
+> PHONE.** `/users` (UI floor ORG_OWNER, mirroring the web's redirect; the API's QA-floor list stays
+> the authority): roster with id-hashed avatar colours, invite with role chips + the
+> `EXPO_PUBLIC_INSPECT_WEB_URL`-composed link and clipboard copy, role change / deactivate /
+> reactivate behind native confirms with INLINE errors — the web's `alert()`s were not ported; the
+> API's additive ceiling, INS-058 last-owner guard and self-protection all surface as readable
+> messages. Direct add-member (email+password) stays web-only for now — recorded. `/invite` (the one
+> public screen): deep-link `?token=` plus a paste-the-token fallback until device links are wired,
+> curated 404 ("not found") vs 410 ("no longer valid") vs accept-time-400 states, "invite expires on
+> X" surfaced (fetched-but-dropped on web) — and **auto sign-in after acceptance** straight into
+> `/inspections` (the web bounces to a bare login form). **Wire cleanup:** `InviteUserInput`,
+> `CreateMemberInput`, `AcceptInvitationInput` moved from service files to `@inspect/shared-types`
+> (wire-contract allowlisted; services re-export; `Role` === `UserRole` by declaration). **Verified:**
+> type-check **11/11** · lint **0 errors** · users+invitations+wire-contract specs green (serial) ·
+> `expo export` green, **22 routes**. Remaining ledger rows: ONLY the three preset screens
+> (`/presets`, `/presets/[id]`, `/presets/new` — the builder, deliberately last).
+>
+> Prior entry: **2026-09-02 (sixth slice) — Phase 4 sweep: the `/purchase-orders` SURFACE IS ON
 > THE PHONE** (list + two-party create + edit + delete). Create feeds BOTH party pickers from the one
 > company list (INS-055 — role lives on the edge), ranked by the NEW shared
 > `rankCompaniesByActivity` in `@inspect/domain` — web's `rankedFor` re-pointed at it, so the

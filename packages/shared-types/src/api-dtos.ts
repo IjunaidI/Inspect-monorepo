@@ -397,6 +397,27 @@ export interface GuestReportDto {
   photos?: GuestReportPhotoDto[];
 }
 
+/** Body of POST /users/invite (ORG_OWNER). PLATFORM_ADMIN is never invitable. */
+export interface InviteUserInput {
+  email: string;
+  role: UserRole;
+}
+
+/** Body of POST /users (ORG_OWNER) — direct member create, no invitation. */
+export interface CreateMemberInput {
+  name?: string;
+  email: string;
+  password: string;
+  role?: UserRole;
+}
+
+/** Body of the public POST /invitations/accept. Password floor: 8 chars. */
+export interface AcceptInvitationInput {
+  token: string;
+  name?: string;
+  password: string;
+}
+
 export interface InvitationDto {
   id: string;
   token: string;

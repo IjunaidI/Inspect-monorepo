@@ -23,17 +23,10 @@ const SAFE_SELECT = {
   createdAt: true,
 } as const;
 
-export interface InviteUserInput {
-  email: string;
-  role: Role;
-}
-
-export interface CreateMemberInput {
-  name?: string;
-  email: string;
-  password: string;
-  role?: Role;
-}
+// The wire shapes live in the shared package (INS-086 §4.4); re-exported so
+// existing imports keep working. `UserRole` there === `Role` here by design.
+export type { CreateMemberInput, InviteUserInput } from '@inspect/shared-types';
+import type { CreateMemberInput, InviteUserInput } from '@inspect/shared-types';
 
 /** Org Owner user management within their own org (spec §4). */
 @Injectable()
