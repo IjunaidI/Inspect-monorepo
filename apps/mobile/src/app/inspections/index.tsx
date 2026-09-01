@@ -115,11 +115,11 @@ export default function Inspections() {
         {roleAtLeast(identity?.role, 'QA_MANAGER') ? (
           <>
             <Pressable
-              onPress={() => router.push('/reports')}
+              onPress={() => router.push('/dashboard')}
               hitSlop={8}
               style={{ marginRight: 16 }}
             >
-              <Text style={styles.signOut}>Reports</Text>
+              <Text style={styles.signOut}>Dashboard</Text>
             </Pressable>
             <Pressable
               onPress={() => router.push('/inspections/new')}

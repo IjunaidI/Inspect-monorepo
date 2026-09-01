@@ -11,6 +11,8 @@ import {
   Plus,
   Upload,
 } from 'lucide-react';
+import { brandFallbacks } from '@inspect/design-tokens';
+import { hashIndex, initialsFrom } from '@inspect/domain';
 import { Btn, Mono } from '@/components/inspect/shell';
 import { ConfirmDialog } from '@/components/inspect/confirm-dialog';
 import { mono as monoStyle, ui } from '@/components/inspect/tokens';
@@ -110,9 +112,8 @@ function Pager({ page, hasPrev, hasNext, onPage }: { page: number; hasPrev: bool
   );
 }
 
-const BRANDS = ['#1457A3', '#0B7D6B', '#C2410C', '#7C3AED', '#B5791A', '#0B1220'];
-const initialsOf = (name: string) =>
-  name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '??';
+// Palette + initials live in the shared packages (INS-086 §4.4); the colour
+// is keyed on the company id so it cannot change when the visible slice does.
 
 function InputRow({ label, name, placeholder, type = 'text', defaultValue }: { label: string; name: string; placeholder?: string; type?: string; defaultValue?: string }) {
   return (
@@ -539,9 +540,9 @@ export function DirectoryClient({
             </tr>
           </thead>
           <tbody>
-            {visible.map((c, i) => {
-              const color = c.primaryColor || BRANDS[i % BRANDS.length];
-              const initials = initialsOf(c.name);
+            {visible.map((c) => {
+              const color = c.primaryColor || brandFallbacks[hashIndex(c.id, brandFallbacks.length)];
+              const initials = initialsFrom(c.name);
               // INS-072: render from the API's short-lived presigned GET (or a
               // legacy absolute URL). `logoUrl` itself is now an object key and
               // is NOT fetchable — using it directly would show a broken image.

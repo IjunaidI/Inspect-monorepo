@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
+import { STATUS_BUCKETS } from '@inspect/domain';
 import {
   apiGet,
   loadOrFallback,
@@ -67,19 +68,7 @@ const DEMO_SUMMARY: ApiDashboardSummary = {
   reports: 12,
 };
 
-/**
- * The nine InspectionStatus values folded into the four states a QA manager
- * actually acts on (INS-068). Every status belongs to exactly one bucket, so
- * the four tiles always sum to the org's total inspections.
- */
-const STATUS_GROUPS: { label: string; statuses: string[] }[] = [
-  { label: 'In progress', statuses: ['DRAFT', 'ASSIGNED', 'IN_PROGRESS'] },
-  { label: 'Awaiting review', statuses: ['SUBMITTED', 'UNDER_REVIEW', 'HOLD'] },
-  { label: 'Passed', statuses: ['APPROVED', 'REPORT_ISSUED'] },
-  { label: 'Failed', statuses: ['REJECTED'] },
-];
-
-const countIn = (byStatus: Record<string, number>, statuses: string[]) =>
+const countIn = (byStatus: Record<string, number>, statuses: readonly string[]) =>
   statuses.reduce((sum, s) => sum + (byStatus[s] ?? 0), 0);
 
 const num = (value: number) => value.toLocaleString('en-US');
@@ -132,7 +121,7 @@ function StatTiles({ summary }: { summary: ApiDashboardSummary }) {
   return (
     <div style={{ display: 'grid', gap: 12, marginTop: 20 }}>
       <TileRow>
-        {STATUS_GROUPS.map(({ label, statuses }) => (
+        {STATUS_BUCKETS.map(({ label, statuses }) => (
           <StatTile key={label} label={label} value={num(countIn(byStatus, statuses))} />
         ))}
         <StatTile label="Pass rate" value={pct(quality.passRate)} hint={qualityHint} />

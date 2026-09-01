@@ -5,6 +5,7 @@ import {
   LOCKED_STATUSES,
   REINSPECTABLE_STATUSES,
   REPORTABLE_STATUSES,
+  STATUS_BUCKETS,
   SUBMITTABLE_STATUSES,
   isLockedStatus,
 } from './inspection-status';
@@ -40,6 +41,15 @@ describe('inspection status rules', () => {
   it('isLockedStatus is false exactly for the submittable statuses', () => {
     for (const s of SUBMITTABLE_STATUSES) expect(isLockedStatus(s)).toBe(false);
     for (const s of LOCKED_STATUSES) expect(isLockedStatus(s)).toBe(true);
+  });
+
+  it('STATUS_BUCKETS partition the full status enum exactly once each', () => {
+    // The dashboard's four tiles must always sum to the org's total
+    // inspections — a status in zero buckets undercounts, in two overcounts.
+    const all = STATUS_BUCKETS.flatMap((b) => [...b.statuses]);
+    expect(all.length).toBe(INSPECTION_STATUSES.length);
+    expect(new Set(all).size).toBe(INSPECTION_STATUSES.length);
+    for (const s of INSPECTION_STATUSES) expect(all).toContain(s);
   });
 
   it('fails closed on unknown, empty and missing status', () => {

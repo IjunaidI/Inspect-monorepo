@@ -5,7 +5,15 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
-> **Last updated: 2026-09-02 (Phase 4 sweep)** — **the report surface is ported**: `/reports` (debounced
+> **Last updated: 2026-09-02 (Phase 4 sweep, continued)** — **the dashboard is ported and the company
+> directory split out**: mobile `/dashboard` is the QA hub (the four STATUS_BUCKETS tiles — now a shared
+> `@inspect/domain` partition composed from the transition sets, web re-pointed — pass-rate/DPHU with the
+> null-is-“—” rule, entity counts, links onward) and mobile `/companies` is the directory (see the
+> `/dashboard` note below for the v1 deviations). Two live web bugs fixed in the same change: the
+> directory's fallback avatar colour was keyed on row index (changed page-to-page; now `hashIndex(id)`
+> against the shared `brandFallbacks` palette in design-tokens) and its local `initialsOf` fork replaced
+> by the shared `initialsFrom`. `expo export` bundles **12 routes**.
+> Prior update (Phase 4 sweep) — **the report surface is ported**: `/reports` (debounced
 > search, pull-to-refresh, error/401/403/empty told apart — the web page conflates all four into
 > "No reports yet") and `/inspections/[id]/report` (live preview for any role, the idempotent generate
 > fired only for QA_MANAGER+, tamper-proof block, **Open PDF** via the presigned `GET /reports/:id/pdf` —
@@ -64,7 +72,7 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 | `/login` | `/login` | `POST /auth/login`, `GET /auth/me` | public | 2 | in-progress (built 2026-08-31; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections` | `/inspections` | `GET /inspections` | `INSPECTOR` | 2 | in-progress (built 2026-08-31; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*`, `POST /inspections/:id/submit` | `INSPECTOR` ✅ | 3 | in-progress (built 2026-08-31: guided camera + offline queue + submit gate; device acceptance blocked on INS-090) | INS-086 |
-| `/dashboard` | `/dashboard` | `GET /dashboard/summary`, `GET /companies` | `QA_MANAGER` | 4 | not-started | INS-086 |
+| `/dashboard` | `/dashboard` + `/companies` | `GET /dashboard/summary`, `GET /companies` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: KPI hub + the directory SPLIT to its own `/companies` screen — search/kind/archived filters, load-more; directory is read-only v1: create/edit/archive land with `/companies/[id]`; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | in-progress (built 2026-08-31: PO/preset/inspector pickers, live AQL preview, idempotent create; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections/[id]/review` | `/inspections/[id]/review` | `POST /inspections/:id/decision` | view: any · decide: `QA_MANAGER` | 4 | in-progress (built 2026-08-31: AQL result, submit-for-review, decision form, linked re-inspection; device acceptance blocked on INS-090) | INS-086 |
 | `/inspections/[id]/report` | `/inspections/[id]/report` | `POST /inspections/:id/report` (idempotent), `GET /inspections/:id`, `GET /reports/:id/pdf` | view: any · signed report: `QA_MANAGER` | 4 | in-progress (built 2026-09-02: live preview + signed report, QA-gated generate, Open PDF via presigned URL; device acceptance blocked on INS-090) | INS-086 |
@@ -82,8 +90,12 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 **Note on `/dashboard`:** the *company directory* lives here (`directory-client.tsx`), not at `/companies` —
 there is no list route. Since [INS-055](../future/BACKLOG.md) it is ONE list with a `kind` filter, not the
 old Buyers/Suppliers tab pair, because a company can be the client on one PO and the factory on another.
-On a phone this is very likely its own screen rather than a panel on the dashboard. Decide from the
-behaviour contract, not the URL.
+**Decided 2026-09-02:** on the phone the directory IS its own screen — mobile `/companies`
+(`apps/mobile/src/app/companies/index.tsx`), linked from the `/dashboard` hub. Deliberate v1 deviations,
+each recorded in the screen header: one debounced server-side search (the web stacks a client-side
+current-page filter on top of Enter-to-search), stable id-hashed fallback avatar colours (the web's
+index-keyed colours changed page-to-page — fixed on web in the same change via `hashIndex`), read-only
+until `/companies/[id]` ports (create/edit/archive stay on the web), and load-more instead of a pager.
 
 **Note on the guests screen:** guests attach to a company acting in its **client** role only — there is no
 factory-side portal. Report visibility keys on `clientCompanyId` AND `orgId`; a party-agnostic predicate

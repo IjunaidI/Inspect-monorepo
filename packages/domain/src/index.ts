@@ -3,7 +3,7 @@
  * the mobile app (INS-086 Phase 1). No I/O, no React, no platform imports.
  */
 export { ROLE_RANK, roleAtLeast } from './roles';
-export { initialsFrom } from './text';
+export { hashIndex, initialsFrom } from './text';
 export { reportNumber } from './report-number';
 export {
   conclusionFrom,
@@ -17,5 +17,6 @@ export {
   DECIDABLE_STATUSES,
   REPORTABLE_STATUSES,
   REINSPECTABLE_STATUSES,
+  STATUS_BUCKETS,
   isLockedStatus,
 } from './inspection-status';

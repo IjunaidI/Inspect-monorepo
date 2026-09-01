@@ -48,6 +48,21 @@ export const severity: Record<
   minor: { key: 'minor', label: 'Minor', abbr: 'Min', fg: '#475467', bg: '#EFF2F6', dot: '#8A93A1' },
 };
 
+/**
+ * Brand-avatar fallback palette: a company with no `primaryColor` gets one of
+ * these, picked by a stable hash of the company id (`hashIndex` in
+ * `@inspect/domain`) — never by row index, which made a company's swatch
+ * change from page to page on the web directory.
+ */
+export const brandFallbacks = [
+  '#1457A3',
+  '#0B7D6B',
+  '#C2410C',
+  '#7C3AED',
+  '#B5791A',
+  '#0B1220',
+] as const;
+
 export type RoleKey = 'inspector' | 'qa' | 'owner' | 'platform';
 
 /** Role badge presentation. Display only — the API is the RBAC authority. */

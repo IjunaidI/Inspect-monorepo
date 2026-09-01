@@ -1,6 +1,28 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02 — Phase 4 sweep continues: the REPORT SURFACE IS ON THE PHONE.** Two more
+> **Last verified: 2026-09-02 (continued) — Phase 4 sweep: the DASHBOARD IS ON THE PHONE, and the company
+> directory is its own `/companies` screen.** Mobile **`/dashboard`** is the QA hub: the four status
+> tiles, pass rate + DPHU (null renders "—", never 0% — INS-068), entity counts, and links to the
+> directory, reports and inspections; the inspections header link swapped Reports→Dashboard since the hub
+> now carries both. Mobile **`/companies`** is the INS-055 single directory — debounced server search,
+> kind (INTERNAL/THIRD_PARTY) + active/all/archived filters, load-more pagination, logo or
+> initials-avatar rows with flattened `_count`s — **read-only v1** (create/edit/archive stay web-side
+> until `/companies/[id]` ports; recorded in the ledger). **§4.4 moves:** `STATUS_BUCKETS` — the
+> dashboard's exhaustive 9-status→4-tile partition — now lives in `@inspect/domain`, deliberately
+> COMPOSED from the existing transition sets (in-progress IS submittable, awaiting-review IS decidable,
+> passed IS reportable) so the KPI partition and the status machine cannot drift, with a
+> partition-exactness test; web re-pointed. **Two live web bugs found by the contract pass and fixed:**
+> the directory's fallback avatar colour was keyed on ROW INDEX, so a company's swatch changed whenever
+> the visible slice did (pages, filters) — replaced with `hashIndex(company.id)` (new in domain, FNV-1a)
+> over the new shared `brandFallbacks` palette in design-tokens; and the directory's local `initialsOf`
+> fork was replaced with the shared `initialsFrom`. **Verified:** type-check **11/11** · lint **0
+> errors** · api **656/42** · web **38/3** · domain **28/5** · api-client **29/2** · mobile **15/1** ·
+> `expo export` green, **12 routes**. **NOT verified:** anything on a device (INS-090). **Deviations
+> recorded in the ledger:** one debounced server search replaces the web's stacked two-tier search;
+> load-more replaces the pager; the web's demo-data fallback is not ported (mobile shows real
+> error/retry states instead).
+>
+> Prior entry: **2026-09-02 — Phase 4 sweep continues: the REPORT SURFACE IS ON THE PHONE.** Two more
 > screens via the `migrate-screen` procedure. **`/reports`**: card list with debounced (300ms) search on
 > PO/client, pull-to-refresh, and — deliberately better than the web page, whose blanket
 > `.catch(() => [])` renders network failure, 401, 403 and the Platform-Admin no-org 403 all as "No
