@@ -7,7 +7,9 @@
 # `Cannot find module '@inspect/shared-types'`.
 #
 # Build from the REPO ROOT: `docker build -f apps/api/Dockerfile .`
-# (On Railway: set the service's Dockerfile path to apps/api/Dockerfile, root directory `/`.)
+# (On Railway — project QCLink, service "Main Application": root directory `/`, config file
+# `apps/api/railway.json` (sets this Dockerfile path, the /health check and the pre-deploy
+# migrate+seed). See docs/reference/deploy-railway.md.)
 
 FROM node:20-slim AS base
 # Prisma engines on a slim image need openssl

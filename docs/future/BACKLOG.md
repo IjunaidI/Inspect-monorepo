@@ -40,7 +40,8 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 ## High
 
 ### INS-090 · The API is not deployed anywhere — a phone cannot reach it   [HIGH]
-- status: in-progress    # Everything machine-side is done: both Dockerfiles rewritten to the verified monorepo contract (copy `packages/`, full `pnpm install --frozen-lockfile`, build via `pnpm build:api`/`build:web`, openssl for Prisma on slim, root `.dockerignore`), `pnpm build:api` proven from a clean `dist/`-less state, `eas` authenticated. **Remaining is ONE user-side step: `railway login`, then run the deploy.** Docker isn't installed locally, so the image build is proven by that deploy.
+- status: done
+- done: 2026-09-02 — the API was already auto-deploying to Railway project **QCLink** (service `Main Application`, from GitHub `main`, `apps/api/Dockerfile`) but answered 502 on every request: Railway routed to its injected `PORT` while the API listens on `API_PORT`. Fixed the domain's target port (3000) + `API_PORT=3000`; added the missing `REPORT_SIGNING_PRIVATE_KEY_PEM` (**fresh** Ed25519, minted for this environment), `ALLOWED_ORIGINS`, `WEB_BASE_URL`, `RATE_LIMIT_TRUSTED_PROXIES=1`; set the service config path to the new `apps/api/railway.json` (`/health` check, pre-deploy `prisma migrate deploy` + seed, start command). Verified from outside the LAN: `GET /health` → db + redis up; `POST /auth/login` → tokens; `GET /auth/me` → PLATFORM_ADMIN; CORS header echoes the console origin; `/docs` 404 (production). Real origins written into `apps/mobile/eas.json`. Runbook: [../reference/deploy-railway.md](../reference/deploy-railway.md). Note: `railway.json` is deprecated by Railway after 2026-12-01 (migrate to `.railway/railway.ts`).
 - area: Infra & CI
 - evidence: `INSPECT_API_URL` defaults to `http://localhost:3000`; no deploy has ever run.
 - problem: The INS-086 device acceptance needs a reachable HTTPS origin — a phone cannot resolve `localhost`.
@@ -107,12 +108,12 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 
 > Nothing here is blocked on engineering. Each needs a credential or a decision only the account owner has.
 
-1. **[INS-090](BACKLOG.md)** — `railway login`, then run the deploy (build contract above). This unlocks the
-   single INS-086 device pass: real origins into `apps/mobile/eas.json`
-   (`EXPO_PUBLIC_INSPECT_API_URL`, `EXPO_PUBLIC_INSPECT_WEB_URL`), then
-   `eas build --profile preview --platform android` (`eas` is already authenticated).
-2. **[INS-002](BACKLOG.md)** — rotate or abandon the old Railway credentials in git history; mint a fresh
-   Ed25519 signing key for every environment as it is created.
+1. **[INS-086](BACKLOG.md) device pass** — the API is deployed and `eas.json` carries the real origins
+   ([INS-090](BACKLOG.md) done 2026-09-02); run `eas build --profile preview --platform android`
+   (`eas` is already authenticated) and walk the ledger on a phone.
+2. **[INS-002](BACKLOG.md)** — rotate the QCLink credentials (DB, Redis, S3, JWT secrets — the user
+   has said everything will be rotated after INS-090; the remote signing key is already fresh) and
+   decide on the git-history scrub.
 3. **Product decisions parked in [STATUS](../STATUS.md) observations** — whether a preset's defect-tag
    selection should LIMIT populate's tag list (today populate offers the whole org catalog), and whether
    an archived company being silently editable via `PATCH /companies/:id` is acceptable.

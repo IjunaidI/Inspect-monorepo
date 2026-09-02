@@ -10,15 +10,17 @@
 ## Where the project stands
 
 **INS-086 (React Native app) Phase 4 is CODE-COMPLETE — every screen-migration-ledger row is
-built.** 25 routes bundle green on Expo SDK 57. The whole epic now waits on exactly one thing, by
-explicit user decision (2026-09-02): a **single on-device acceptance pass**, gated on the INS-090
-deploy. Steps, in order — all user-side until the deploy exists:
+built.** 25 routes bundle green on Expo SDK 57. **The API is now reachable from a phone
+([INS-090](future/BACKLOG.md) done 2026-09-02):** `https://main-application-production-6fa4.up.railway.app/health`
+reports db + redis up and a login round-trip works from outside the local network. The whole epic
+now waits on exactly one thing, by explicit user decision (2026-09-02): the **single on-device
+acceptance pass**:
 
-1. `railway login`, then deploy `apps/api` (the verified build contract is in
-   [INS-090](future/BACKLOG.md): root context, `pnpm build:api`, `prisma migrate deploy` + seed on
-   release, mint a **fresh** Ed25519 signing key).
-2. Put the real origins into `apps/mobile/eas.json` — `EXPO_PUBLIC_INSPECT_API_URL`, and
-   `EXPO_PUBLIC_INSPECT_WEB_URL` (magic-link/invite-link copy composes from it).
+1. ~~Deploy the API~~ — done. Railway project **QCLink**, runbook
+   [reference/deploy-railway.md](reference/deploy-railway.md). A fresh Ed25519 signing key was
+   minted there; the remaining INS-002 rotation is user-side.
+2. ~~Real origins into `apps/mobile/eas.json`~~ — done (`preview` + `production` carry
+   `EXPO_PUBLIC_INSPECT_API_URL` / `EXPO_PUBLIC_INSPECT_WEB_URL`).
 3. `eas build --profile preview --platform android` (`eas` is already authenticated as
    donanlumina; project `@donanlumina/inspect` is linked). Walk the ledger on the device.
 
@@ -31,6 +33,7 @@ deploy. Steps, in order — all user-side until the deploy exists:
 | **Web console** (Next.js 15) | All screens live-wired; clicked through end-to-end 2026-08-31 (signed report + guest portal verified in a real browser). Six live bugs found by the Phase 4 contract passes were fixed 2026-09-02 (see below). **38 Vitest tests.** |
 | **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **15 Vitest tests** on the pure capture core. Nothing device-verified yet. |
 | **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**29 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity`), `@inspect/design-tokens` (+`brandFallbacks`). |
+| **Deploy** (Railway project QCLink — a DEV environment) | API `Main Application` live at `main-application-production-6fa4.up.railway.app` (Dockerfile build, `/health` check, pre-deploy `migrate deploy` + seed, fresh signing key), console `serene-vision` at `serene-vision-production-8387.up.railway.app`, Postgres + Redis + bucket. Auto-deploys on push to `main`. Runbook: [reference/deploy-railway.md](reference/deploy-railway.md). |
 | **CI** (`.github/workflows/ci.yml`) | migrate→seed→type-check→api Jest→all Vitest suites→integration→builds→lint→OpenAPI staleness→single-resolved-React assertion. **Green on every 2026-09-02 push (10/10 commits).** |
 
 **Verified numbers (2026-09-02):** type-check 11/11 · lint 0 errors (1 known font warning) ·
@@ -73,12 +76,16 @@ integration 147/16 (CI) · `expo export` 25 routes.
 - `pnpm` 9.15.9 is on PATH; `npx -y pnpm@9.12.0` crashes — use the PATH pnpm or app-local `.bin`.
 - Bootstrap admin password converges to `BOOTSTRAP_ADMIN_*` on every `prisma db seed` — re-seed if
   login 401s. Nest `--watch` restarts cause transient one-request failures — retry before blaming code.
+- **The root `.env` and the deployed API share one Postgres** (the local `DATABASE_URL` is the
+  public proxy of Railway's `Postgres-k9HN`). A local `migrate reset` resets the deployed DB too.
+- **Railway routes to `PORT`, the API listens on `API_PORT`.** The domain's target port must be 3000
+  (it is) — a recreated domain without it 502s while the logs say "successfully started".
 - Dev workspace for manual passes: **Acme Apparel Group** (owner@acme-apparel.test — see the
   2026-08-31 click-through in git history for the full fixture set).
 
-## Open backlog (7 items)
+## Open backlog (6 items)
 
-[INS-090](future/BACKLOG.md) deploy (user-side) · [INS-002](future/BACKLOG.md) credential rotation
+[INS-002](future/BACKLOG.md) credential rotation
 (user-side) · [INS-086](future/BACKLOG.md) epic (device pass) · [INS-089](future/BACKLOG.md) record
 the report signer · [INS-034](future/BACKLOG.md) guest module spec · [INS-087](future/BACKLOG.md)
 per-role picker ranking · [INS-085](future/BACKLOG.md) Windows Jest workers (annotated).

@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_INSPECT_API_URL": "http://192.168.18.64:3000"
+        "EXPO_PUBLIC_INSPECT_API_URL": "http://192.168.18.64:3000",
+        "EXPO_PUBLIC_INSPECT_WEB_URL": "http://192.168.18.64:3001"
       }
     },
     "preview": {
@@ -17,13 +18,15 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_INSPECT_API_URL": "https://CHANGE_ME.up.railway.app"
+        "EXPO_PUBLIC_INSPECT_API_URL": "https://main-application-production-6fa4.up.railway.app",
+        "EXPO_PUBLIC_INSPECT_WEB_URL": "https://serene-vision-production-8387.up.railway.app"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_INSPECT_API_URL": "https://CHANGE_ME.up.railway.app"
+        "EXPO_PUBLIC_INSPECT_API_URL": "https://main-application-production-6fa4.up.railway.app",
+        "EXPO_PUBLIC_INSPECT_WEB_URL": "https://serene-vision-production-8387.up.railway.app"
       }
     }
   },

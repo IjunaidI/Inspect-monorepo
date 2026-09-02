@@ -11,7 +11,7 @@ MVP is **web-first** (admin/QA console + API); mobile camera capture is a delibe
 > ## ⚠️ TEMPORARY — pre-production: the databases hold nothing of value
 >
 > **This project still has no production deployment.** There are now up to two environments, and **both are
-> dev**: the local stack (`docker-compose.dev.yml`) and a **remote dev environment** the API is being deployed
+> dev**: the local stack (`docker-compose.dev.yml`) and a **remote dev environment** the API is deployed
 > to ([INS-090](docs/future/BACKLOG.md)). Neither database holds anything important, and no decision should be
 > shaped by a wish to preserve either.
 >
@@ -71,7 +71,7 @@ All four packages build to `dist/` and are consumed through it; `apps/web`'s Vit
 package **source**, so a stale `dist` cannot fake a green suite. Node ≥ 20, pnpm 9.12.0 (root `package.json`).
 
 **React Native migration ([INS-086](docs/future/BACKLOG.md)):** `apps/mobile` exists as of Phase 2
-(2026-08-31); its on-device acceptance is still blocked on [INS-090](docs/future/BACKLOG.md). The three
+(2026-08-31); the API is deployed ([INS-090](docs/future/BACKLOG.md) done 2026-09-02); its on-device acceptance pass is the next step. The three
 shared packages above landed in Phase 1 ([INS-086](docs/future/BACKLOG.md), 2026-08-27). Design:
 [docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](docs/in-progress/specs/2026-08-26-inspect-react-native-migration-design.md).
 Per-screen state lives in [docs/reference/screen-migration-map.md](docs/reference/screen-migration-map.md);
