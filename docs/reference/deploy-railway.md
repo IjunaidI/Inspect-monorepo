@@ -25,14 +25,25 @@ The **local `.env` and the deployed API share the same Postgres** (the local URL
 
 - **Build:** `DOCKERFILE` at `apps/api/Dockerfile`, root context — the image runs `pnpm install
   --frozen-lockfile` + `pnpm build:api` (never a bare `--filter` build; see the Dockerfile header).
-- **Pre-deploy** (every deployment, before the new container takes traffic):
-  `prisma migrate deploy` then `prisma db seed` (idempotent global defect library + bootstrap admin
-  when `BOOTSTRAP_ADMIN_*` is set — it is **not** set remotely; the shared DB already holds the admin
-  the local seed created).
+- **Pre-deploy** (every deployment, before the new container takes traffic): ONE command,
+  `sh -c "pnpm --filter @inspect/api exec prisma migrate deploy && pnpm --filter @inspect/api exec prisma db seed"`.
+  **The `sh -c` is load-bearing.** Railway does not run the pre-deploy string through a shell: with a bare
+  `a && b` the step exited 0 but only `migrate deploy` ran (the `&&` and everything after it were handed to
+  Prisma as ignored positionals) — the seed never executed. Proven 2026-09-02 by setting a NEW
+  `BOOTSTRAP_ADMIN_PASSWORD`: login with it was 401 until the `sh -c` form deployed (`4efbcfe4`), whose
+  log shows "Seed complete … 14 already present" + "Bootstrap Platform Admin ready" and login 201.
+  The API also refuses a two-entry `preDeployCommand` array ("Invalid input"). `BOOTSTRAP_ADMIN_*` IS
+  set on the service, so every deploy converges the platform admin's password to the Railway value —
+  the root `.env` carries the same value (synced 2026-09-02) so a local seed does not flip it back.
 - **Start:** `node apps/api/dist/main.js`. **Healthcheck:** `GET /health` (Terminus: db + redis).
-- The service's *config file path* setting points at `apps/api/railway.json` (set via
-  `serviceInstanceUpdate`, 2026-09-02). A root-level `railway.json` would also govern the web
-  service, so keep it under `apps/api/`.
+- **Where the settings live:** the service *settings* (healthcheck, pre-deploy, start command) are the
+  authority today, set via `serviceInstanceUpdate` on 2026-09-02; `apps/api/railway.json` mirrors them.
+  To make the file the authority, set the service's *config file path* to `apps/api/railway.json` —
+  but ONLY once that file is on GitHub `main`: Railway snapshots the repo and fails the deployment at
+  `SNAPSHOT_CODE` with `service config at 'apps/api/railway.json' not found` otherwise (two failed
+  deploys on 2026-09-02 while the commit was still local). A root-level `railway.json` would also
+  govern the web service, so keep it under `apps/api/`. Note the GraphQL `Builder` enum has no
+  `DOCKERFILE`; the Dockerfile build comes from the `RAILWAY_DOCKERFILE_PATH` service variable.
 - ⚠️ Railway has deprecated `railway.json` in favour of `.railway/railway.ts`; existing files keep
   working until **2026-12-01**. Migrate with `railway config migrate` before then.
 
@@ -43,13 +54,17 @@ Railway injects a random `PORT` and, with no target port on the domain, routes t
 every request answered `502 Application failed to respond` while the logs said "Nest application
 successfully started". Fixed by setting the domain's target port to 3000 (`railway domain update
 <domain> --port 3000`) and `API_PORT=3000` explicitly. If the domain is ever recreated, set the port again.
+**Railway's own health check has the same blind spot:** it probes the port in `PORT`, so with the
+`/health` check enabled the deploy sat in DEPLOYING for the full 300 s timeout and FAILED
+(`HEALTHCHECK: Healthcheck failure`) while the app was up. Pinning the service variable **`PORT=3000`**
+fixed it — keep `PORT`, `API_PORT` and the domain target port equal.
 
 ### Variables on `Main Application`
 
 Required to boot: `DATABASE_URL`, `REDIS_URL` (both `${{...}}` references to the plugins),
 `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `REPORT_SIGNING_PRIVATE_KEY_PEM`, `S3_*`.
 Set 2026-09-02: a **fresh** Ed25519 `REPORT_SIGNING_PRIVATE_KEY_PEM` (minted for this environment,
-never on disk in the repo), `API_PORT=3000`, `ALLOWED_ORIGINS` (console origin + `http://localhost:3001`),
+never on disk in the repo), `API_PORT=3000` + `PORT=3000` (see the port gotcha), `ALLOWED_ORIGINS` (console origin + `http://localhost:3001`),
 `WEB_BASE_URL` (console origin — invite/portal links), `RATE_LIMIT_TRUSTED_PROXIES=1` (Railway's edge).
 `NODE_ENV=production` comes from the Dockerfile, so `/docs` is off — read the committed `openapi.json`.
 
@@ -70,8 +85,9 @@ railway deployment list -s "Main Application" --json
 railway logs -s "Main Application" -d -n 200          # deploy logs (add -b for build logs)
 railway variable list -s "Main Application" --json    # prints raw values — keep out of transcripts
 railway variable set KEY=value -s "Main Application" --skip-deploys
-railway redeploy -s "Main Application" --yes          # same image, re-runs pre-deploy
-railway redeploy -s "Main Application" --yes --from-source   # rebuild from the latest main
+railway redeploy -s "Main Application" --yes          # same image AND same settings manifest — re-runs pre-deploy but does NOT pick up changed service settings
+railway redeploy -s "Main Application" --yes --from-source   # rebuild from the latest main; the ONLY way a settings change (healthcheck, pre-deploy, start) reaches a deployment
+railway api 'query { deploymentEvents(id: "<deployment-id>") { edges { node { step payload { error } } } } }'  # why a deploy FAILED
 curl https://main-application-production-6fa4.up.railway.app/health
 ```
 

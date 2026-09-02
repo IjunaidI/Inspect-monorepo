@@ -5,10 +5,7 @@
     "dockerfilePath": "apps/api/Dockerfile"
   },
   "deploy": {
-    "preDeployCommand": [
-      "pnpm --filter @inspect/api exec prisma migrate deploy",
-      "pnpm --filter @inspect/api exec prisma db seed"
-    ],
+    "preDeployCommand": "sh -c \"pnpm --filter @inspect/api exec prisma migrate deploy && pnpm --filter @inspect/api exec prisma db seed\"",
     "startCommand": "node apps/api/dist/main.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,

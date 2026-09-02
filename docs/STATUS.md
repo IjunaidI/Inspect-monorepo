@@ -74,12 +74,15 @@ integration 147/16 (CI) · `expo export` 25 routes.
 - The Prisma CLI does **not** read the repo-root `.env` — export `DATABASE_URL` explicitly; never
   hand-extract the multi-line `REPORT_SIGNING_PRIVATE_KEY_PEM`.
 - `pnpm` 9.15.9 is on PATH; `npx -y pnpm@9.12.0` crashes — use the PATH pnpm or app-local `.bin`.
-- Bootstrap admin password converges to `BOOTSTRAP_ADMIN_*` on every `prisma db seed` — re-seed if
-  login 401s. Nest `--watch` restarts cause transient one-request failures — retry before blaming code.
+- Bootstrap admin password converges to `BOOTSTRAP_ADMIN_*` on every `prisma db seed` — locally AND on
+  every Railway deploy (the service carries the same value as the root `.env`; keep them equal or the
+  password flip-flops). Re-seed if login 401s. Nest `--watch` restarts cause transient one-request failures — retry before blaming code.
 - **The root `.env` and the deployed API share one Postgres** (the local `DATABASE_URL` is the
   public proxy of Railway's `Postgres-k9HN`). A local `migrate reset` resets the deployed DB too.
-- **Railway routes to `PORT`, the API listens on `API_PORT`.** The domain's target port must be 3000
-  (it is) — a recreated domain without it 502s while the logs say "successfully started".
+- **Railway routes AND health-checks on `PORT`; the API listens on `API_PORT`.** The service pins
+  `PORT=3000` + `API_PORT=3000` and the domain targets 3000 — drop any one and it 502s / fails the
+  deploy health check while the logs say "successfully started". Pre-deploy is `sh -c "…"` because Railway
+  runs the string without a shell; a settings change only lands via a from-source deploy, never `redeploy`.
 - Dev workspace for manual passes: **Acme Apparel Group** (owner@acme-apparel.test — see the
   2026-08-31 click-through in git history for the full fixture set).
 
