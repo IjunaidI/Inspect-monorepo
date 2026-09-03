@@ -16,8 +16,9 @@
  * - Fallback avatar colour keys on a hash of the company id (shared
  *   `hashIndex`), so it cannot change between pages — the web bug this
  *   session fixed at the same time.
- * - Create stays web-only for now; a row opens `/companies/[id]` for
- *   edit/archive/restore.
+ * - Create opens the INS-091 quick-create sheet (name + kind) and lands on
+ *   `/companies/[id]` to finish branding/location; a row opens
+ *   `/companies/[id]` for edit/archive/restore.
  * - Pagination is a "Load more" append (same 50-row pages, same full-page
  *   heuristic for "there may be more").
  */
@@ -41,6 +42,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { QuickCreateCompanySheet } from '@/components/quick-create/company';
 import { client, loadIdentity, signOut } from '@/lib/session';
 
 const PAGE_SIZE = 50;
@@ -106,6 +108,7 @@ export default function Companies() {
   const [view, setView] = useState<ViewFilter>('active');
   const [rows, setRows] = useState<CompanyDto[] | null>(null);
   const [hasNext, setHasNext] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -183,7 +186,12 @@ export default function Companies() {
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
         <BackButton fallbackHref="/dashboard" />
-        <Text style={styles.title}>Companies</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Companies</Text>
+          <Pressable onPress={() => setCreating(true)} hitSlop={8} accessibilityRole="button">
+            <Text style={styles.newLink}>New</Text>
+          </Pressable>
+        </View>
         {rows !== null ? (
           <Text style={styles.subtitle}>
             {visible.length} compan{visible.length === 1 ? 'y' : 'ies'}
@@ -302,6 +310,14 @@ export default function Companies() {
           }}
         />
       )}
+      <QuickCreateCompanySheet
+        visible={creating}
+        onClose={() => setCreating(false)}
+        onCreated={(c) => {
+          setCreating(false);
+          router.push(`/companies/${c.id}`);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -317,7 +333,15 @@ const styles = StyleSheet.create({
     backgroundColor: palette.panel,
     gap: 8,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
+  newLink: {
+    color: palette.accent,
+    fontSize: 15,
+    fontWeight: '700',
+    minHeight: 44,
+    lineHeight: 44,
+  },
   subtitle: { color: palette.sub, fontSize: 13 },
   search: {
     height: 40,
