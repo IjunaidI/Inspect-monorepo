@@ -2,9 +2,13 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
+import Link from 'next/link';
 import { ui, mono, severity } from '@/components/inspect/tokens';
 import { Spinner } from '@/components/inspect/loading';
-import type { ApiPurchaseOrder, ApiLoopPreset, ApiUser, AqlPreview } from '@/lib/api';
+import { EntityPicker } from '@/components/inspect/entity-picker';
+import { ErrorBanner } from '@/components/inspect/error-banner';
+import { QuickCreatePurchaseOrder } from '@/components/inspect/quick-create/quick-create-purchase-order';
+import type { ApiPurchaseOrder, ApiLoopPreset, ApiUser, AqlPreview, ApiCompany, ApiProduct } from '@/lib/api';
 import { createInspection, previewAql } from '../actions';
 
 const field: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6 };
@@ -31,15 +35,31 @@ const AQL_FIELD: Record<AqlClass, string> = { critical: 'aqlCritical', major: 'a
 
 const aqlOptionLabel = (v: number) => (v === 0 ? '0 · any defect rejects' : v.toFixed(1));
 
-export function CreateInspectionForm({ pos, presets, inspectors }: { pos: ApiPurchaseOrder[]; presets: ApiLoopPreset[]; inspectors: ApiUser[] }) {
+export function CreateInspectionForm({ pos: initialPos, presets, inspectors, companies, products }: { pos: ApiPurchaseOrder[]; presets: ApiLoopPreset[]; inspectors: ApiUser[]; companies: ApiCompany[]; products: ApiProduct[] }) {
   const [state, action, pending] = useActionState(createInspection, {} as { error?: string });
-  const [poId, setPoId] = useState(pos[0]?.id ?? '');
+  const [pos, setPos] = useState(initialPos);
+  const [poId, setPoId] = useState(initialPos[0]?.id ?? '');
+  const [presetId, setPresetId] = useState(presets[0]?.id ?? '');
+  const [presetTouched, setPresetTouched] = useState(false);
+  const [creatingPo, setCreatingPo] = useState(false);
   const [lotSize, setLotSize] = useState(1000);
   const [aql, setAql] = useState<Record<AqlClass, number>>({ ...DEFAULT_AQL });
   const [preview, setPreview] = useState<AqlPreview>();
   const [previewError, setPreviewError] = useState<string>();
   const [crid] = useState(() => `web-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
   const po = pos.find((p) => p.id === poId);
+
+  // INS-091 — the client's default preset is written by both company forms
+  // and, until now, read by nothing. Applied on PO change while the user has
+  // not chosen a preset by hand; skipped when the id is not in the list. `row`
+  // is passed for a PO created this render, before it is in `pos`.
+  function selectPo(nextId: string, row?: ApiPurchaseOrder) {
+    setPoId(nextId);
+    if (presetTouched) return;
+    const next = row ?? pos.find((p) => p.id === nextId);
+    const preferred = next?.clientCompany?.defaultLoopPresetId;
+    if (preferred && presets.some((p) => p.id === preferred)) setPresetId(preferred);
+  }
 
   // The preview is driven by the SAME inputs the create POST sends, and the API
   // runs the same validation on both — so the panel can never show a plan the
@@ -58,23 +78,25 @@ export function CreateInspectionForm({ pos, presets, inspectors }: { pos: ApiPur
     return () => { live = false; clearTimeout(t); };
   }, [lotSize, aql]);
 
-  if (pos.length === 0) {
-    return <div style={card}>No purchase orders yet. Create two companies (the client and the factory), a product and a PO first, then return here.</div>;
-  }
-
   return (
     <form action={action} style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 24, alignItems: 'start' }}>
-      <input type="hidden" name="poId" value={poId} />
       <input type="hidden" name="lotSize" value={lotSize} />
       <input type="hidden" name="clientRequestId" value={crid} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={card}>
           <div style={eyebrow}>Purchase order</div>
-          <div style={{ ...field, marginTop: 14 }}>
-            <span style={lbl}>PO</span>
-            <select value={poId} onChange={(e) => setPoId(e.target.value)} style={{ ...input, cursor: 'pointer' }}>
-              {pos.map((p) => <option key={p.id} value={p.id}>{p.poNumber}</option>)}
-            </select>
+          <div style={{ marginTop: 14 }}>
+            <EntityPicker
+              name="poId"
+              label="PO"
+              options={pos.map((p) => ({ id: p.id, label: p.poNumber, hint: p.clientCompany?.name ?? undefined }))}
+              value={poId}
+              onChange={selectPo}
+              placeholder="Select the PO…"
+              emptyText="No purchase orders yet — add one below."
+              createLabel="+ Add new purchase order…"
+              onCreate={() => setCreatingPo(true)}
+            />
           </div>
           <div style={{ display: 'flex', gap: 18, marginTop: 14, fontSize: 13, color: ui.sub }}>
             <span>Client: <strong style={{ color: ui.ink }}>{po?.clientCompany?.name ?? '—'}</strong></span>
@@ -87,9 +109,20 @@ export function CreateInspectionForm({ pos, presets, inspectors }: { pos: ApiPur
           <div style={eyebrow}>Procedure &amp; lot</div>
           <div style={{ ...field, marginTop: 14 }}>
             <span style={lbl}>Loop preset</span>
-            <select name="loopPresetId" defaultValue={presets[0]?.id ?? ''} style={{ ...input, cursor: 'pointer' }}>
-              {presets.map((p) => <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>)}
-            </select>
+            {presets.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: ui.sub }}>
+                No loop presets yet. <Link href="/presets/new" style={{ color: ui.accent, fontWeight: 550 }}>Create one in the preset builder</Link>, then return here.
+              </div>
+            ) : (
+              <select
+                name="loopPresetId"
+                value={presetId}
+                onChange={(e) => { setPresetId(e.target.value); setPresetTouched(true); }}
+                style={{ ...input, cursor: 'pointer' }}
+              >
+                {presets.map((p) => <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>)}
+              </select>
+            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
             <div style={field}>
@@ -137,9 +170,9 @@ export function CreateInspectionForm({ pos, presets, inspectors }: { pos: ApiPur
           )}
         </div>
 
-        {state?.error && <div style={{ color: ui.danger, fontSize: 13 }}>{state.error}</div>}
+        {state?.error && <ErrorBanner>{state.error}</ErrorBanner>}
         <div>
-          <button type="submit" disabled={pending} aria-busy={pending || undefined} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 40, padding: '0 16px', background: ui.accent, color: '#fff', borderWidth: 0, borderStyle: 'solid', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.7 : 1 }}>
+          <button type="submit" disabled={pending || !poId || !presetId} aria-busy={pending || undefined} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 40, padding: '0 16px', background: ui.accent, color: '#fff', borderWidth: 0, borderStyle: 'solid', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.7 : 1 }}>
             {pending && <Spinner size={13} />}
             {pending ? 'Creating…' : 'Create inspection'}
           </button>
@@ -186,6 +219,19 @@ export function CreateInspectionForm({ pos, presets, inspectors }: { pos: ApiPur
           <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12.5, marginTop: 12 }}>Enter a lot size…</div>
         )}
       </div>
+
+      {/* Portals to <body>, so nesting inside this <form> is fine. */}
+      <QuickCreatePurchaseOrder
+        open={creatingPo}
+        onClose={() => setCreatingPo(false)}
+        companies={companies}
+        products={products}
+        onCreated={(created) => {
+          setPos((prev) => [created, ...prev]);
+          setCreatingPo(false);
+          selectPo(created.id, created);
+        }}
+      />
     </form>
   );
 }
