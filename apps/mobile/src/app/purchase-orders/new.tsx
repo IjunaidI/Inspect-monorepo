@@ -8,6 +8,10 @@
  * counts). Self-dealing (client === factory) is pre-checked here as UX and
  * enforced by the API's 400. Unlike the web form, a failed picker load is a
  * real error with retry — never silently empty selects.
+ *
+ * INS-091: every picker is searchable and ends in "+ Add new…" — a company or
+ * product is created in a sheet, appended and selected; nothing typed here is
+ * lost. The lists live in state so they can grow.
  */
 import { ApiError } from '@inspect/api-client';
 import { palette } from '@inspect/design-tokens';
@@ -20,19 +24,15 @@ import type {
 } from '@inspect/shared-types';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OptionPicker } from '@/components/option-picker';
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
+import { describeCreateError } from '@/components/quick-create-sheet';
+import { QuickCreateCompanySheet } from '@/components/quick-create/company';
+import { QuickCreateProductSheet } from '@/components/quick-create/product';
 import { client, loadIdentity } from '@/lib/session';
 
 type Load =
@@ -67,6 +67,10 @@ async function fetchFormData(): Promise<Load> {
 export default function NewPurchaseOrder() {
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  // Seeded from the load, then grown by the quick-create sheets.
+  const [companies, setCompanies] = useState<CompanyDto[]>([]);
+  const [products, setProducts] = useState<ProductDto[]>([]);
+  const [creating, setCreating] = useState<'client' | 'factory' | 'product' | null>(null);
   const [poNumber, setPoNumber] = useState('');
   const [clientCo, setClientCo] = useState<CompanyDto | null>(null);
   const [factoryCo, setFactoryCo] = useState<CompanyDto | null>(null);
@@ -76,7 +80,13 @@ export default function NewPurchaseOrder() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchAndApply = useCallback(() => {
-    fetchFormData().then(setLoad);
+    fetchFormData().then((result) => {
+      setLoad(result);
+      if (result.kind === 'ready') {
+        setCompanies(result.companies);
+        setProducts(result.products);
+      }
+    });
   }, []);
   useEffect(fetchAndApply, [fetchAndApply]);
   const reload = useCallback(() => {
@@ -112,7 +122,7 @@ export default function NewPurchaseOrder() {
       const created = await client.post<PurchaseOrderDto>('/purchase-orders', body);
       router.replace(`/purchase-orders/${created.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create failed');
+      setError(describeCreateError(e, 'Create failed'));
       setPending(false);
     }
   }
@@ -150,83 +160,108 @@ export default function NewPurchaseOrder() {
     );
   }
 
-  const { companies, products } = load;
-
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.title}>New purchase order</Text>
+    <FormScreen>
+      <Text style={styles.title}>New purchase order</Text>
 
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>PO number *</Text>
-          <TextInput
-            style={styles.input}
-            value={poNumber}
-            onChangeText={setPoNumber}
-            placeholder="PO-2026-0001"
-            placeholderTextColor={palette.faint}
-            autoCapitalize="characters"
-            autoCorrect={false}
-          />
-        </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>PO number *</Text>
+        <TextInput
+          style={styles.input}
+          value={poNumber}
+          onChangeText={setPoNumber}
+          placeholder="PO-2026-0001"
+          placeholderTextColor={palette.faint}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
+      </View>
 
-        <OptionPicker
-          label="Client (receives the branded report) *"
-          value={clientCo}
-          options={companies}
-          display={(c) => c.name}
-          placeholder="Select the client…"
-          onSelect={setClientCo}
+      <OptionPicker
+        label="Client (receives the branded report) *"
+        value={clientCo}
+        options={companies}
+        display={(c) => c.name}
+        placeholder="Select the client…"
+        emptyText="No companies yet."
+        createLabel="+ Add new company…"
+        onCreate={() => setCreating('client')}
+        onSelect={setClientCo}
+      />
+      <OptionPicker
+        label="Factory (produces the goods) *"
+        value={factoryCo}
+        options={companies}
+        display={(c) => c.name}
+        placeholder="Select the factory…"
+        emptyText="No companies yet."
+        createLabel="+ Add new company…"
+        onCreate={() => setCreating('factory')}
+        onSelect={setFactoryCo}
+      />
+      {selfDealing ? (
+        <Text style={styles.errorText}>
+          Client and factory must differ — the same company cannot hold both roles on one PO.
+        </Text>
+      ) : null}
+
+      <OptionPicker
+        label="Product *"
+        value={product}
+        options={products}
+        display={(p) => (p.description ? `${p.styleNumber} — ${p.description}` : p.styleNumber)}
+        placeholder="Select the product…"
+        emptyText="No products yet."
+        createLabel="+ Add new product…"
+        onCreate={() => setCreating('product')}
+        onSelect={setProduct}
+      />
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Total quantity (pcs)</Text>
+        <TextInput
+          style={[styles.input, !quantityValid && styles.inputInvalid]}
+          value={quantityText}
+          onChangeText={setQuantityText}
+          placeholder="Optional"
+          placeholderTextColor={palette.faint}
+          keyboardType="number-pad"
         />
-        <OptionPicker
-          label="Factory (produces the goods) *"
-          value={factoryCo}
-          options={companies}
-          display={(c) => c.name}
-          placeholder="Select the factory…"
-          onSelect={setFactoryCo}
-        />
-        {selfDealing ? (
-          <Text style={styles.errorText}>
-            Client and factory must differ — the same company cannot hold both roles on one PO.
-          </Text>
+        {!quantityValid ? (
+          <Text style={styles.errorText}>Quantity must be a number of 1 or more.</Text>
         ) : null}
+      </View>
 
-        <OptionPicker
-          label="Product *"
-          value={product}
-          options={products}
-          display={(p) => (p.description ? `${p.styleNumber} — ${p.description}` : p.styleNumber)}
-          placeholder="Select the product…"
-          onSelect={setProduct}
-        />
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Total quantity (pcs)</Text>
-          <TextInput
-            style={[styles.input, !quantityValid && styles.inputInvalid]}
-            value={quantityText}
-            onChangeText={setQuantityText}
-            placeholder="Optional"
-            placeholderTextColor={palette.faint}
-            keyboardType="number-pad"
-          />
-          {!quantityValid ? (
-            <Text style={styles.errorText}>Quantity must be a number of 1 or more.</Text>
-          ) : null}
-        </View>
+      <Pressable
+        style={[styles.button, (!ready || pending) && styles.buttonDisabled]}
+        onPress={create}
+        disabled={!ready || pending}
+      >
+        <Text style={styles.buttonLabel}>{pending ? 'Creating…' : 'Create purchase order'}</Text>
+      </Pressable>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <Pressable
-          style={[styles.button, (!ready || pending) && styles.buttonDisabled]}
-          onPress={create}
-          disabled={!ready || pending}
-        >
-          <Text style={styles.buttonLabel}>{pending ? 'Creating…' : 'Create purchase order'}</Text>
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+      <QuickCreateCompanySheet
+        visible={creating === 'client' || creating === 'factory'}
+        onClose={() => setCreating(null)}
+        onCreated={(c) => {
+          setCompanies((prev) => rankCompaniesByActivity([...prev, c]));
+          if (creating === 'client') setClientCo(c);
+          if (creating === 'factory') setFactoryCo(c);
+          setCreating(null);
+        }}
+      />
+      <QuickCreateProductSheet
+        visible={creating === 'product'}
+        onClose={() => setCreating(null)}
+        onCreated={(p) => {
+          setProducts((prev) => [...prev, p]);
+          setProduct(p);
+          setCreating(null);
+        }}
+      />
+    </FormScreen>
   );
 }
 
