@@ -23,6 +23,10 @@ const pkg = (name: string) =>
   fileURLToPath(new URL(`../../packages/${name}/src/index.ts`, import.meta.url));
 
 export default defineConfig({
+  // INS-091: the first component tests (`// @vitest-environment jsdom` per
+  // file). Next's tsconfig sets `jsx: preserve` for its own compiler, so Vite
+  // must be told to transform JSX itself or every .tsx test fails to parse.
+  oxc: { jsx: { runtime: 'automatic' } },
   resolve: {
     tsconfigPaths: true,
     alias: {
