@@ -5,6 +5,7 @@
 export { ROLE_RANK, roleAtLeast } from './roles';
 export { hashIndex, initialsFrom } from './text';
 export { rankCompaniesByActivity } from './company-ranking';
+export { filterOptions } from './filter-options';
 export { reportNumber } from './report-number';
 export {
   conclusionFrom,
