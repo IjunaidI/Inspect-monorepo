@@ -19,7 +19,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -28,6 +27,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
 import { client, loadIdentity } from '@/lib/session';
 
 type Load =
@@ -179,67 +179,65 @@ export default function PurchaseOrderDetail() {
   const { po } = load;
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.title}>{po.poNumber}</Text>
+    <FormScreen>
+      <Text style={styles.title}>{po.poNumber}</Text>
 
-        {/* INS-055: the two-party edge, frozen at create. */}
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Parties (immutable after create)</Text>
-          <MetaRow label="Client" value={po.clientCompany?.name ?? '—'} />
-          <MetaRow label="Factory" value={po.factoryCompany?.name ?? '—'} />
-          <MetaRow label="Product" value={po.product?.styleNumber ?? '—'} />
-        </View>
+      {/* INS-055: the two-party edge, frozen at create. */}
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>Parties (immutable after create)</Text>
+        <MetaRow label="Client" value={po.clientCompany?.name ?? '—'} />
+        <MetaRow label="Factory" value={po.factoryCompany?.name ?? '—'} />
+        <MetaRow label="Product" value={po.product?.styleNumber ?? '—'} />
+      </View>
 
-        {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
-        {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
+      {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+      {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
 
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>PO number *</Text>
-          <TextInput
-            style={styles.input}
-            value={poNumber ?? ''}
-            onChangeText={setPoNumber}
-            autoCapitalize="characters"
-            autoCorrect={false}
-          />
-        </View>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Total quantity (pcs)</Text>
-          <TextInput
-            style={styles.input}
-            value={quantityText}
-            onChangeText={setQuantityText}
-            placeholder="Optional"
-            placeholderTextColor={palette.faint}
-            keyboardType="number-pad"
-          />
-        </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>PO number *</Text>
+        <TextInput
+          style={styles.input}
+          value={poNumber ?? ''}
+          onChangeText={setPoNumber}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
+      </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Total quantity (pcs)</Text>
+        <TextInput
+          style={styles.input}
+          value={quantityText}
+          onChangeText={setQuantityText}
+          placeholder="Optional"
+          placeholderTextColor={palette.faint}
+          keyboardType="number-pad"
+        />
+      </View>
 
+      <Pressable
+        style={[styles.button, pending && styles.buttonDisabled]}
+        onPress={() => save(po)}
+        disabled={pending}
+      >
+        <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
+      </Pressable>
+
+      <View style={styles.dangerCard}>
+        <Text style={styles.dangerTitle}>Delete purchase order</Text>
+        <Text style={styles.hint}>
+          Permanent. Refused with a clear message when inspections reference this PO.
+        </Text>
         <Pressable
-          style={[styles.button, pending && styles.buttonDisabled]}
-          onPress={() => save(po)}
+          onPress={() => confirmDelete(po)}
           disabled={pending}
+          hitSlop={8}
+          style={styles.dangerButton}
         >
-          <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
+          <Text style={styles.dangerButtonLabel}>Delete</Text>
         </Pressable>
-
-        <View style={styles.dangerCard}>
-          <Text style={styles.dangerTitle}>Delete purchase order</Text>
-          <Text style={styles.hint}>
-            Permanent. Refused with a clear message when inspections reference this PO.
-          </Text>
-          <Pressable
-            onPress={() => confirmDelete(po)}
-            disabled={pending}
-            hitSlop={8}
-            style={styles.dangerButton}
-          >
-            <Text style={styles.dangerButtonLabel}>Delete</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </FormScreen>
   );
 }
 

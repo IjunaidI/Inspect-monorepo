@@ -27,6 +27,8 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -256,176 +258,190 @@ export default function Users() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={styles.body}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.accent} />
-        }
+      {/* INS-091: keyboard-safe like FormScreen; kept inline for the RefreshControl. */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <BackButton fallbackHref="/dashboard" />
-        <Text style={styles.title}>Team</Text>
-        <Text style={styles.subtitle}>
-          {users.length} member{users.length === 1 ? '' : 's'}
-        </Text>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.body}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor={palette.accent}
+            />
+          }
+        >
+          <BackButton fallbackHref="/dashboard" />
+          <Text style={styles.title}>Team</Text>
+          <Text style={styles.subtitle}>
+            {users.length} member{users.length === 1 ? '' : 's'}
+          </Text>
 
-        {/* Invite */}
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Invite a team member</Text>
+          {/* Invite */}
+          <View style={styles.card}>
+            <Text style={styles.sectionLabel}>Invite a team member</Text>
+            <TextInput
+              style={styles.input}
+              value={inviteEmail}
+              onChangeText={setInviteEmail}
+              placeholder="teammate@org.example"
+              placeholderTextColor={palette.faint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+            />
+            <View style={styles.chipRow}>
+              {INVITABLE.map(({ role, label }) => (
+                <Pressable
+                  key={role}
+                  onPress={() => setInviteRole(role)}
+                  style={[styles.roleChip, inviteRole === role && styles.roleChipActive]}
+                >
+                  <Text
+                    style={[
+                      styles.roleChipLabel,
+                      inviteRole === role && styles.roleChipLabelActive,
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            {inviteError ? <Text style={styles.errorText}>{inviteError}</Text> : null}
+            <Pressable
+              style={[styles.button, invitePending && styles.buttonDisabled]}
+              onPress={invite}
+              disabled={invitePending}
+            >
+              <Text style={styles.buttonLabel}>{invitePending ? 'Sending…' : 'Invite'}</Text>
+            </Pressable>
+
+            {invited ? (
+              <View style={styles.successBox}>
+                <Text style={styles.successText}>
+                  {invited.emailSent
+                    ? `Invitation emailed to ${invited.email}. The link below is a backup.`
+                    : `The email to ${invited.email} could not be sent — share this link manually.`}
+                </Text>
+                {inviteLink ? (
+                  <Text style={styles.linkValue} numberOfLines={2}>
+                    {inviteLink}
+                  </Text>
+                ) : (
+                  <Text style={styles.hint}>
+                    No console origin configured (EXPO_PUBLIC_INSPECT_WEB_URL) — copy the token and
+                    append it to {'<console origin>/invite?token=…'}
+                  </Text>
+                )}
+                <Pressable
+                  onPress={() => {
+                    void Clipboard.setStringAsync(inviteLink ?? invited.token).then(() => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    });
+                  }}
+                  hitSlop={8}
+                >
+                  <Text style={styles.copyLink}>
+                    {copied ? 'Copied ✓' : inviteLink ? 'Copy link' : 'Copy token'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Roster */}
           <TextInput
             style={styles.input}
-            value={inviteEmail}
-            onChangeText={setInviteEmail}
-            placeholder="teammate@org.example"
+            value={filter}
+            onChangeText={setFilter}
+            placeholder="Filter by name or email…"
             placeholderTextColor={palette.faint}
             autoCapitalize="none"
             autoCorrect={false}
-            keyboardType="email-address"
           />
-          <View style={styles.chipRow}>
-            {INVITABLE.map(({ role, label }) => (
-              <Pressable
-                key={role}
-                onPress={() => setInviteRole(role)}
-                style={[styles.roleChip, inviteRole === role && styles.roleChipActive]}
-              >
-                <Text
-                  style={[styles.roleChipLabel, inviteRole === role && styles.roleChipLabelActive]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {inviteError ? <Text style={styles.errorText}>{inviteError}</Text> : null}
-          <Pressable
-            style={[styles.button, invitePending && styles.buttonDisabled]}
-            onPress={invite}
-            disabled={invitePending}
-          >
-            <Text style={styles.buttonLabel}>{invitePending ? 'Sending…' : 'Invite'}</Text>
-          </Pressable>
-
-          {invited ? (
-            <View style={styles.successBox}>
-              <Text style={styles.successText}>
-                {invited.emailSent
-                  ? `Invitation emailed to ${invited.email}. The link below is a backup.`
-                  : `The email to ${invited.email} could not be sent — share this link manually.`}
-              </Text>
-              {inviteLink ? (
-                <Text style={styles.linkValue} numberOfLines={2}>
-                  {inviteLink}
-                </Text>
-              ) : (
-                <Text style={styles.hint}>
-                  No console origin configured (EXPO_PUBLIC_INSPECT_WEB_URL) — copy the token and
-                  append it to {'<console origin>/invite?token=…'}
-                </Text>
-              )}
-              <Pressable
-                onPress={() => {
-                  void Clipboard.setStringAsync(inviteLink ?? invited.token).then(() => {
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  });
-                }}
-                hitSlop={8}
-              >
-                <Text style={styles.copyLink}>
-                  {copied ? 'Copied ✓' : inviteLink ? 'Copy link' : 'Copy token'}
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-        </View>
-
-        {/* Roster */}
-        <TextInput
-          style={styles.input}
-          value={filter}
-          onChangeText={setFilter}
-          placeholder="Filter by name or email…"
-          placeholderTextColor={palette.faint}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
-        {visible.length === 0 ? (
-          <Text style={styles.empty}>{q ? 'No users match your search.' : 'No users yet.'}</Text>
-        ) : (
-          visible.map((u) => {
-            const you = u.id === me?.userId;
-            const badge = ROLE_BADGE[u.role] ?? roleTokens.inspector;
-            const status = STATUS_STYLE[u.status] ?? STATUS_STYLE.DEACTIVATED;
-            const color = brandFallbacks[hashIndex(u.id, brandFallbacks.length)];
-            const pendingHere = rowPending === u.id;
-            return (
-              <View key={u.id} style={styles.userRow}>
-                <View style={[styles.avatar, { backgroundColor: color }]}>
-                  <Text style={styles.avatarInitials}>{initialsFrom(u.name || u.email)}</Text>
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.userName} numberOfLines={1}>
-                    {u.name || u.email}
-                    {you ? <Text style={styles.youTag}> (you)</Text> : null}
-                  </Text>
-                  <Text style={styles.userMeta} numberOfLines={1}>
-                    {u.email}
-                  </Text>
-                  <Text style={styles.userMeta}>
-                    <Text style={{ color: status.color, fontWeight: '600' }}>{status.label}</Text>
-                    {'  ·  last active '}
-                    {u.lastLoginAt ? DATE_FMT.format(new Date(u.lastLoginAt)) : '—'}
-                  </Text>
-                  {/* Self-protection mirrors the API: no role change, no
+          {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
+          {visible.length === 0 ? (
+            <Text style={styles.empty}>{q ? 'No users match your search.' : 'No users yet.'}</Text>
+          ) : (
+            visible.map((u) => {
+              const you = u.id === me?.userId;
+              const badge = ROLE_BADGE[u.role] ?? roleTokens.inspector;
+              const status = STATUS_STYLE[u.status] ?? STATUS_STYLE.DEACTIVATED;
+              const color = brandFallbacks[hashIndex(u.id, brandFallbacks.length)];
+              const pendingHere = rowPending === u.id;
+              return (
+                <View key={u.id} style={styles.userRow}>
+                  <View style={[styles.avatar, { backgroundColor: color }]}>
+                    <Text style={styles.avatarInitials}>{initialsFrom(u.name || u.email)}</Text>
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.userName} numberOfLines={1}>
+                      {u.name || u.email}
+                      {you ? <Text style={styles.youTag}> (you)</Text> : null}
+                    </Text>
+                    <Text style={styles.userMeta} numberOfLines={1}>
+                      {u.email}
+                    </Text>
+                    <Text style={styles.userMeta}>
+                      <Text style={{ color: status.color, fontWeight: '600' }}>{status.label}</Text>
+                      {'  ·  last active '}
+                      {u.lastLoginAt ? DATE_FMT.format(new Date(u.lastLoginAt)) : '—'}
+                    </Text>
+                    {/* Self-protection mirrors the API: no role change, no
                       deactivate on your own row. */}
-                  {!you ? (
-                    <View style={styles.rowActions}>
-                      <View style={{ flex: 1 }}>
-                        <OptionPicker
-                          label=""
-                          value={INVITABLE.find((r) => r.role === u.role) ?? null}
-                          options={INVITABLE}
-                          display={(r) => r.label}
-                          placeholder={ROLE_BADGE[u.role]?.label ?? u.role}
-                          onSelect={(r) => void changeRole(u, r.role)}
-                        />
-                      </View>
-                      <Pressable
-                        onPress={() => confirmToggleActive(u)}
-                        disabled={pendingHere}
-                        hitSlop={8}
-                      >
-                        <Text
-                          style={
-                            u.status === 'DEACTIVATED'
-                              ? styles.reactivateLink
-                              : styles.deactivateLink
-                          }
+                    {!you ? (
+                      <View style={styles.rowActions}>
+                        <View style={{ flex: 1 }}>
+                          <OptionPicker
+                            label=""
+                            value={INVITABLE.find((r) => r.role === u.role) ?? null}
+                            options={INVITABLE}
+                            display={(r) => r.label}
+                            placeholder={ROLE_BADGE[u.role]?.label ?? u.role}
+                            onSelect={(r) => void changeRole(u, r.role)}
+                          />
+                        </View>
+                        <Pressable
+                          onPress={() => confirmToggleActive(u)}
+                          disabled={pendingHere}
+                          hitSlop={8}
                         >
-                          {pendingHere
-                            ? '…'
-                            : u.status === 'DEACTIVATED'
-                              ? 'Reactivate'
-                              : 'Deactivate'}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ) : (
-                    <View style={styles.selfBadgeRow}>
-                      <View style={[styles.roleBadge, { backgroundColor: badge.bg }]}>
-                        <Text style={[styles.roleBadgeLabel, { color: badge.fg }]}>
-                          {badge.label}
-                        </Text>
+                          <Text
+                            style={
+                              u.status === 'DEACTIVATED'
+                                ? styles.reactivateLink
+                                : styles.deactivateLink
+                            }
+                          >
+                            {pendingHere
+                              ? '…'
+                              : u.status === 'DEACTIVATED'
+                                ? 'Reactivate'
+                                : 'Deactivate'}
+                          </Text>
+                        </Pressable>
                       </View>
-                    </View>
-                  )}
+                    ) : (
+                      <View style={styles.selfBadgeRow}>
+                        <View style={[styles.roleBadge, { backgroundColor: badge.bg }]}>
+                          <Text style={[styles.roleBadgeLabel, { color: badge.fg }]}>
+                            {badge.label}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
-            );
-          })
-        )}
-      </ScrollView>
+              );
+            })
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

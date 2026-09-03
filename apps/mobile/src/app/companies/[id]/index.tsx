@@ -31,7 +31,6 @@ import {
   Alert,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -41,6 +40,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OptionPicker } from '@/components/option-picker';
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
 import { client, loadIdentity } from '@/lib/session';
 
 /** The one shape the API accepts for primaryColor (INS-077) — a live hint only. */
@@ -252,200 +252,195 @@ export default function CompanyDetail() {
     (presetId ? { id: presetId, label: 'Current preset (not in list)' } : presetOptions[0]);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
-        {/* Identity */}
-        <View style={styles.headRow}>
-          {!logoRemoved && company.logoViewUrl ? (
-            <Image source={{ uri: company.logoViewUrl }} style={styles.avatar} />
-          ) : (
-            <View
-              style={[styles.avatar, { backgroundColor: company.primaryColor || fallbackColor }]}
-            >
-              <Text style={styles.avatarInitials}>{initialsFrom(company.name)}</Text>
-            </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title} numberOfLines={1}>
-              {company.name}
-            </Text>
-            <Text style={styles.subtitle}>
-              {company.kind === 'INTERNAL' ? 'Internal' : 'Third-party'}
-            </Text>
+    <FormScreen>
+      {/* Identity */}
+      <View style={styles.headRow}>
+        {!logoRemoved && company.logoViewUrl ? (
+          <Image source={{ uri: company.logoViewUrl }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: company.primaryColor || fallbackColor }]}>
+            <Text style={styles.avatarInitials}>{initialsFrom(company.name)}</Text>
           </View>
-        </View>
-
-        {company.archivedAt ? (
-          <View style={styles.archivedBanner}>
-            <Text style={styles.archivedText}>
-              This company is archived. It is hidden from the active directory; history is
-              preserved.
-            </Text>
-            <Pressable onPress={() => restore(company)} disabled={pending} hitSlop={8}>
-              <Text style={styles.link}>{pending ? 'Restoring…' : 'Restore'}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
-        {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
-
-        {/* Identity fields */}
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Name *</Text>
-          <TextInput
-            style={styles.input}
-            value={name ?? ''}
-            onChangeText={setName}
-            placeholder="Company name"
-            placeholderTextColor={palette.faint}
-          />
-        </View>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Kind</Text>
-          <View style={styles.chipRow}>
-            {(['THIRD_PARTY', 'INTERNAL'] as const).map((k) => (
-              <Pressable
-                key={k}
-                onPress={() => setKindV(k)}
-                style={[styles.kindChip, kindV === k && styles.kindChipActive]}
-              >
-                <Text style={[styles.kindChipLabel, kindV === k && styles.kindChipLabelActive]}>
-                  {k === 'INTERNAL' ? 'Internal' : 'Third-party'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        {/* Branding — used when this company is the CLIENT on an inspection. */}
-        <Text style={styles.sectionLabel}>Branding (client role)</Text>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Brand colour (hex)</Text>
-          <View style={styles.colorRow}>
-            <View
-              style={[
-                styles.swatch,
-                {
-                  backgroundColor: colorValid && color.trim() ? color.trim() : palette.lineSoft,
-                },
-              ]}
-            />
-            <TextInput
-              style={[styles.input, { flex: 1 }, !colorValid && styles.inputInvalid]}
-              value={color}
-              onChangeText={setColor}
-              placeholder="#1457A3"
-              placeholderTextColor={palette.faint}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-          {!colorValid ? (
-            <Text style={styles.hintDanger}>Use #RRGGBB — the API rejects other shapes.</Text>
-          ) : null}
-        </View>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Logo</Text>
-          {!logoRemoved && company.logoUrl ? (
-            <View style={styles.logoRow}>
-              <Text style={styles.hint} numberOfLines={1}>
-                {company.logoUrl.split('/').pop()}
-              </Text>
-              <Pressable onPress={() => setLogoRemoved(true)} hitSlop={8}>
-                <Text style={styles.removeLink}>Remove</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Text style={styles.hint}>
-              {logoRemoved
-                ? 'Logo will be removed on save.'
-                : 'No logo. Uploading a new one is web-only for now.'}
-            </Text>
-          )}
-        </View>
-        <OptionPicker
-          label="Default preset"
-          value={selectedPreset}
-          options={presetOptions}
-          display={(o) => o.label}
-          placeholder="None"
-          onSelect={(o) => setPresetId(o.id)}
-        />
-        {presets === null ? (
-          <Text style={styles.hintDanger}>
-            Presets could not be loaded — the default-preset list may be incomplete.
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title} numberOfLines={1}>
+            {company.name}
           </Text>
-        ) : null}
+          <Text style={styles.subtitle}>
+            {company.kind === 'INTERNAL' ? 'Internal' : 'Third-party'}
+          </Text>
+        </View>
+      </View>
 
-        {/* Location — used when this company is the FACTORY on an inspection. */}
-        <Text style={styles.sectionLabel}>Location (factory role)</Text>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Address</Text>
+      {company.archivedAt ? (
+        <View style={styles.archivedBanner}>
+          <Text style={styles.archivedText}>
+            This company is archived. It is hidden from the active directory; history is preserved.
+          </Text>
+          <Pressable onPress={() => restore(company)} disabled={pending} hitSlop={8}>
+            <Text style={styles.link}>{pending ? 'Restoring…' : 'Restore'}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+      {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
+
+      {/* Identity fields */}
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Name *</Text>
+        <TextInput
+          style={styles.input}
+          value={name ?? ''}
+          onChangeText={setName}
+          placeholder="Company name"
+          placeholderTextColor={palette.faint}
+        />
+      </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Kind</Text>
+        <View style={styles.chipRow}>
+          {(['THIRD_PARTY', 'INTERNAL'] as const).map((k) => (
+            <Pressable
+              key={k}
+              onPress={() => setKindV(k)}
+              style={[styles.kindChip, kindV === k && styles.kindChipActive]}
+            >
+              <Text style={[styles.kindChipLabel, kindV === k && styles.kindChipLabelActive]}>
+                {k === 'INTERNAL' ? 'Internal' : 'Third-party'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {/* Branding — used when this company is the CLIENT on an inspection. */}
+      <Text style={styles.sectionLabel}>Branding (client role)</Text>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Brand colour (hex)</Text>
+        <View style={styles.colorRow}>
+          <View
+            style={[
+              styles.swatch,
+              {
+                backgroundColor: colorValid && color.trim() ? color.trim() : palette.lineSoft,
+              },
+            ]}
+          />
           <TextInput
-            style={styles.input}
-            value={address}
-            onChangeText={setAddress}
-            placeholder="Street, city, country"
+            style={[styles.input, { flex: 1 }, !colorValid && styles.inputInvalid]}
+            value={color}
+            onChangeText={setColor}
+            placeholder="#1457A3"
             placeholderTextColor={palette.faint}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
         </View>
-        <View style={styles.gpsRow}>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Latitude</Text>
-            <TextInput
-              style={styles.input}
-              value={lat}
-              onChangeText={setLat}
-              placeholder="23.81"
-              placeholderTextColor={palette.faint}
-              keyboardType="numbers-and-punctuation"
-            />
-          </View>
-          <View style={[styles.field, { flex: 1 }]}>
-            <Text style={styles.fieldLabel}>Longitude</Text>
-            <TextInput
-              style={styles.input}
-              value={lng}
-              onChangeText={setLng}
-              placeholder="90.41"
-              placeholderTextColor={palette.faint}
-              keyboardType="numbers-and-punctuation"
-            />
-          </View>
-        </View>
-
-        <Pressable
-          style={[styles.button, pending && styles.buttonDisabled]}
-          onPress={() => save(company)}
-          disabled={pending}
-        >
-          <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
-        </Pressable>
-
-        <Pressable onPress={() => router.push(`/companies/${company.id}/guests`)} hitSlop={4}>
-          <Text style={styles.link}>Manage guests →</Text>
-        </Pressable>
-
-        {!company.archivedAt ? (
-          <View style={styles.dangerCard}>
-            <Text style={styles.dangerTitle}>Archive company</Text>
-            <Text style={styles.hint}>
-              Removes this company from the active list. Historical purchase orders, inspections and
-              reports are preserved.
+        {!colorValid ? (
+          <Text style={styles.hintDanger}>Use #RRGGBB — the API rejects other shapes.</Text>
+        ) : null}
+      </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Logo</Text>
+        {!logoRemoved && company.logoUrl ? (
+          <View style={styles.logoRow}>
+            <Text style={styles.hint} numberOfLines={1}>
+              {company.logoUrl.split('/').pop()}
             </Text>
-            <Pressable
-              onPress={() => confirmArchive(company)}
-              disabled={pending}
-              hitSlop={8}
-              style={styles.dangerButton}
-            >
-              <Text style={styles.dangerButtonLabel}>Archive</Text>
+            <Pressable onPress={() => setLogoRemoved(true)} hitSlop={8}>
+              <Text style={styles.removeLink}>Remove</Text>
             </Pressable>
           </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+        ) : (
+          <Text style={styles.hint}>
+            {logoRemoved
+              ? 'Logo will be removed on save.'
+              : 'No logo. Uploading a new one is web-only for now.'}
+          </Text>
+        )}
+      </View>
+      <OptionPicker
+        label="Default preset"
+        value={selectedPreset}
+        options={presetOptions}
+        display={(o) => o.label}
+        placeholder="None"
+        onSelect={(o) => setPresetId(o.id)}
+      />
+      {presets === null ? (
+        <Text style={styles.hintDanger}>
+          Presets could not be loaded — the default-preset list may be incomplete.
+        </Text>
+      ) : null}
+
+      {/* Location — used when this company is the FACTORY on an inspection. */}
+      <Text style={styles.sectionLabel}>Location (factory role)</Text>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Address</Text>
+        <TextInput
+          style={styles.input}
+          value={address}
+          onChangeText={setAddress}
+          placeholder="Street, city, country"
+          placeholderTextColor={palette.faint}
+        />
+      </View>
+      <View style={styles.gpsRow}>
+        <View style={[styles.field, { flex: 1 }]}>
+          <Text style={styles.fieldLabel}>Latitude</Text>
+          <TextInput
+            style={styles.input}
+            value={lat}
+            onChangeText={setLat}
+            placeholder="23.81"
+            placeholderTextColor={palette.faint}
+            keyboardType="numbers-and-punctuation"
+          />
+        </View>
+        <View style={[styles.field, { flex: 1 }]}>
+          <Text style={styles.fieldLabel}>Longitude</Text>
+          <TextInput
+            style={styles.input}
+            value={lng}
+            onChangeText={setLng}
+            placeholder="90.41"
+            placeholderTextColor={palette.faint}
+            keyboardType="numbers-and-punctuation"
+          />
+        </View>
+      </View>
+
+      <Pressable
+        style={[styles.button, pending && styles.buttonDisabled]}
+        onPress={() => save(company)}
+        disabled={pending}
+      >
+        <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
+      </Pressable>
+
+      <Pressable onPress={() => router.push(`/companies/${company.id}/guests`)} hitSlop={4}>
+        <Text style={styles.link}>Manage guests →</Text>
+      </Pressable>
+
+      {!company.archivedAt ? (
+        <View style={styles.dangerCard}>
+          <Text style={styles.dangerTitle}>Archive company</Text>
+          <Text style={styles.hint}>
+            Removes this company from the active list. Historical purchase orders, inspections and
+            reports are preserved.
+          </Text>
+          <Pressable
+            onPress={() => confirmArchive(company)}
+            disabled={pending}
+            hitSlop={8}
+            style={styles.dangerButton}
+          >
+            <Text style={styles.dangerButtonLabel}>Archive</Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </FormScreen>
   );
 }
 

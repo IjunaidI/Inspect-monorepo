@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { FormScreen } from '@/components/form-screen';
 import { client, signIn } from '@/lib/session';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -194,52 +195,48 @@ export default function Invite() {
   const roleLabel = ROLE_LABEL[invite.role] ?? invite.role;
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.title}>Join {invite.orgName ?? 'an Inspect workspace'}</Text>
-        <Text style={styles.mutedText}>
-          {invite.email} · {roleLabel}
-          {invite.expiresAt
-            ? ` · invite expires ${DATE_FMT.format(new Date(invite.expiresAt))}`
-            : ''}
+    <FormScreen>
+      <Text style={styles.title}>Join {invite.orgName ?? 'an Inspect workspace'}</Text>
+      <Text style={styles.mutedText}>
+        {invite.email} · {roleLabel}
+        {invite.expiresAt ? ` · invite expires ${DATE_FMT.format(new Date(invite.expiresAt))}` : ''}
+      </Text>
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Your name (optional)</Text>
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="Full name"
+          placeholderTextColor={palette.faint}
+        />
+      </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Choose a password (min 8 characters)</Text>
+        <TextInput
+          style={styles.input}
+          value={password}
+          onChangeText={setPassword}
+          placeholder="••••••••"
+          placeholderTextColor={palette.faint}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+      </View>
+
+      {acceptError ? <Text style={styles.errorText}>{acceptError}</Text> : null}
+
+      <Pressable
+        style={[styles.button, (pending || password.length < 8) && styles.buttonDisabled]}
+        onPress={() => accept(invite, token)}
+        disabled={pending || password.length < 8}
+      >
+        <Text style={styles.buttonLabel}>
+          {pending ? 'Activating account…' : 'Activate account'}
         </Text>
-
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Your name (optional)</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Full name"
-            placeholderTextColor={palette.faint}
-          />
-        </View>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Choose a password (min 8 characters)</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            placeholderTextColor={palette.faint}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-        </View>
-
-        {acceptError ? <Text style={styles.errorText}>{acceptError}</Text> : null}
-
-        <Pressable
-          style={[styles.button, (pending || password.length < 8) && styles.buttonDisabled]}
-          onPress={() => accept(invite, token)}
-          disabled={pending || password.length < 8}
-        >
-          <Text style={styles.buttonLabel}>
-            {pending ? 'Activating account…' : 'Activate account'}
-          </Text>
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+      </Pressable>
+    </FormScreen>
   );
 }
 

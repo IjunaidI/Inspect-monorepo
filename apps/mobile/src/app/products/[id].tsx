@@ -20,7 +20,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -29,6 +28,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
 import { client, loadIdentity } from '@/lib/session';
 
 type Load =
@@ -190,77 +190,75 @@ export default function ProductDetail() {
   const { product } = load;
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.title}>{product.styleNumber}</Text>
-        {product._count ? (
-          <Text style={styles.subtitle}>
-            {product._count.purchaseOrders ?? 0} POs · {product._count.inspections ?? 0} inspections
+    <FormScreen>
+      <Text style={styles.title}>{product.styleNumber}</Text>
+      {product._count ? (
+        <Text style={styles.subtitle}>
+          {product._count.purchaseOrders ?? 0} POs · {product._count.inspections ?? 0} inspections
+        </Text>
+      ) : null}
+
+      {product.archivedAt ? (
+        <View style={styles.archivedBanner}>
+          <Text style={styles.archivedText}>
+            This product is archived and hidden from the active list.
           </Text>
-        ) : null}
-
-        {product.archivedAt ? (
-          <View style={styles.archivedBanner}>
-            <Text style={styles.archivedText}>
-              This product is archived and hidden from the active list.
-            </Text>
-            <Pressable onPress={() => restore(product)} disabled={pending} hitSlop={8}>
-              <Text style={styles.link}>{pending ? 'Restoring…' : 'Restore'}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
-        {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
-
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Style number *</Text>
-          <TextInput
-            style={styles.input}
-            value={styleNumber ?? ''}
-            onChangeText={setStyleNumber}
-            autoCapitalize="characters"
-            autoCorrect={false}
-          />
+          <Pressable onPress={() => restore(product)} disabled={pending} hitSlop={8}>
+            <Text style={styles.link}>{pending ? 'Restoring…' : 'Restore'}</Text>
+          </Pressable>
         </View>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Description</Text>
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Fabric, construction, colourway…"
-            placeholderTextColor={palette.faint}
-            multiline
-          />
+      ) : null}
+
+      {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+      {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Style number *</Text>
+        <TextInput
+          style={styles.input}
+          value={styleNumber ?? ''}
+          onChangeText={setStyleNumber}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
+      </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Description</Text>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Fabric, construction, colourway…"
+          placeholderTextColor={palette.faint}
+          multiline
+        />
+      </View>
+
+      <Pressable
+        style={[styles.button, pending && styles.buttonDisabled]}
+        onPress={() => save(product)}
+        disabled={pending}
+      >
+        <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
+      </Pressable>
+
+      {!product.archivedAt ? (
+        <View style={styles.dangerCard}>
+          <Text style={styles.dangerTitle}>Archive product</Text>
+          <Text style={styles.hint}>
+            Removes it from the active list. Historical POs and inspections are preserved.
+          </Text>
+          <Pressable
+            onPress={() => confirmArchive(product)}
+            disabled={pending}
+            hitSlop={8}
+            style={styles.dangerButton}
+          >
+            <Text style={styles.dangerButtonLabel}>Archive</Text>
+          </Pressable>
         </View>
-
-        <Pressable
-          style={[styles.button, pending && styles.buttonDisabled]}
-          onPress={() => save(product)}
-          disabled={pending}
-        >
-          <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
-        </Pressable>
-
-        {!product.archivedAt ? (
-          <View style={styles.dangerCard}>
-            <Text style={styles.dangerTitle}>Archive product</Text>
-            <Text style={styles.hint}>
-              Removes it from the active list. Historical POs and inspections are preserved.
-            </Text>
-            <Pressable
-              onPress={() => confirmArchive(product)}
-              disabled={pending}
-              hitSlop={8}
-              style={styles.dangerButton}
-            >
-              <Text style={styles.dangerButtonLabel}>Archive</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+      ) : null}
+    </FormScreen>
   );
 }
 

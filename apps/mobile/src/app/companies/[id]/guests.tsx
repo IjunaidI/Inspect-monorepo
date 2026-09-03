@@ -34,7 +34,6 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -43,6 +42,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
 import { WEB_URL } from '@/lib/config';
 import { client, loadIdentity } from '@/lib/session';
 
@@ -222,132 +222,130 @@ export default function CompanyGuests() {
   const magicLink = invited && WEB_URL ? `${WEB_URL}/portal?token=${invited.token}` : null;
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.title}>Guests</Text>
-        <Text style={styles.subtitle}>{company.name}</Text>
-        <Text style={styles.hint}>
-          Guests see signed reports where this company is the CLIENT. Reports naming it as the
-          factory are never shown.
-        </Text>
+    <FormScreen>
+      <Text style={styles.title}>Guests</Text>
+      <Text style={styles.subtitle}>{company.name}</Text>
+      <Text style={styles.hint}>
+        Guests see signed reports where this company is the CLIENT. Reports naming it as the factory
+        are never shown.
+      </Text>
 
-        {/* Invite */}
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Invite a guest</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="guest@client.example"
-            placeholderTextColor={palette.faint}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-          />
-          <View style={styles.chipRow}>
-            {TTL_OPTIONS.map((d) => (
-              <Pressable
-                key={d}
-                onPress={() => setTtl(d)}
-                style={[styles.ttlChip, ttl === d && styles.ttlChipActive]}
-              >
-                <Text style={[styles.ttlChipLabel, ttl === d && styles.ttlChipLabelActive]}>
-                  {d} days
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {inviteError ? <Text style={styles.errorText}>{inviteError}</Text> : null}
-          <Pressable
-            style={[styles.button, pending && styles.buttonDisabled]}
-            onPress={invite}
-            disabled={pending}
-          >
-            <Text style={styles.buttonLabel}>{pending ? 'Sending…' : 'Invite'}</Text>
-          </Pressable>
-
-          {invited ? (
-            <View style={styles.successBox}>
-              <Text style={styles.successText}>
-                {invited.emailSent
-                  ? `Invitation emailed to ${invited.email}. The link below is a backup — it is shown only once.`
-                  : `The email to ${invited.email} could not be sent — share this link manually. It is shown only once.`}
+      {/* Invite */}
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>Invite a guest</Text>
+        <TextInput
+          style={styles.input}
+          value={email}
+          onChangeText={setEmail}
+          placeholder="guest@client.example"
+          placeholderTextColor={palette.faint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+        />
+        <View style={styles.chipRow}>
+          {TTL_OPTIONS.map((d) => (
+            <Pressable
+              key={d}
+              onPress={() => setTtl(d)}
+              style={[styles.ttlChip, ttl === d && styles.ttlChipActive]}
+            >
+              <Text style={[styles.ttlChipLabel, ttl === d && styles.ttlChipLabelActive]}>
+                {d} days
               </Text>
-              {magicLink ? (
-                <>
-                  <Text style={styles.linkValue} numberOfLines={2}>
-                    {magicLink}
-                  </Text>
-                  <CopyButton value={magicLink} label="Copy link" />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.hint}>
-                    No console origin configured (EXPO_PUBLIC_INSPECT_WEB_URL), so the full portal
-                    link cannot be composed here. Copy the token and append it to
-                    {' <console origin>/portal?token=…'}
-                  </Text>
-                  <CopyButton value={invited.token} label="Copy token" />
-                </>
-              )}
-            </View>
-          ) : null}
+            </Pressable>
+          ))}
         </View>
+        {inviteError ? <Text style={styles.errorText}>{inviteError}</Text> : null}
+        <Pressable
+          style={[styles.button, pending && styles.buttonDisabled]}
+          onPress={invite}
+          disabled={pending}
+        >
+          <Text style={styles.buttonLabel}>{pending ? 'Sending…' : 'Invite'}</Text>
+        </Pressable>
 
-        {/* Guest list */}
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>
-            {guests ? `${guests.length} guest${guests.length === 1 ? '' : 's'}` : 'Guests'}
-          </Text>
-          {revokeError ? <Text style={styles.errorText}>{revokeError}</Text> : null}
-          {guests === null ? (
-            <View style={styles.inlineError}>
-              <Text style={styles.errorText}>The guest list could not be loaded.</Text>
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            </View>
-          ) : guests.length === 0 ? (
-            <Text style={styles.hint}>No guests yet. Invite someone above.</Text>
-          ) : (
-            guests.map((g) => {
-              const ss = STATUS_STYLE[g.status] ?? {
-                label: g.status,
-                color: palette.sub,
-              };
-              const expired = new Date(g.tokenExpiresAt) < new Date();
-              return (
-                <View key={g.id} style={styles.guestRow}>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.guestEmail} numberOfLines={1}>
-                      {g.email}
-                    </Text>
-                    <Text style={styles.guestMeta}>
-                      <Text style={{ color: ss.color, fontWeight: '600' }}>{ss.label}</Text>
-                      {expired && g.status === 'ACTIVE' ? (
-                        <Text style={{ color: palette.danger }}> · Expired</Text>
-                      ) : null}
-                      {'  ·  expires '}
-                      {DATE_FMT.format(new Date(g.tokenExpiresAt))}
-                    </Text>
-                    <Text style={styles.guestMeta}>
-                      last access {g.lastAccessAt ? DATE_FMT.format(new Date(g.lastAccessAt)) : '—'}
-                      {'  ·  invited '}
-                      {DATE_FMT.format(new Date(g.createdAt))}
-                    </Text>
-                  </View>
-                  {g.status === 'ACTIVE' ? (
-                    <Pressable onPress={() => confirmRevoke(g)} hitSlop={8}>
-                      <Text style={styles.revokeLink}>Revoke</Text>
-                    </Pressable>
-                  ) : null}
+        {invited ? (
+          <View style={styles.successBox}>
+            <Text style={styles.successText}>
+              {invited.emailSent
+                ? `Invitation emailed to ${invited.email}. The link below is a backup — it is shown only once.`
+                : `The email to ${invited.email} could not be sent — share this link manually. It is shown only once.`}
+            </Text>
+            {magicLink ? (
+              <>
+                <Text style={styles.linkValue} numberOfLines={2}>
+                  {magicLink}
+                </Text>
+                <CopyButton value={magicLink} label="Copy link" />
+              </>
+            ) : (
+              <>
+                <Text style={styles.hint}>
+                  No console origin configured (EXPO_PUBLIC_INSPECT_WEB_URL), so the full portal
+                  link cannot be composed here. Copy the token and append it to
+                  {' <console origin>/portal?token=…'}
+                </Text>
+                <CopyButton value={invited.token} label="Copy token" />
+              </>
+            )}
+          </View>
+        ) : null}
+      </View>
+
+      {/* Guest list */}
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>
+          {guests ? `${guests.length} guest${guests.length === 1 ? '' : 's'}` : 'Guests'}
+        </Text>
+        {revokeError ? <Text style={styles.errorText}>{revokeError}</Text> : null}
+        {guests === null ? (
+          <View style={styles.inlineError}>
+            <Text style={styles.errorText}>The guest list could not be loaded.</Text>
+            <Pressable onPress={reload} hitSlop={8}>
+              <Text style={styles.link}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : guests.length === 0 ? (
+          <Text style={styles.hint}>No guests yet. Invite someone above.</Text>
+        ) : (
+          guests.map((g) => {
+            const ss = STATUS_STYLE[g.status] ?? {
+              label: g.status,
+              color: palette.sub,
+            };
+            const expired = new Date(g.tokenExpiresAt) < new Date();
+            return (
+              <View key={g.id} style={styles.guestRow}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.guestEmail} numberOfLines={1}>
+                    {g.email}
+                  </Text>
+                  <Text style={styles.guestMeta}>
+                    <Text style={{ color: ss.color, fontWeight: '600' }}>{ss.label}</Text>
+                    {expired && g.status === 'ACTIVE' ? (
+                      <Text style={{ color: palette.danger }}> · Expired</Text>
+                    ) : null}
+                    {'  ·  expires '}
+                    {DATE_FMT.format(new Date(g.tokenExpiresAt))}
+                  </Text>
+                  <Text style={styles.guestMeta}>
+                    last access {g.lastAccessAt ? DATE_FMT.format(new Date(g.lastAccessAt)) : '—'}
+                    {'  ·  invited '}
+                    {DATE_FMT.format(new Date(g.createdAt))}
+                  </Text>
                 </View>
-              );
-            })
-          )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+                {g.status === 'ACTIVE' ? (
+                  <Pressable onPress={() => confirmRevoke(g)} hitSlop={8}>
+                    <Text style={styles.revokeLink}>Revoke</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            );
+          })
+        )}
+      </View>
+    </FormScreen>
   );
 }
 

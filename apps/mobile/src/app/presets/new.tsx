@@ -33,18 +33,11 @@ import type {
 } from '@inspect/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
 import { client, loadIdentity } from '@/lib/session';
 
 const SEVERITIES: DefectSeverity[] = ['CRITICAL', 'MAJOR', 'MINOR'];
@@ -299,211 +292,207 @@ export default function PresetBuilder() {
       : 'Reusing an existing preset name adds its next version; a new name starts at v1.';
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.title}>{seed ? `Duplicate “${seed.name}”` : 'New preset'}</Text>
-        <Text style={styles.hint}>{versionHint} AQL General Level II (the MVP engine).</Text>
-        {seedFailed ? (
-          <View style={styles.warnBanner}>
-            <Text style={styles.warnText}>
-              The preset to duplicate could not be loaded — starting from a blank builder.
-            </Text>
-          </View>
-        ) : null}
-        {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
-
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Preset name *</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Knitwear pre-shipment"
-            placeholderTextColor={palette.faint}
-          />
-        </View>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Description</Text>
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="What this loop covers…"
-            placeholderTextColor={palette.faint}
-            multiline
-          />
-        </View>
-
-        {/* The loop: ordered single-image items (INS-081). */}
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Loop items · one image each · {items.length}</Text>
-          {items.map((it, i) => (
-            <View key={it.key} style={styles.itemBlock}>
-              <View style={styles.itemHead}>
-                <View style={styles.itemIndex}>
-                  <Text style={styles.itemIndexLabel}>{i + 1}</Text>
-                </View>
-                <View style={styles.itemControls}>
-                  <Pressable onPress={() => moveItem(it.key, -1)} hitSlop={6} disabled={i === 0}>
-                    <Text style={[styles.ctl, i === 0 && styles.ctlDisabled]}>↑</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => moveItem(it.key, 1)}
-                    hitSlop={6}
-                    disabled={i === items.length - 1}
-                  >
-                    <Text style={[styles.ctl, i === items.length - 1 && styles.ctlDisabled]}>
-                      ↓
-                    </Text>
-                  </Pressable>
-                  {items.length > 1 ? (
-                    <Pressable onPress={() => removeItem(it.key)} hitSlop={6}>
-                      <Text style={styles.ctlDanger}>Remove</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-              <TextInput
-                style={styles.input}
-                value={it.itemName}
-                onChangeText={(v) => updateItem(it.key, { itemName: v })}
-                placeholder="Item name (e.g. Front view) *"
-                placeholderTextColor={palette.faint}
-              />
-              <TextInput
-                style={styles.input}
-                value={it.description}
-                onChangeText={(v) => updateItem(it.key, { description: v })}
-                placeholder="Guidance for the inspector (optional)"
-                placeholderTextColor={palette.faint}
-              />
-              {it.referenceImageUrl ? (
-                <Text style={styles.hint}>Reference image kept from the duplicated preset.</Text>
-              ) : (
-                <Text style={styles.hint}>Reference-image upload is web-only for now.</Text>
-              )}
-            </View>
-          ))}
-          <Pressable onPress={() => setItems((prev) => [...prev, blankItem()])} hitSlop={6}>
-            <Text style={styles.addLink}>+ Add loop item</Text>
-          </Pressable>
-        </View>
-
-        {/* Loop-global defect tags. */}
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>
-            Defect tags (loop-global) · {selected.size} selected
+    <FormScreen>
+      <Text style={styles.title}>{seed ? `Duplicate “${seed.name}”` : 'New preset'}</Text>
+      <Text style={styles.hint}>{versionHint} AQL General Level II (the MVP engine).</Text>
+      {seedFailed ? (
+        <View style={styles.warnBanner}>
+          <Text style={styles.warnText}>
+            The preset to duplicate could not be loaded — starting from a blank builder.
           </Text>
-          {SEVERITIES.map((sev) => {
-            const group = allDefects.filter((d) => d.defaultSeverity === sev);
-            if (group.length === 0) return null;
-            const tint = severityTint[SEV_KEY[sev]];
-            return (
-              <View key={sev} style={{ gap: 6 }}>
-                <Text style={[styles.sevLabel, { color: tint.fg }]}>{tint.label}</Text>
-                <View style={styles.chipWrap}>
-                  {group.map((d) => {
-                    const on = selected.has(d.id);
-                    return (
-                      <Pressable
-                        key={d.id}
-                        onPress={() => toggleDefect(d.id)}
-                        style={[
-                          styles.chip,
-                          { backgroundColor: on ? tint.bg : palette.lineSoft },
-                          on && { borderColor: tint.fg, borderWidth: 1 },
-                        ]}
-                      >
-                        <Text style={[styles.chipLabel, { color: on ? tint.fg : palette.sub }]}>
-                          {d.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+        </View>
+      ) : null}
+      {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Preset name *</Text>
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="e.g. Knitwear pre-shipment"
+          placeholderTextColor={palette.faint}
+        />
+      </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Description</Text>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="What this loop covers…"
+          placeholderTextColor={palette.faint}
+          multiline
+        />
+      </View>
+
+      {/* The loop: ordered single-image items (INS-081). */}
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>Loop items · one image each · {items.length}</Text>
+        {items.map((it, i) => (
+          <View key={it.key} style={styles.itemBlock}>
+            <View style={styles.itemHead}>
+              <View style={styles.itemIndex}>
+                <Text style={styles.itemIndexLabel}>{i + 1}</Text>
               </View>
-            );
-          })}
-          <View style={styles.customRow}>
+              <View style={styles.itemControls}>
+                <Pressable onPress={() => moveItem(it.key, -1)} hitSlop={6} disabled={i === 0}>
+                  <Text style={[styles.ctl, i === 0 && styles.ctlDisabled]}>↑</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => moveItem(it.key, 1)}
+                  hitSlop={6}
+                  disabled={i === items.length - 1}
+                >
+                  <Text style={[styles.ctl, i === items.length - 1 && styles.ctlDisabled]}>↓</Text>
+                </Pressable>
+                {items.length > 1 ? (
+                  <Pressable onPress={() => removeItem(it.key)} hitSlop={6}>
+                    <Text style={styles.ctlDanger}>Remove</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
             <TextInput
-              style={[styles.input, { flex: 1 }]}
-              value={customName}
-              onChangeText={setCustomName}
-              placeholder="Add a custom defect…"
+              style={styles.input}
+              value={it.itemName}
+              onChangeText={(v) => updateItem(it.key, { itemName: v })}
+              placeholder="Item name (e.g. Front view) *"
               placeholderTextColor={palette.faint}
             />
+            <TextInput
+              style={styles.input}
+              value={it.description}
+              onChangeText={(v) => updateItem(it.key, { description: v })}
+              placeholder="Guidance for the inspector (optional)"
+              placeholderTextColor={palette.faint}
+            />
+            {it.referenceImageUrl ? (
+              <Text style={styles.hint}>Reference image kept from the duplicated preset.</Text>
+            ) : (
+              <Text style={styles.hint}>Reference-image upload is web-only for now.</Text>
+            )}
           </View>
-          <View style={styles.chipWrap}>
-            {SEVERITIES.map((sev) => {
-              const tint = severityTint[SEV_KEY[sev]];
-              const on = customSeverity === sev;
-              return (
-                <Pressable
-                  key={sev}
-                  onPress={() => setCustomSeverity(sev)}
-                  style={[styles.chip, { backgroundColor: on ? tint.bg : palette.lineSoft }]}
-                >
-                  <Text style={[styles.chipLabel, { color: on ? tint.fg : palette.sub }]}>
-                    {tint.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-            <Pressable onPress={addCustomDefect} disabled={customPending} hitSlop={6}>
-              <Text style={styles.addLink}>{customPending ? 'Adding…' : 'Add'}</Text>
-            </Pressable>
-          </View>
-          {customError ? <Text style={styles.errorText}>{customError}</Text> : null}
-        </View>
+        ))}
+        <Pressable onPress={() => setItems((prev) => [...prev, blankItem()])} hitSlop={6}>
+          <Text style={styles.addLink}>+ Add loop item</Text>
+        </Pressable>
+      </View>
 
-        {/* Loop-global measurement sheet. */}
-        <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Measurement sheet (per unit)</Text>
-          {fields.map((f) => (
-            <View key={f.key} style={styles.fieldRow}>
-              <TextInput
-                style={[styles.input, { flex: 2 }]}
-                value={f.label}
-                onChangeText={(v) =>
-                  setFields((prev) => prev.map((x) => (x.key === f.key ? { ...x, label: v } : x)))
-                }
-                placeholder="Label (e.g. Chest width)"
-                placeholderTextColor={palette.faint}
-              />
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={f.unit}
-                onChangeText={(v) =>
-                  setFields((prev) => prev.map((x) => (x.key === f.key ? { ...x, unit: v } : x)))
-                }
-                placeholder="Unit"
-                placeholderTextColor={palette.faint}
-              />
-              <Pressable
-                onPress={() => setFields((prev) => prev.filter((x) => x.key !== f.key))}
-                hitSlop={6}
-              >
-                <Text style={styles.ctlDanger}>✕</Text>
-              </Pressable>
+      {/* Loop-global defect tags. */}
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>
+          Defect tags (loop-global) · {selected.size} selected
+        </Text>
+        {SEVERITIES.map((sev) => {
+          const group = allDefects.filter((d) => d.defaultSeverity === sev);
+          if (group.length === 0) return null;
+          const tint = severityTint[SEV_KEY[sev]];
+          return (
+            <View key={sev} style={{ gap: 6 }}>
+              <Text style={[styles.sevLabel, { color: tint.fg }]}>{tint.label}</Text>
+              <View style={styles.chipWrap}>
+                {group.map((d) => {
+                  const on = selected.has(d.id);
+                  return (
+                    <Pressable
+                      key={d.id}
+                      onPress={() => toggleDefect(d.id)}
+                      style={[
+                        styles.chip,
+                        { backgroundColor: on ? tint.bg : palette.lineSoft },
+                        on && { borderColor: tint.fg, borderWidth: 1 },
+                      ]}
+                    >
+                      <Text style={[styles.chipLabel, { color: on ? tint.fg : palette.sub }]}>
+                        {d.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
-          ))}
-          <Pressable
-            onPress={() => setFields((prev) => [...prev, { key: newKey(), label: '', unit: '' }])}
-            hitSlop={6}
-          >
-            <Text style={styles.addLink}>+ Add measurement field</Text>
+          );
+        })}
+        <View style={styles.customRow}>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            value={customName}
+            onChangeText={setCustomName}
+            placeholder="Add a custom defect…"
+            placeholderTextColor={palette.faint}
+          />
+        </View>
+        <View style={styles.chipWrap}>
+          {SEVERITIES.map((sev) => {
+            const tint = severityTint[SEV_KEY[sev]];
+            const on = customSeverity === sev;
+            return (
+              <Pressable
+                key={sev}
+                onPress={() => setCustomSeverity(sev)}
+                style={[styles.chip, { backgroundColor: on ? tint.bg : palette.lineSoft }]}
+              >
+                <Text style={[styles.chipLabel, { color: on ? tint.fg : palette.sub }]}>
+                  {tint.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Pressable onPress={addCustomDefect} disabled={customPending} hitSlop={6}>
+            <Text style={styles.addLink}>{customPending ? 'Adding…' : 'Add'}</Text>
           </Pressable>
         </View>
+        {customError ? <Text style={styles.errorText}>{customError}</Text> : null}
+      </View>
 
+      {/* Loop-global measurement sheet. */}
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>Measurement sheet (per unit)</Text>
+        {fields.map((f) => (
+          <View key={f.key} style={styles.fieldRow}>
+            <TextInput
+              style={[styles.input, { flex: 2 }]}
+              value={f.label}
+              onChangeText={(v) =>
+                setFields((prev) => prev.map((x) => (x.key === f.key ? { ...x, label: v } : x)))
+              }
+              placeholder="Label (e.g. Chest width)"
+              placeholderTextColor={palette.faint}
+            />
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={f.unit}
+              onChangeText={(v) =>
+                setFields((prev) => prev.map((x) => (x.key === f.key ? { ...x, unit: v } : x)))
+              }
+              placeholder="Unit"
+              placeholderTextColor={palette.faint}
+            />
+            <Pressable
+              onPress={() => setFields((prev) => prev.filter((x) => x.key !== f.key))}
+              hitSlop={6}
+            >
+              <Text style={styles.ctlDanger}>✕</Text>
+            </Pressable>
+          </View>
+        ))}
         <Pressable
-          style={[styles.button, pending && styles.buttonDisabled]}
-          onPress={() => save(seed)}
-          disabled={pending}
+          onPress={() => setFields((prev) => [...prev, { key: newKey(), label: '', unit: '' }])}
+          hitSlop={6}
         >
-          <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save preset'}</Text>
+          <Text style={styles.addLink}>+ Add measurement field</Text>
         </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+
+      <Pressable
+        style={[styles.button, pending && styles.buttonDisabled]}
+        onPress={() => save(seed)}
+        disabled={pending}
+      >
+        <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save preset'}</Text>
+      </Pressable>
+    </FormScreen>
   );
 }
 

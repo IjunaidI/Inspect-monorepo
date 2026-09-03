@@ -8,10 +8,11 @@ import { roleAtLeast } from '@inspect/domain';
 import type { CreateProductInput, ProductDto } from '@inspect/shared-types';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
 import { client, loadIdentity } from '@/lib/session';
 
 export default function NewProduct() {
@@ -59,46 +60,44 @@ export default function NewProduct() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
-        <BackButton label="Cancel" fallbackHref="/products" />
-        <Text style={styles.title}>New product</Text>
+    <FormScreen>
+      <BackButton label="Cancel" fallbackHref="/products" />
+      <Text style={styles.title}>New product</Text>
 
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Style number *</Text>
-          <TextInput
-            style={styles.input}
-            value={styleNumber}
-            onChangeText={setStyleNumber}
-            placeholder="ST-2026-001"
-            placeholderTextColor={palette.faint}
-            autoCapitalize="characters"
-            autoCorrect={false}
-          />
-        </View>
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Description</Text>
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Fabric, construction, colourway…"
-            placeholderTextColor={palette.faint}
-            multiline
-          />
-        </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Style number *</Text>
+        <TextInput
+          style={styles.input}
+          value={styleNumber}
+          onChangeText={setStyleNumber}
+          placeholder="ST-2026-001"
+          placeholderTextColor={palette.faint}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
+      </View>
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Description</Text>
+        <TextInput
+          style={[styles.input, styles.multiline]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Fabric, construction, colourway…"
+          placeholderTextColor={palette.faint}
+          multiline
+        />
+      </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Pressable
-          style={[styles.button, pending && styles.buttonDisabled]}
-          onPress={create}
-          disabled={pending}
-        >
-          <Text style={styles.buttonLabel}>{pending ? 'Creating…' : 'Create product'}</Text>
-        </Pressable>
-      </ScrollView>
-    </SafeAreaView>
+      <Pressable
+        style={[styles.button, pending && styles.buttonDisabled]}
+        onPress={create}
+        disabled={pending}
+      >
+        <Text style={styles.buttonLabel}>{pending ? 'Creating…' : 'Create product'}</Text>
+      </Pressable>
+    </FormScreen>
   );
 }
 

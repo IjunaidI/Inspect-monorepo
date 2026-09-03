@@ -19,18 +19,11 @@ import type { InspectionDto, QaDecision } from '@inspect/shared-types';
 import * as Device from 'expo-device';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
 import { client, loadIdentity } from '@/lib/session';
 
 const SUBMITTABLE = new Set<string>(SUBMITTABLE_STATUSES);
@@ -196,158 +189,158 @@ export default function Review() {
   const showDecisionForm = DECIDABLE.has(insp.status) && canDecide;
   const fail = r?.systemRecommendation === 'FAIL';
 
+  const header = (
+    <View style={styles.header}>
+      <BackButton />
+      <Text style={styles.headerTitle} numberOfLines={1}>
+        {insp.purchaseOrder?.poNumber ?? 'Review'}
+      </Text>
+      <View style={{ width: 40 }} />
+    </View>
+  );
+
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <BackButton />
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {insp.purchaseOrder?.poNumber ?? 'Review'}
-        </Text>
-        <View style={{ width: 40 }} />
-      </View>
+    <FormScreen header={header}>
+      <Text style={styles.subLine}>
+        {insp.clientCompany?.name ?? '—'} · {insp.product?.styleNumber ?? '—'} · status{' '}
+        {insp.status.replace(/_/g, ' ')}
+      </Text>
 
-      <ScrollView contentContainerStyle={styles.body}>
-        <Text style={styles.subLine}>
-          {insp.clientCompany?.name ?? '—'} · {insp.product?.styleNumber ?? '—'} · status{' '}
-          {insp.status.replace(/_/g, ' ')}
-        </Text>
+      {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
 
-        {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
-
-        {/* AQL result */}
-        {r ? (
-          <View style={styles.card}>
-            <View style={styles.recoRow}>
-              <Text style={styles.sectionLabel}>System recommendation</Text>
-              <Text style={[styles.reco, { color: fail ? severityTint.critical.fg : '#1F8A4C' }]}>
-                {r.systemRecommendation}
-              </Text>
-            </View>
-            <Text style={styles.hint}>
-              Sample n {insp.computedSampling?.sampleSize ?? '—'} · code{' '}
-              {insp.computedSampling?.sampleSizeCodeLetter ?? '—'} · lot {insp.lotSize ?? '—'}
+      {/* AQL result */}
+      {r ? (
+        <View style={styles.card}>
+          <View style={styles.recoRow}>
+            <Text style={styles.sectionLabel}>System recommendation</Text>
+            <Text style={[styles.reco, { color: fail ? severityTint.critical.fg : '#1F8A4C' }]}>
+              {r.systemRecommendation}
             </Text>
-            {CLASSES.map((cls) => {
-              const c = r.perClass[cls];
-              if (!c) return null;
-              const rej = c.outcome === 'FAIL';
-              return (
-                <View key={cls} style={styles.classRow}>
-                  <View style={[styles.chip, { backgroundColor: TINT[cls].bg }]}>
-                    <Text style={[styles.chipLabel, { color: TINT[cls].fg }]}>
-                      {cls.charAt(0).toUpperCase() + cls.slice(1)}
-                    </Text>
-                  </View>
-                  <Text style={styles.classCell}>found {c.found}</Text>
-                  <Text style={styles.classCell}>
-                    Ac {c.ac} · Re {c.re}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.classOutcome,
-                      { color: rej ? severityTint.critical.fg : '#1F8A4C' },
-                    ]}
-                  >
-                    {rej ? 'Reject' : 'Accept'}
+          </View>
+          <Text style={styles.hint}>
+            Sample n {insp.computedSampling?.sampleSize ?? '—'} · code{' '}
+            {insp.computedSampling?.sampleSizeCodeLetter ?? '—'} · lot {insp.lotSize ?? '—'}
+          </Text>
+          {CLASSES.map((cls) => {
+            const c = r.perClass[cls];
+            if (!c) return null;
+            const rej = c.outcome === 'FAIL';
+            return (
+              <View key={cls} style={styles.classRow}>
+                <View style={[styles.chip, { backgroundColor: TINT[cls].bg }]}>
+                  <Text style={[styles.chipLabel, { color: TINT[cls].fg }]}>
+                    {cls.charAt(0).toUpperCase() + cls.slice(1)}
                   </Text>
                 </View>
-              );
-            })}
-          </View>
-        ) : (
-          <View style={styles.card}>
-            <Text style={styles.mutedText}>
-              No AQL result yet — submit the inspection to compute the sampling evaluation.
-            </Text>
-          </View>
-        )}
+                <Text style={styles.classCell}>found {c.found}</Text>
+                <Text style={styles.classCell}>
+                  Ac {c.ac} · Re {c.re}
+                </Text>
+                <Text
+                  style={[
+                    styles.classOutcome,
+                    { color: rej ? severityTint.critical.fg : '#1F8A4C' },
+                  ]}
+                >
+                  {rej ? 'Reject' : 'Accept'}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.mutedText}>
+            No AQL result yet — submit the inspection to compute the sampling evaluation.
+          </Text>
+        </View>
+      )}
 
-        {/* Pre-submit */}
-        {SUBMITTABLE.has(insp.status) ? (
-          <View style={styles.card}>
-            <Text style={styles.sectionLabel}>QA decision</Text>
-            <Text style={styles.hint}>
-              This inspection has not been submitted. Submitting locks the audit block and computes
-              the AQL result.
-            </Text>
-            <Pressable
-              style={[styles.btn, pending && styles.dim]}
-              disabled={pending}
-              onPress={submitForReview}
-            >
-              <Text style={styles.btnLabel}>{pending ? 'Submitting…' : 'Submit for review'}</Text>
-            </Pressable>
-            <Pressable onPress={() => router.push(`/inspections/${inspectionId}/capture`)}>
-              <Text style={styles.link}>Capture photos & defects</Text>
-            </Pressable>
-          </View>
-        ) : showDecisionForm ? (
-          <View style={styles.card}>
-            <Text style={styles.sectionLabel}>QA decision</Text>
-            {DECISIONS.map((d) => (
-              <Pressable
-                key={d.value}
-                style={[styles.decisionRow, decision === d.value && styles.decisionRowActive]}
-                onPress={() => setDecision(d.value)}
-              >
-                <View style={[styles.radio, decision === d.value && styles.radioActive]} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.decisionLabel}>{d.label}</Text>
-                  <Text style={styles.hint}>{d.hint}</Text>
-                </View>
-              </Pressable>
-            ))}
-            <Text style={styles.fieldLabel}>Decision note *</Text>
-            <TextInput
-              style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
-              multiline
-              value={remarks}
-              onChangeText={setRemarks}
-              editable={!pending}
-              placeholder="Required for every decision, including Pass."
-              placeholderTextColor={palette.faint}
-            />
-            <Pressable
-              style={[styles.btn, (!decision || !remarks.trim() || pending) && styles.dim]}
-              disabled={!decision || !remarks.trim() || pending}
-              onPress={decide}
-            >
-              <Text style={styles.btnLabel}>{pending ? 'Submitting…' : 'Submit decision'}</Text>
-            </Pressable>
-            <Text style={styles.hint}>
-              Submitting locks the report. Corrections require a new linked re-inspection.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.card}>
-            {DECIDABLE.has(insp.status) ? (
-              <Text style={styles.mutedText}>Awaiting QA Manager review.</Text>
-            ) : (
-              <>
-                <Text style={styles.sectionLabel}>Final decision</Text>
-                <Text style={styles.finalDecision}>{r?.qaDecision ?? insp.status}</Text>
-                {r?.qaRemarks ? <Text style={styles.hint}>{r.qaRemarks}</Text> : null}
-              </>
-            )}
-          </View>
-        )}
-
-        {REPORTABLE.has(insp.status) ? (
-          <Pressable onPress={() => router.push(`/inspections/${inspectionId}/report`)} hitSlop={8}>
-            <Text style={styles.reportLink}>View the signed report →</Text>
-          </Pressable>
-        ) : null}
-        {REINSPECTABLE.has(insp.status) && canDecide ? (
+      {/* Pre-submit */}
+      {SUBMITTABLE.has(insp.status) ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>QA decision</Text>
+          <Text style={styles.hint}>
+            This inspection has not been submitted. Submitting locks the audit block and computes
+            the AQL result.
+          </Text>
           <Pressable
-            style={[styles.btnGhost, pending && styles.dim]}
+            style={[styles.btn, pending && styles.dim]}
             disabled={pending}
-            onPress={() => reInspect(insp)}
+            onPress={submitForReview}
           >
-            <Text style={styles.btnGhostLabel}>Start linked re-inspection</Text>
+            <Text style={styles.btnLabel}>{pending ? 'Submitting…' : 'Submit for review'}</Text>
           </Pressable>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+          <Pressable onPress={() => router.push(`/inspections/${inspectionId}/capture`)}>
+            <Text style={styles.link}>Capture photos & defects</Text>
+          </Pressable>
+        </View>
+      ) : showDecisionForm ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>QA decision</Text>
+          {DECISIONS.map((d) => (
+            <Pressable
+              key={d.value}
+              style={[styles.decisionRow, decision === d.value && styles.decisionRowActive]}
+              onPress={() => setDecision(d.value)}
+            >
+              <View style={[styles.radio, decision === d.value && styles.radioActive]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.decisionLabel}>{d.label}</Text>
+                <Text style={styles.hint}>{d.hint}</Text>
+              </View>
+            </Pressable>
+          ))}
+          <Text style={styles.fieldLabel}>Decision note *</Text>
+          <TextInput
+            style={[styles.input, { minHeight: 70, textAlignVertical: 'top' }]}
+            multiline
+            value={remarks}
+            onChangeText={setRemarks}
+            editable={!pending}
+            placeholder="Required for every decision, including Pass."
+            placeholderTextColor={palette.faint}
+          />
+          <Pressable
+            style={[styles.btn, (!decision || !remarks.trim() || pending) && styles.dim]}
+            disabled={!decision || !remarks.trim() || pending}
+            onPress={decide}
+          >
+            <Text style={styles.btnLabel}>{pending ? 'Submitting…' : 'Submit decision'}</Text>
+          </Pressable>
+          <Text style={styles.hint}>
+            Submitting locks the report. Corrections require a new linked re-inspection.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.card}>
+          {DECIDABLE.has(insp.status) ? (
+            <Text style={styles.mutedText}>Awaiting QA Manager review.</Text>
+          ) : (
+            <>
+              <Text style={styles.sectionLabel}>Final decision</Text>
+              <Text style={styles.finalDecision}>{r?.qaDecision ?? insp.status}</Text>
+              {r?.qaRemarks ? <Text style={styles.hint}>{r.qaRemarks}</Text> : null}
+            </>
+          )}
+        </View>
+      )}
+
+      {REPORTABLE.has(insp.status) ? (
+        <Pressable onPress={() => router.push(`/inspections/${inspectionId}/report`)} hitSlop={8}>
+          <Text style={styles.reportLink}>View the signed report →</Text>
+        </Pressable>
+      ) : null}
+      {REINSPECTABLE.has(insp.status) && canDecide ? (
+        <Pressable
+          style={[styles.btnGhost, pending && styles.dim]}
+          disabled={pending}
+          onPress={() => reInspect(insp)}
+        >
+          <Text style={styles.btnGhostLabel}>Start linked re-inspection</Text>
+        </Pressable>
+      ) : null}
+    </FormScreen>
   );
 }
 
