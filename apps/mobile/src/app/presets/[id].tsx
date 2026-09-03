@@ -22,13 +22,14 @@ import {
   Alert,
   Image,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 const SEV_KEY: Record<string, SeverityKey> = {
@@ -56,7 +57,10 @@ async function fetchPreset(id: string): Promise<Load> {
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return { kind: 'missing' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -130,9 +134,7 @@ export default function PresetDetail() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -228,10 +230,7 @@ export default function PresetDetail() {
         </View>
 
         {/* INS-076: presets are immutable — Duplicate is the only edit path. */}
-        <Pressable
-          onPress={() => router.push(`/presets/new?from=${preset.id}`)}
-          hitSlop={4}
-        >
+        <Pressable onPress={() => router.push(`/presets/new?from=${preset.id}`)} hitSlop={4}>
           <Text style={styles.link}>Duplicate into a new version →</Text>
         </Pressable>
 
@@ -258,7 +257,13 @@ export default function PresetDetail() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
   mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
@@ -287,8 +292,17 @@ const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   chipLabel: { fontSize: 12, fontWeight: '600' },
-  measureRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  measureLabel: { color: palette.ink, fontSize: 13, fontWeight: '600', flexShrink: 1 },
+  measureRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  measureLabel: {
+    color: palette.ink,
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
   measureUnit: { color: palette.faint, fontSize: 13 },
   itemRow: {
     flexDirection: 'row',
@@ -309,7 +323,12 @@ const styles = StyleSheet.create({
   itemIndexLabel: { color: palette.accent, fontSize: 12.5, fontWeight: '700' },
   itemName: { color: palette.ink, fontSize: 14, fontWeight: '600' },
   itemDesc: { color: palette.sub, fontSize: 12.5, lineHeight: 17 },
-  thumb: { width: 52, height: 52, borderRadius: 8, backgroundColor: palette.lineSoft },
+  thumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: palette.lineSoft,
+  },
   thumbFallback: { alignItems: 'center', justifyContent: 'center' },
   thumbFallbackText: { color: palette.faint, fontSize: 9 },
   dangerCard: {

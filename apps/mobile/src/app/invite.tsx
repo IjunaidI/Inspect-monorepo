@@ -22,13 +22,13 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { client, signIn } from '@/lib/session';
 
@@ -73,9 +73,7 @@ export default function Invite() {
   const router = useRouter();
   const { token: linkToken } = useLocalSearchParams<{ token?: string }>();
 
-  const [load, setLoad] = useState<Load>(
-    linkToken ? { kind: 'loading' } : { kind: 'no-token' },
-  );
+  const [load, setLoad] = useState<Load>(linkToken ? { kind: 'loading' } : { kind: 'no-token' });
   const [pastedToken, setPastedToken] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -248,7 +246,13 @@ export default function Invite() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 20, gap: 14, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centeredScroll: {
     flexGrow: 1,
     alignItems: 'center',
@@ -256,9 +260,24 @@ const styles = StyleSheet.create({
     padding: 32,
     gap: 10,
   },
-  title: { color: palette.ink, fontSize: 20, fontWeight: '700', textAlign: 'center' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center', lineHeight: 20 },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600', marginTop: 8 },
+  title: {
+    color: palette.ink,
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  mutedText: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  link: {
+    color: palette.accent,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
   tokenBox: { alignSelf: 'stretch', gap: 10, marginTop: 8 },
   field: { gap: 6 },
   fieldLabel: {

@@ -8,16 +8,10 @@ import { roleAtLeast } from '@inspect/domain';
 import type { CreateProductInput, ProductDto } from '@inspect/shared-types';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 export default function NewProduct() {
@@ -67,6 +61,7 @@ export default function NewProduct() {
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.body}>
+        <BackButton label="Cancel" fallbackHref="/products" />
         <Text style={styles.title}>New product</Text>
 
         <View style={styles.field}>
@@ -110,7 +105,13 @@ export default function NewProduct() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   forbiddenTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
   mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },

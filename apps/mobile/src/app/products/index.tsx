@@ -17,13 +17,14 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity, signOut } from '@/lib/session';
 
 const PAGE_SIZE = 50;
@@ -44,7 +45,10 @@ async function fetchProducts(q: string, view: ViewFilter, skip: number): Promise
   if (q) params.set('q', q);
   if (view !== 'active') params.set('includeArchived', '1');
   try {
-    return { kind: 'rows', rows: await client.get<ProductDto[]>(`/products?${params.toString()}`) };
+    return {
+      kind: 'rows',
+      rows: await client.get<ProductDto[]>(`/products?${params.toString()}`),
+    };
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return { kind: 'unauthorized' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
@@ -136,9 +140,7 @@ export default function Products() {
       <SafeAreaView style={styles.screen}>
         <View style={styles.centered}>
           <Text style={styles.forbiddenTitle}>QA Manager access required</Text>
-          <Text style={styles.forbiddenBody}>
-            Products are visible to QA Managers and above.
-          </Text>
+          <Text style={styles.forbiddenBody}>Products are visible to QA Managers and above.</Text>
         </View>
       </SafeAreaView>
     );
@@ -149,6 +151,7 @@ export default function Products() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
+        <BackButton fallbackHref="/dashboard" />
         <View style={styles.headerRow}>
           <Text style={styles.title}>Products</Text>
           <Pressable onPress={() => router.push('/products/new')} hitSlop={8}>
@@ -196,7 +199,11 @@ export default function Products() {
           data={visible}
           keyExtractor={(item) => item.id}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.accent} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor={palette.accent}
+            />
           }
           contentContainerStyle={visible.length ? styles.list : styles.listEmpty}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -250,7 +257,11 @@ const styles = StyleSheet.create({
     backgroundColor: palette.panel,
     gap: 8,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   newLink: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   subtitle: { color: palette.sub, fontSize: 13 },
@@ -273,12 +284,26 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     backgroundColor: palette.bg,
   },
-  filterChipActive: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
+  filterChipActive: {
+    backgroundColor: palette.accentSoft,
+    borderColor: palette.accent,
+  },
   filterChipLabel: { color: palette.sub, fontSize: 12.5, fontWeight: '600' },
   filterChipLabelActive: { color: palette.accent },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   forbiddenTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  forbiddenBody: { color: palette.sub, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  forbiddenBody: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   notice: {
     margin: 16,
     padding: 12,
@@ -294,7 +319,12 @@ const styles = StyleSheet.create({
   noticeText: { color: palette.danger, fontSize: 13, flexShrink: 1 },
   retry: { color: palette.accent, fontSize: 13, fontWeight: '600' },
   list: { padding: 16 },
-  listEmpty: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  listEmpty: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   separator: { height: 8 },
   empty: { color: palette.faint, fontSize: 14, textAlign: 'center' },
   row: {

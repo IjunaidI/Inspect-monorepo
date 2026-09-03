@@ -30,7 +30,7 @@ import type {
   ReportDto,
   ReportPdfDownloadDto,
 } from '@inspect/shared-types';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -38,13 +38,14 @@ import {
   Linking,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 const REPORTABLE = new Set<string>(REPORTABLE_STATUSES);
@@ -93,9 +94,15 @@ async function fetchReport(id: string): Promise<Load> {
     // 403 and 404 are deliberately told apart — the web screen collapses them.
     if (e instanceof ApiError && e.status === 404) return { kind: 'missing' };
     if (e instanceof ApiError && e.status === 403) {
-      return { kind: 'error', message: 'You do not have access to this inspection.' };
+      return {
+        kind: 'error',
+        message: 'You do not have access to this inspection.',
+      };
     }
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 
   let report: ReportDto | null = null;
@@ -123,14 +130,15 @@ function groupMeasurements(measurements: MeasurementDto[] | undefined) {
   for (const m of measurements ?? []) {
     byCycle.set(m.cycleIndex, [...(byCycle.get(m.cycleIndex) ?? []), m]);
   }
-  return [...byCycle.keys()].sort((a, b) => a - b).map((c) => ({
-    cycleIndex: c,
-    items: byCycle.get(c) ?? [],
-  }));
+  return [...byCycle.keys()]
+    .sort((a, b) => a - b)
+    .map((c) => ({
+      cycleIndex: c,
+      items: byCycle.get(c) ?? [],
+    }));
 }
 
 export default function Report() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const inspectionId = String(id);
 
@@ -187,9 +195,7 @@ export default function Report() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -265,8 +271,8 @@ export default function Report() {
           <View style={styles.card}>
             <Text style={styles.sectionLabel}>Sampling plan (ISO 2859-1, Level II)</Text>
             <Text style={styles.hint}>
-              Lot {insp.lotSize ?? '—'} · code {insp.computedSampling.sampleSizeCodeLetter} ·
-              sample n {insp.computedSampling.sampleSize}
+              Lot {insp.lotSize ?? '—'} · code {insp.computedSampling.sampleSizeCodeLetter} · sample
+              n {insp.computedSampling.sampleSize}
             </Text>
             {CLASSES.map((cls) => {
               const plan = insp.computedSampling?.perClass?.[cls];
@@ -315,7 +321,8 @@ export default function Report() {
                     {item.itemName}
                     <Text style={styles.hint}>
                       {'  '}
-                      {item.photos?.length ?? 0} shot{(item.photos?.length ?? 0) === 1 ? '' : 's'}
+                      {item.photos?.length ?? 0} shot
+                      {(item.photos?.length ?? 0) === 1 ? '' : 's'}
                       {flagged ? ` · ${flagged} flagged` : ''}
                     </Text>
                   </Text>
@@ -326,9 +333,7 @@ export default function Report() {
                           <Image key={p.id} source={{ uri: p.viewUrl }} style={styles.thumb} />
                         ) : (
                           <View key={p.id} style={[styles.thumb, styles.thumbFallback]}>
-                            <Text style={styles.thumbFallbackText}>
-                              U{p.cycleIndex + 1}
-                            </Text>
+                            <Text style={styles.thumbFallbackText}>U{p.cycleIndex + 1}</Text>
                           </View>
                         ),
                       )}
@@ -382,9 +387,7 @@ export default function Report() {
                 onPress={() => openPdf(report.id)}
                 disabled={pdfPending}
               >
-                <Text style={styles.buttonLabel}>
-                  {pdfPending ? 'Opening…' : 'Open PDF'}
-                </Text>
+                <Text style={styles.buttonLabel}>{pdfPending ? 'Opening…' : 'Open PDF'}</Text>
               </Pressable>
             ) : (
               <Text style={styles.hint}>PDF not yet rendered.</Text>
@@ -410,7 +413,13 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
   errorText: { color: palette.danger, fontSize: 13 },
@@ -453,21 +462,42 @@ const styles = StyleSheet.create({
   hint: { color: palette.faint, fontSize: 12 },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   metaLabel: { color: palette.sub, fontSize: 13 },
-  metaValue: { color: palette.ink, fontSize: 13, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
+  metaValue: {
+    color: palette.ink,
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
   classRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  chip: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, minWidth: 68, alignItems: 'center' },
+  chip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    minWidth: 68,
+    alignItems: 'center',
+  },
   chipLabel: { fontSize: 11, fontWeight: '600', letterSpacing: 0.3 },
   classCell: { color: palette.sub, fontSize: 12.5 },
   classOutcome: { fontSize: 12.5, fontWeight: '700', marginLeft: 'auto' },
   photoGroup: { gap: 6 },
   photoGroupTitle: { color: palette.ink, fontSize: 14, fontWeight: '600' },
   photoStrip: { flexDirection: 'row', gap: 8 },
-  thumb: { width: 72, height: 72, borderRadius: 8, backgroundColor: palette.lineSoft },
+  thumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: palette.lineSoft,
+  },
   thumbFallback: { alignItems: 'center', justifyContent: 'center' },
   thumbFallbackText: { color: palette.faint, fontSize: 12, fontWeight: '600' },
   measureGroup: { gap: 4 },
   measureUnit: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  measureRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  measureRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   measureLabel: { color: palette.sub, fontSize: 13, flexShrink: 1 },
   measureValue: { color: palette.ink, fontSize: 13, fontWeight: '600' },
   hashBlock: { gap: 2 },

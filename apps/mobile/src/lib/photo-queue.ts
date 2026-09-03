@@ -175,7 +175,10 @@ export async function retakeWithQueued(
 ): Promise<void> {
   const presigned = await io.presign(entry.inspectionId, { ext: 'jpg' });
   await io.putBytes(presigned.uploadUrl, entry.localUri);
-  const input: RetakePhotoInput = { storageKey: presigned.storageKey, contentHash: entry.sha256 };
+  const input: RetakePhotoInput = {
+    storageKey: presigned.storageKey,
+    contentHash: entry.sha256,
+  };
   await client.post(
     `/inspections/${entry.inspectionId}/populate/photos/${occupyingPhotoId}/retake`,
     input,

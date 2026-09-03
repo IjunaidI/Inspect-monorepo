@@ -22,13 +22,14 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity, signOut } from '@/lib/session';
 
 type Load =
@@ -131,6 +132,7 @@ export default function Reports() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
+        <BackButton fallbackHref="/dashboard" />
         <Text style={styles.title}>Reports</Text>
         {rows !== null ? (
           <Text style={styles.subtitle}>
@@ -238,9 +240,20 @@ const styles = StyleSheet.create({
     color: palette.ink,
     backgroundColor: palette.bg,
   },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   forbiddenTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  forbiddenBody: { color: palette.sub, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  forbiddenBody: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   notice: {
     margin: 16,
     padding: 12,
@@ -256,9 +269,19 @@ const styles = StyleSheet.create({
   noticeText: { color: palette.danger, fontSize: 13, flexShrink: 1 },
   retry: { color: palette.accent, fontSize: 13, fontWeight: '600' },
   list: { padding: 16 },
-  listEmpty: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  listEmpty: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   separator: { height: 8 },
-  empty: { color: palette.faint, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  empty: {
+    color: palette.faint,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   row: {
     backgroundColor: palette.panel,
     borderColor: palette.line,
@@ -267,7 +290,12 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 4,
   },
-  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  rowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   reportNo: { color: palette.accent, fontSize: 16, fontWeight: '700' },
   rowDate: { color: palette.faint, fontSize: 12 },
   rowSub: { color: palette.sub, fontSize: 14 },

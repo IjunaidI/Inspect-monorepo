@@ -1,6 +1,6 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-02.** This is the source-of-truth dashboard: current state only.
+> **Last verified: 2026-09-04.** This is the source-of-truth dashboard: current state only.
 > The long per-session history that used to stack here was trimmed 2026-09-02 — it lives in git
 > history (`git log -- docs/STATUS.md`) and in the backlog archive
 > ([done/2026-09-02-backlog-archive.md](done/2026-09-02-backlog-archive.md)). Open work:
@@ -21,8 +21,17 @@ acceptance pass**:
    minted there; the remaining INS-002 rotation is user-side.
 2. ~~Real origins into `apps/mobile/eas.json`~~ — done (`preview` + `production` carry
    `EXPO_PUBLIC_INSPECT_API_URL` / `EXPO_PUBLIC_INSPECT_WEB_URL`).
-3. `eas build --profile preview --platform android` (`eas` is already authenticated as
-   donanlumina; project `@donanlumina/inspect` is linked). Walk the ledger on the device.
+3. **The device pass has started (2026-09-04)** on a local Android 16 emulator running Expo Go against
+   the Railway API (workflow in the session memory; phone: Expo Go → `exp://192.168.18.64:8081`).
+   Test users in Acme Apparel Group: `qa.mobile@` / `inspector.mobile@acme-apparel.test`.
+   First two defects found and fixed: every screen imported React Native's deprecated `SafeAreaView`
+   (a no-op on Android — headers sat under the status bar) → all 21 screens now use
+   `react-native-safe-area-context`; and the hub-level lists, dashboard and product form had no visible
+   back control → one shared `BackButton` (`src/components/back-button.tsx`, pops the stack or falls
+   back to a given route when there is no history) replaced 18 ad-hoc back links and was added to 8
+   screens. Verified on the emulator: Inspections → Dashboard → Products → Back → Back.
+4. `eas build --profile preview --platform android` (`eas` is already authenticated as
+   donanlumina; project `@donanlumina/inspect` is linked). Walk the rest of the ledger on the device.
 
 ## What exists, by pillar
 

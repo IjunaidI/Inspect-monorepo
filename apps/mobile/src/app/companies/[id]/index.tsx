@@ -18,7 +18,12 @@
 import { ApiError } from '@inspect/api-client';
 import { brandFallbacks, palette, severity as severityTint } from '@inspect/design-tokens';
 import { hashIndex, initialsFrom, roleAtLeast } from '@inspect/domain';
-import type { CompanyDto, CompanyKind, LoopPresetDto, UpdateCompanyInput } from '@inspect/shared-types';
+import type {
+  CompanyDto,
+  CompanyKind,
+  LoopPresetDto,
+  UpdateCompanyInput,
+} from '@inspect/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -26,15 +31,16 @@ import {
   Alert,
   Image,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OptionPicker } from '@/components/option-picker';
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 /** The one shape the API accepts for primaryColor (INS-077) — a live hint only. */
@@ -64,7 +70,10 @@ async function fetchCompany(id: string): Promise<Load> {
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return { kind: 'missing' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -221,9 +230,7 @@ export default function CompanyDetail() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -235,7 +242,10 @@ export default function CompanyDetail() {
   const colorValid = color.trim() === '' || HEX_RE.test(color.trim());
   const presetOptions: PresetOption[] = [
     { id: null, label: 'None' },
-    ...(presets ?? []).map((p) => ({ id: p.id, label: `${p.name} · v${p.version}` })),
+    ...(presets ?? []).map((p) => ({
+      id: p.id,
+      label: `${p.name} · v${p.version}`,
+    })),
   ];
   const selectedPreset =
     presetOptions.find((o) => o.id === presetId) ??
@@ -316,7 +326,9 @@ export default function CompanyDetail() {
             <View
               style={[
                 styles.swatch,
-                { backgroundColor: colorValid && color.trim() ? color.trim() : palette.lineSoft },
+                {
+                  backgroundColor: colorValid && color.trim() ? color.trim() : palette.lineSoft,
+                },
               ]}
             />
             <TextInput
@@ -411,10 +423,7 @@ export default function CompanyDetail() {
           <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
         </Pressable>
 
-        <Pressable
-          onPress={() => router.push(`/companies/${company.id}/guests`)}
-          hitSlop={4}
-        >
+        <Pressable onPress={() => router.push(`/companies/${company.id}/guests`)} hitSlop={4}>
           <Text style={styles.link}>Manage guests →</Text>
         </Pressable>
 
@@ -422,8 +431,8 @@ export default function CompanyDetail() {
           <View style={styles.dangerCard}>
             <Text style={styles.dangerTitle}>Archive company</Text>
             <Text style={styles.hint}>
-              Removes this company from the active list. Historical purchase orders, inspections
-              and reports are preserved.
+              Removes this company from the active list. Historical purchase orders, inspections and
+              reports are preserved.
             </Text>
             <Pressable
               onPress={() => confirmArchive(company)}
@@ -443,7 +452,13 @@ export default function CompanyDetail() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
   mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
@@ -499,7 +514,10 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     backgroundColor: palette.panel,
   },
-  kindChipActive: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
+  kindChipActive: {
+    backgroundColor: palette.accentSoft,
+    borderColor: palette.accent,
+  },
   kindChipLabel: { color: palette.sub, fontSize: 13, fontWeight: '600' },
   kindChipLabelActive: { color: palette.accent },
   sectionLabel: {
@@ -520,7 +538,12 @@ const styles = StyleSheet.create({
   },
   hint: { color: palette.faint, fontSize: 12, lineHeight: 17, flexShrink: 1 },
   hintDanger: { color: palette.danger, fontSize: 12 },
-  logoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   removeLink: { color: palette.danger, fontSize: 13, fontWeight: '600' },
   gpsRow: { flexDirection: 'row', gap: 10 },
   button: {

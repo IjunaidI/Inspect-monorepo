@@ -24,15 +24,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OptionPicker } from '@/components/option-picker';
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 /** Mirrors the API's ALLOWED_AQL_VALUES; 0 = "any defect rejects". */
@@ -44,7 +45,12 @@ type Load =
   | { kind: 'loading' }
   | { kind: 'forbidden' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; pos: PurchaseOrderDto[]; presets: LoopPresetDto[]; inspectors: UserDto[] };
+  | {
+      kind: 'ready';
+      pos: PurchaseOrderDto[];
+      presets: LoopPresetDto[];
+      inspectors: UserDto[];
+    };
 
 /** Pure fetch — setState only ever happens in .then. */
 async function fetchFormData(): Promise<Load> {
@@ -63,7 +69,10 @@ async function fetchFormData(): Promise<Load> {
       inspectors: users.filter((u) => u.role === 'INSPECTOR' && u.status === 'ACTIVE'),
     };
   } catch (e) {
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -165,10 +174,7 @@ export default function NewInspection() {
 
   const aqlLabel = (v: number) => (v === 0 ? '0 · any defect rejects' : v.toFixed(1));
 
-  const presetLabel = useMemo(
-    () => (p: LoopPresetDto) => `${p.name} (v${p.version})`,
-    [],
-  );
+  const presetLabel = useMemo(() => (p: LoopPresetDto) => `${p.name} (v${p.version})`, []);
 
   if (load.kind === 'loading') {
     return (
@@ -181,9 +187,7 @@ export default function NewInspection() {
     return (
       <SafeAreaView style={[styles.screen, styles.center]}>
         <Text style={styles.mutedText}>Creating an inspection needs the QA Manager role.</Text>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.link}>Back</Text>
-        </Pressable>
+        <BackButton />
       </SafeAreaView>
     );
   }
@@ -202,12 +206,10 @@ export default function NewInspection() {
     return (
       <SafeAreaView style={[styles.screen, styles.center]}>
         <Text style={styles.mutedText}>
-          No purchase orders yet. Create two companies (the client and the factory), a product and
-          a PO in the console first, then return here.
+          No purchase orders yet. Create two companies (the client and the factory), a product and a
+          PO in the console first, then return here.
         </Text>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.link}>Back</Text>
-        </Pressable>
+        <BackButton />
       </SafeAreaView>
     );
   }
@@ -215,9 +217,7 @@ export default function NewInspection() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.link}>Cancel</Text>
-        </Pressable>
+        <BackButton label="Cancel" />
         <Text style={styles.headerTitle}>New inspection</Text>
         <Pressable onPress={create} disabled={!canCreate} hitSlop={8}>
           {pending ? (
@@ -339,7 +339,12 @@ export default function NewInspection() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
-  center: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 24,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -412,6 +417,12 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     gap: 12,
   },
-  planClass: { color: palette.ink, fontSize: 13, fontWeight: '600', flex: 1, textTransform: 'capitalize' },
+  planClass: {
+    color: palette.ink,
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+    textTransform: 'capitalize',
+  },
   planCell: { color: palette.sub, fontSize: 13 },
 });

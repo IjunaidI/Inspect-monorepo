@@ -4,15 +4,8 @@ import { roleAtLeast } from '@inspect/domain';
 import type { InspectionDto } from '@inspect/shared-types';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  FlatList,
-  Pressable,
-  RefreshControl,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { client, loadIdentity, signOut, type Identity } from '@/lib/session';
 
@@ -49,7 +42,10 @@ type LoadResult =
 /** Pure fetch — no component state captured, so effects may call it freely. */
 async function fetchInspections(): Promise<LoadResult> {
   try {
-    return { kind: 'rows', rows: await client.get<InspectionDto[]>('/inspections') };
+    return {
+      kind: 'rows',
+      rows: await client.get<InspectionDto[]>('/inspections'),
+    };
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return { kind: 'unauthorized' };
     return {
@@ -107,9 +103,7 @@ export default function Inspections() {
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>Inspections</Text>
           {identity ? (
-            <Text style={styles.subtitle}>
-              {identity.orgName ?? identity.email ?? ''}
-            </Text>
+            <Text style={styles.subtitle}>{identity.orgName ?? identity.email ?? ''}</Text>
           ) : null}
         </View>
         {roleAtLeast(identity?.role, 'QA_MANAGER') ? (
@@ -145,19 +139,13 @@ export default function Inspections() {
         data={rows ?? []}
         keyExtractor={(item) => item.id}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={refresh}
-            tintColor={palette.accent}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.accent} />
         }
         contentContainerStyle={rows?.length ? styles.list : styles.listEmpty}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           rows === null ? null : (
-            <Text style={styles.empty}>
-              {error ? '' : 'No inspections in this workspace yet.'}
-            </Text>
+            <Text style={styles.empty}>{error ? '' : 'No inspections in this workspace yet.'}</Text>
           )
         }
         renderItem={({ item }) => (
@@ -225,7 +213,12 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 4,
   },
-  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  rowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   po: { color: palette.ink, fontSize: 16, fontWeight: '600', flexShrink: 1 },
   rowSub: { color: palette.sub, fontSize: 14 },
   rowMeta: { color: palette.faint, fontSize: 12 },

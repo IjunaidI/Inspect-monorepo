@@ -36,14 +36,15 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 const SEVERITIES: DefectSeverity[] = ['CRITICAL', 'MAJOR', 'MINOR'];
@@ -64,7 +65,11 @@ type DraftItem = {
 type DraftField = { key: string; label: string; unit: string };
 
 const newKey = () => Math.random().toString(36).slice(2, 10);
-const blankItem = (): DraftItem => ({ key: newKey(), itemName: '', description: '' });
+const blankItem = (): DraftItem => ({
+  key: newKey(),
+  itemName: '',
+  description: '',
+});
 
 type Load =
   | { kind: 'loading' }
@@ -87,7 +92,10 @@ async function fetchBuilderData(fromId: string | null): Promise<Load> {
     catalog = await client.get<DefectCatalogDto[]>('/defect-catalog');
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
   if (!fromId) return { kind: 'ready', catalog, seed: null, seedFailed: false };
   try {
@@ -138,7 +146,11 @@ export default function PresetBuilder() {
           })),
       );
       setFields(
-        s.measurementFields.map((f) => ({ key: newKey(), label: f.label, unit: f.unit ?? '' })),
+        s.measurementFields.map((f) => ({
+          key: newKey(),
+          label: f.label,
+          unit: f.unit ?? '',
+        })),
       );
       setSelected(new Set(s.allowedDefects.map((ad) => ad.defectCatalogId)));
     }
@@ -186,7 +198,10 @@ export default function PresetBuilder() {
     setCustomPending(true);
     setCustomError(null);
     try {
-      const body: CreateDefectInput = { name: trimmed, defaultSeverity: customSeverity };
+      const body: CreateDefectInput = {
+        name: trimmed,
+        defaultSeverity: customSeverity,
+      };
       const created = await client.post<DefectCatalogDto>('/defect-catalog', body);
       setExtraDefects((prev) => [...prev, created]);
       setSelected((prev) => new Set(prev).add(created.id));
@@ -268,9 +283,7 @@ export default function PresetBuilder() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -323,9 +336,7 @@ export default function PresetBuilder() {
 
         {/* The loop: ordered single-image items (INS-081). */}
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>
-            Loop items · one image each · {items.length}
-          </Text>
+          <Text style={styles.sectionLabel}>Loop items · one image each · {items.length}</Text>
           {items.map((it, i) => (
             <View key={it.key} style={styles.itemBlock}>
               <View style={styles.itemHead}>
@@ -367,9 +378,7 @@ export default function PresetBuilder() {
                 placeholderTextColor={palette.faint}
               />
               {it.referenceImageUrl ? (
-                <Text style={styles.hint}>
-                  Reference image kept from the duplicated preset.
-                </Text>
+                <Text style={styles.hint}>Reference image kept from the duplicated preset.</Text>
               ) : (
                 <Text style={styles.hint}>Reference-image upload is web-only for now.</Text>
               )}
@@ -382,7 +391,9 @@ export default function PresetBuilder() {
 
         {/* Loop-global defect tags. */}
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Defect tags (loop-global) · {selected.size} selected</Text>
+          <Text style={styles.sectionLabel}>
+            Defect tags (loop-global) · {selected.size} selected
+          </Text>
           {SEVERITIES.map((sev) => {
             const group = allDefects.filter((d) => d.defaultSeverity === sev);
             if (group.length === 0) return null;
@@ -454,9 +465,7 @@ export default function PresetBuilder() {
                 style={[styles.input, { flex: 2 }]}
                 value={f.label}
                 onChangeText={(v) =>
-                  setFields((prev) =>
-                    prev.map((x) => (x.key === f.key ? { ...x, label: v } : x)),
-                  )
+                  setFields((prev) => prev.map((x) => (x.key === f.key ? { ...x, label: v } : x)))
                 }
                 placeholder="Label (e.g. Chest width)"
                 placeholderTextColor={palette.faint}
@@ -501,7 +510,13 @@ export default function PresetBuilder() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
   mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
@@ -557,7 +572,11 @@ const styles = StyleSheet.create({
     borderTopColor: palette.lineSoft,
     paddingTop: 10,
   },
-  itemHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  itemHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   itemIndex: {
     width: 26,
     height: 26,
@@ -572,8 +591,18 @@ const styles = StyleSheet.create({
   ctlDisabled: { color: palette.faint },
   ctlDanger: { color: palette.danger, fontSize: 13, fontWeight: '600' },
   addLink: { color: palette.accent, fontSize: 14, fontWeight: '600' },
-  sevLabel: { fontSize: 11.5, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
+  sevLabel: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    alignItems: 'center',
+  },
   chip: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
   chipLabel: { fontSize: 12.5, fontWeight: '600' },
   customRow: { flexDirection: 'row', gap: 8 },

@@ -33,13 +33,14 @@ import {
   Image,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity, signOut } from '@/lib/session';
 
 const PAGE_SIZE = 50;
@@ -70,7 +71,10 @@ async function fetchCompanies(
   // and the archived-only view narrows it client-side, exactly like the web.
   if (view !== 'active') params.set('includeArchived', '1');
   try {
-    return { kind: 'rows', rows: await client.get<CompanyDto[]>(`/companies?${params.toString()}`) };
+    return {
+      kind: 'rows',
+      rows: await client.get<CompanyDto[]>(`/companies?${params.toString()}`),
+    };
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return { kind: 'unauthorized' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
@@ -178,6 +182,7 @@ export default function Companies() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
+        <BackButton fallbackHref="/dashboard" />
         <Text style={styles.title}>Companies</Text>
         {rows !== null ? (
           <Text style={styles.subtitle}>
@@ -202,7 +207,11 @@ export default function Companies() {
             active={kindF === 'THIRD_PARTY'}
             onPress={() => setKindF('THIRD_PARTY')}
           />
-          <Chip label="Internal" active={kindF === 'INTERNAL'} onPress={() => setKindF('INTERNAL')} />
+          <Chip
+            label="Internal"
+            active={kindF === 'INTERNAL'}
+            onPress={() => setKindF('INTERNAL')}
+          />
         </View>
         <View style={styles.filterRow}>
           <Chip label="Active" active={view === 'active'} onPress={() => setView('active')} />
@@ -247,9 +256,7 @@ export default function Companies() {
           ListFooterComponent={
             hasNext && visible.length ? (
               <Pressable style={styles.loadMore} onPress={loadMore} disabled={loadingMore}>
-                <Text style={styles.loadMoreLabel}>
-                  {loadingMore ? 'Loading…' : 'Load more'}
-                </Text>
+                <Text style={styles.loadMoreLabel}>{loadingMore ? 'Loading…' : 'Load more'}</Text>
               </Pressable>
             ) : null
           }
@@ -331,12 +338,26 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     backgroundColor: palette.bg,
   },
-  filterChipActive: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
+  filterChipActive: {
+    backgroundColor: palette.accentSoft,
+    borderColor: palette.accent,
+  },
   filterChipLabel: { color: palette.sub, fontSize: 12.5, fontWeight: '600' },
   filterChipLabelActive: { color: palette.accent },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   forbiddenTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  forbiddenBody: { color: palette.sub, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  forbiddenBody: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   notice: {
     margin: 16,
     padding: 12,
@@ -352,7 +373,12 @@ const styles = StyleSheet.create({
   noticeText: { color: palette.danger, fontSize: 13, flexShrink: 1 },
   retry: { color: palette.accent, fontSize: 13, fontWeight: '600' },
   list: { padding: 16 },
-  listEmpty: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  listEmpty: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   separator: { height: 8 },
   empty: { color: palette.faint, fontSize: 14, textAlign: 'center' },
   row: {

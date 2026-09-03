@@ -22,14 +22,15 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 const SUBMITTABLE = new Set<string>(SUBMITTABLE_STATUSES);
@@ -43,9 +44,21 @@ const TINT = {
   minor: severityTint.minor,
 };
 const DECISIONS: { value: QaDecision; label: string; hint: string }[] = [
-  { value: 'PASS', label: 'Pass', hint: 'Release the lot. Overrides the system flag.' },
-  { value: 'FAIL', label: 'Fail', hint: 'Reject the lot. Matches a system FAIL.' },
-  { value: 'HOLD', label: 'Hold', hint: 'Pause for clarification or re-inspection.' },
+  {
+    value: 'PASS',
+    label: 'Pass',
+    hint: 'Release the lot. Overrides the system flag.',
+  },
+  {
+    value: 'FAIL',
+    label: 'Fail',
+    hint: 'Reject the lot. Matches a system FAIL.',
+  },
+  {
+    value: 'HOLD',
+    label: 'Hold',
+    hint: 'Pause for clarification or re-inspection.',
+  },
 ];
 
 type Load =
@@ -66,9 +79,15 @@ async function fetchReview(id: string): Promise<Load> {
     // 403 and 404 are deliberately told apart — the web screen collapses them.
     if (e instanceof ApiError && e.status === 404) return { kind: 'missing' };
     if (e instanceof ApiError && e.status === 403) {
-      return { kind: 'error', message: 'You do not have access to this inspection.' };
+      return {
+        kind: 'error',
+        message: 'You do not have access to this inspection.',
+      };
     }
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -134,7 +153,9 @@ export default function Review() {
       const raw = orig as unknown as Record<string, unknown>;
       const loopPresetId =
         (raw.loopPresetId as string | undefined) ??
-        ((raw.loopPresetSnapshot as Record<string, unknown> | null)?.presetId as string | undefined);
+        ((raw.loopPresetSnapshot as Record<string, unknown> | null)?.presetId as
+          | string
+          | undefined);
       const aqlPlan = raw.aqlPlan as Record<string, number> | null | undefined;
       const created = await client.post<{ id: string }>('/inspections', {
         poId,
@@ -164,9 +185,7 @@ export default function Review() {
         <Text style={styles.mutedText}>
           {load.kind === 'missing' ? 'Inspection not found.' : load.message}
         </Text>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.link}>Back</Text>
-        </Pressable>
+        <BackButton />
       </SafeAreaView>
     );
   }
@@ -180,9 +199,7 @@ export default function Review() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.link}>Back</Text>
-        </Pressable>
+        <BackButton />
         <Text style={styles.headerTitle} numberOfLines={1}>
           {insp.purchaseOrder?.poNumber ?? 'Review'}
         </Text>
@@ -316,10 +333,7 @@ export default function Review() {
         )}
 
         {REPORTABLE.has(insp.status) ? (
-          <Pressable
-            onPress={() => router.push(`/inspections/${inspectionId}/report`)}
-            hitSlop={8}
-          >
+          <Pressable onPress={() => router.push(`/inspections/${inspectionId}/report`)} hitSlop={8}>
             <Text style={styles.reportLink}>View the signed report →</Text>
           </Pressable>
         ) : null}
@@ -339,7 +353,12 @@ export default function Review() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
-  center: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 24,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -350,7 +369,12 @@ const styles = StyleSheet.create({
     borderBottomColor: palette.line,
     backgroundColor: palette.panel,
   },
-  headerTitle: { color: palette.ink, fontSize: 16, fontWeight: '700', flexShrink: 1 },
+  headerTitle: {
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: '700',
+    flexShrink: 1,
+  },
   link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   dim: { opacity: 0.4 },
   mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
@@ -372,10 +396,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
-  recoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  recoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   reco: { fontSize: 18, fontWeight: '800' },
   hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
-  reportLink: { color: palette.accent, fontSize: 14, fontWeight: '600', paddingVertical: 4 },
+  reportLink: {
+    color: palette.accent,
+    fontSize: 14,
+    fontWeight: '600',
+    paddingVertical: 4,
+  },
   classRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -413,7 +446,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
   },
-  decisionRowActive: { borderColor: palette.accent, backgroundColor: palette.accentSoft },
+  decisionRowActive: {
+    borderColor: palette.accent,
+    backgroundColor: palette.accentSoft,
+  },
   radio: {
     width: 18,
     height: 18,

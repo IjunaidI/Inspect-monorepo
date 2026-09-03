@@ -19,14 +19,15 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 type Load =
@@ -41,11 +42,17 @@ async function fetchPo(id: string): Promise<Load> {
   const identity = await loadIdentity();
   if (!roleAtLeast(identity?.role, 'QA_MANAGER')) return { kind: 'forbidden' };
   try {
-    return { kind: 'ready', po: await client.get<PurchaseOrderDto>(`/purchase-orders/${id}`) };
+    return {
+      kind: 'ready',
+      po: await client.get<PurchaseOrderDto>(`/purchase-orders/${id}`),
+    };
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return { kind: 'missing' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -162,9 +169,7 @@ export default function PurchaseOrderDetail() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -252,7 +257,13 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
   mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
@@ -275,7 +286,13 @@ const styles = StyleSheet.create({
   },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   metaLabel: { color: palette.sub, fontSize: 13 },
-  metaValue: { color: palette.ink, fontSize: 13, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
+  metaValue: {
+    color: palette.ink,
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
   errorText: { color: palette.danger, fontSize: 13 },
   savedText: { color: palette.accent, fontSize: 13, fontWeight: '600' },
   field: { gap: 6 },

@@ -52,7 +52,10 @@ async function secureStoreAuthProvider(): Promise<AuthContext> {
 }
 
 /** The app's ONE api client. Every screen imports this, never `fetch`. */
-export const client = createApiClient({ baseUrl: API_URL, auth: secureStoreAuthProvider });
+export const client = createApiClient({
+  baseUrl: API_URL,
+  auth: secureStoreAuthProvider,
+});
 
 export interface Identity {
   userId?: string;

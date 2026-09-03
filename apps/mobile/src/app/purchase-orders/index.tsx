@@ -15,12 +15,13 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity, signOut } from '@/lib/session';
 
 type Load =
@@ -34,7 +35,10 @@ async function fetchPos(): Promise<Load> {
   const identity = await loadIdentity();
   if (!roleAtLeast(identity?.role, 'QA_MANAGER')) return { kind: 'forbidden' };
   try {
-    return { kind: 'rows', rows: await client.get<PurchaseOrderDto[]>('/purchase-orders') };
+    return {
+      kind: 'rows',
+      rows: await client.get<PurchaseOrderDto[]>('/purchase-orders'),
+    };
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return { kind: 'unauthorized' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
@@ -100,6 +104,7 @@ export default function PurchaseOrders() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
+        <BackButton fallbackHref="/dashboard" />
         <View style={styles.headerRow}>
           <Text style={styles.title}>Purchase orders</Text>
           <Pressable onPress={() => router.push('/purchase-orders/new')} hitSlop={8}>
@@ -131,7 +136,11 @@ export default function PurchaseOrders() {
           data={rows ?? []}
           keyExtractor={(item) => item.id}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.accent} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor={palette.accent}
+            />
           }
           contentContainerStyle={rows?.length ? styles.list : styles.listEmpty}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -174,13 +183,28 @@ const styles = StyleSheet.create({
     backgroundColor: palette.panel,
     gap: 4,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   newLink: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   subtitle: { color: palette.sub, fontSize: 13 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   forbiddenTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  forbiddenBody: { color: palette.sub, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  forbiddenBody: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   notice: {
     margin: 16,
     padding: 12,
@@ -196,7 +220,12 @@ const styles = StyleSheet.create({
   noticeText: { color: palette.danger, fontSize: 13, flexShrink: 1 },
   retry: { color: palette.accent, fontSize: 13, fontWeight: '600' },
   list: { padding: 16 },
-  listEmpty: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  listEmpty: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   separator: { height: 8 },
   empty: { color: palette.faint, fontSize: 14, textAlign: 'center' },
   row: {

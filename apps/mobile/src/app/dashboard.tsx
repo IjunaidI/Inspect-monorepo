@@ -20,13 +20,14 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity, signOut } from '@/lib/session';
 
 const countIn = (byStatus: Record<string, number>, statuses: readonly string[]) =>
@@ -55,7 +56,10 @@ async function fetchSummary(): Promise<Load> {
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return { kind: 'unauthorized' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -111,7 +115,9 @@ export default function Dashboard() {
       <SafeAreaView style={styles.screen}>
         <View style={styles.centered}>
           <Text style={styles.errorTitle}>
-            {load.kind === 'forbidden' ? 'QA Manager access required' : 'Could not load the dashboard'}
+            {load.kind === 'forbidden'
+              ? 'QA Manager access required'
+              : 'Could not load the dashboard'}
           </Text>
           <Text style={styles.mutedText}>
             {load.kind === 'forbidden'
@@ -126,9 +132,7 @@ export default function Dashboard() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -153,6 +157,7 @@ export default function Dashboard() {
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.accent} />
         }
       >
+        <BackButton fallbackHref="/inspections" />
         <Text style={styles.title}>Dashboard</Text>
 
         <View style={styles.tileGrid}>
@@ -200,10 +205,21 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  mutedText: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   tileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

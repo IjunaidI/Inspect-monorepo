@@ -29,15 +29,16 @@ import {
   Alert,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OptionPicker } from '@/components/option-picker';
+import { BackButton } from '@/components/back-button';
 import { WEB_URL } from '@/lib/config';
 import { client, loadIdentity, signOut, type Identity } from '@/lib/session';
 
@@ -86,7 +87,10 @@ async function fetchUsers(): Promise<Load> {
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) return { kind: 'unauthorized' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -192,7 +196,11 @@ export default function Users() {
     try {
       const body: InviteUserInput = { email, role: inviteRole };
       const res = await client.post<InvitationDto>('/users/invite', body);
-      setInvited({ token: res.token, email, emailSent: res.emailSent ?? false });
+      setInvited({
+        token: res.token,
+        email,
+        emailSent: res.emailSent ?? false,
+      });
       setInviteEmail('');
       reload();
     } catch (e) {
@@ -232,9 +240,7 @@ export default function Users() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -244,9 +250,7 @@ export default function Users() {
   const { users, me } = load;
   const q = filter.trim().toLowerCase();
   const visible = q
-    ? users.filter(
-        (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q),
-      )
+    ? users.filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
     : users;
   const inviteLink = invited && WEB_URL ? `${WEB_URL}/invite?token=${invited.token}` : null;
 
@@ -258,6 +262,7 @@ export default function Users() {
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.accent} />
         }
       >
+        <BackButton fallbackHref="/dashboard" />
         <Text style={styles.title}>Team</Text>
         <Text style={styles.subtitle}>
           {users.length} member{users.length === 1 ? '' : 's'}
@@ -346,9 +351,7 @@ export default function Users() {
         />
         {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
         {visible.length === 0 ? (
-          <Text style={styles.empty}>
-            {q ? 'No users match your search.' : 'No users yet.'}
-          </Text>
+          <Text style={styles.empty}>{q ? 'No users match your search.' : 'No users yet.'}</Text>
         ) : (
           visible.map((u) => {
             const you = u.id === me?.userId;
@@ -364,7 +367,7 @@ export default function Users() {
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={styles.userName} numberOfLines={1}>
                     {u.name || u.email}
-                    {you ? <Text style={styles.youTag}>  (you)</Text> : null}
+                    {you ? <Text style={styles.youTag}> (you)</Text> : null}
                   </Text>
                   <Text style={styles.userMeta} numberOfLines={1}>
                     {u.email}
@@ -395,7 +398,9 @@ export default function Users() {
                       >
                         <Text
                           style={
-                            u.status === 'DEACTIVATED' ? styles.reactivateLink : styles.deactivateLink
+                            u.status === 'DEACTIVATED'
+                              ? styles.reactivateLink
+                              : styles.deactivateLink
                           }
                         >
                           {pendingHere
@@ -428,10 +433,21 @@ export default function Users() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  mutedText: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   subtitle: { color: palette.sub, fontSize: 13 },
@@ -469,7 +485,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: palette.bg,
   },
-  roleChipActive: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
+  roleChipActive: {
+    backgroundColor: palette.accentSoft,
+    borderColor: palette.accent,
+  },
   roleChipLabel: { color: palette.sub, fontSize: 12.5, fontWeight: '600' },
   roleChipLabelActive: { color: palette.accent },
   errorText: { color: palette.danger, fontSize: 13 },
@@ -492,7 +511,12 @@ const styles = StyleSheet.create({
   linkValue: { color: palette.sub, fontSize: 12 },
   copyLink: { color: palette.accent, fontSize: 13, fontWeight: '600' },
   hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
-  empty: { color: palette.faint, fontSize: 14, textAlign: 'center', paddingVertical: 24 },
+  empty: {
+    color: palette.faint,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
   userRow: {
     flexDirection: 'row',
     gap: 12,
@@ -513,9 +537,24 @@ const styles = StyleSheet.create({
   userName: { color: palette.ink, fontSize: 15, fontWeight: '600' },
   youTag: { color: palette.faint, fontSize: 12, fontWeight: '400' },
   userMeta: { color: palette.faint, fontSize: 12 },
-  rowActions: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, marginTop: 6 },
-  deactivateLink: { color: palette.danger, fontSize: 13, fontWeight: '600', paddingBottom: 12 },
-  reactivateLink: { color: palette.accent, fontSize: 13, fontWeight: '600', paddingBottom: 12 },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+    marginTop: 6,
+  },
+  deactivateLink: {
+    color: palette.danger,
+    fontSize: 13,
+    fontWeight: '600',
+    paddingBottom: 12,
+  },
+  reactivateLink: {
+    color: palette.accent,
+    fontSize: 13,
+    fontWeight: '600',
+    paddingBottom: 12,
+  },
   selfBadgeRow: { flexDirection: 'row', marginTop: 6 },
   roleBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   roleBadgeLabel: { fontSize: 11.5, fontWeight: '600' },

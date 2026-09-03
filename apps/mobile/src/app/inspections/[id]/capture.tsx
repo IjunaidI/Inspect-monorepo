@@ -26,13 +26,13 @@ import {
   Alert,
   Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 
 import {
@@ -58,6 +58,7 @@ import {
   saveQueue,
   stashCapture,
 } from '@/lib/photo-queue';
+import { BackButton } from '@/components/back-button';
 import { client } from '@/lib/session';
 
 const SEVERITIES: DefectSeverity[] = ['CRITICAL', 'MAJOR', 'MINOR'];
@@ -83,7 +84,10 @@ async function fetchCapture(inspectionId: string): Promise<Load> {
     return { kind: 'ready', inspection, catalog };
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return { kind: 'missing' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -143,7 +147,10 @@ export default function Capture() {
         const next = insp.cycleState?.nextSlot;
         if (next && insp.items) {
           const idx = insp.items.findIndex((i) => i.id === next.itemId);
-          setCursor({ cycleIndex: next.cycleIndex, itemIndex: Math.max(idx, 0) });
+          setCursor({
+            cycleIndex: next.cycleIndex,
+            itemIndex: Math.max(idx, 0),
+          });
         }
       }
       const persisted = loadQueue();
@@ -354,9 +361,7 @@ export default function Capture() {
         <Text style={styles.errorText}>
           {load.kind === 'missing' ? 'Inspection not found.' : load.message}
         </Text>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.link}>Back</Text>
-        </Pressable>
+        <BackButton />
       </SafeAreaView>
     );
   }
@@ -364,9 +369,7 @@ export default function Capture() {
     return (
       <SafeAreaView style={[styles.screen, styles.center]}>
         <Text style={styles.errorText}>No loop items defined on this inspection.</Text>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.link}>Back</Text>
-        </Pressable>
+        <BackButton />
       </SafeAreaView>
     );
   }
@@ -379,9 +382,7 @@ export default function Capture() {
     <SafeAreaView style={styles.screen}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.link}>Close</Text>
-        </Pressable>
+        <BackButton label="Close" />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {inspection!.purchaseOrder?.poNumber ?? 'Capture'}
@@ -425,7 +426,11 @@ export default function Capture() {
             elsewhere while yours waited. Keep yours (replaces it) or discard yours.
           </Text>
           <View style={styles.rowButtons}>
-            <Pressable style={styles.btnSmall} disabled={busy} onPress={() => resolveConflictKeepMine(c)}>
+            <Pressable
+              style={styles.btnSmall}
+              disabled={busy}
+              onPress={() => resolveConflictKeepMine(c)}
+            >
               <Text style={styles.btnSmallLabel}>Keep mine</Text>
             </Pressable>
             <Pressable style={styles.btnSmallGhost} onPress={() => resolveConflictDiscard(c)}>
@@ -569,7 +574,9 @@ export default function Capture() {
       </View>
 
       <Text style={styles.progress}>
-        {state ? `${state.completedCycles} unit${state.completedCycles === 1 ? '' : 's'} complete` : ''}
+        {state
+          ? `${state.completedCycles} unit${state.completedCycles === 1 ? '' : 's'} complete`
+          : ''}
         {target ? ` / ${target} target — you may end on any complete unit` : ''}
         {uploadingCount > 0 ? `  ·  ${uploadingCount} in queue` : ''}
       </Text>
@@ -618,7 +625,9 @@ export default function Capture() {
         <View style={[styles.sheetBackdrop, styles.center]}>
           <View style={styles.gateBody}>
             <EndGate
-              verdict={state ? canSubmit(state, uploadingCount) : { ok: false, reason: 'no-complete-unit' }}
+              verdict={
+                state ? canSubmit(state, uploadingCount) : { ok: false, reason: 'no-complete-unit' }
+              }
               items={items}
               busy={busy}
               onFinish={(cycleIndex) => {
@@ -690,7 +699,11 @@ function UnitSheet(props: {
                     key={c.id}
                     disabled={!canTag || busy || readOnly}
                     onPress={() => props.onTag(c)}
-                    style={[styles.defectChip, { backgroundColor: TINT[sev].bg }, (!canTag || readOnly) && styles.dim]}
+                    style={[
+                      styles.defectChip,
+                      { backgroundColor: TINT[sev].bg },
+                      (!canTag || readOnly) && styles.dim,
+                    ]}
                   >
                     <Text style={[styles.defectChipLabel, { color: TINT[sev].fg }]}>{c.name}</Text>
                   </Pressable>
@@ -761,8 +774,8 @@ function UnitSheet(props: {
               label={f.label}
               unit={f.unit}
               initial={
-                measurementFor(inspection.measurements, cursor.cycleIndex, f.label)?.recordedValue ??
-                ''
+                measurementFor(inspection.measurements, cursor.cycleIndex, f.label)
+                  ?.recordedValue ?? ''
               }
               readOnly={readOnly}
               onSave={(v) => props.onMeasure(f.label, f.unit, v)}
@@ -815,8 +828,8 @@ function EndGate(props: {
         <Text style={styles.gateTitle}>Photos still uploading</Text>
         <Text style={styles.gateText}>
           Submit is blocked while the upload queue is non-empty — completeness is judged against
-          what the server holds. Wait for uploads to finish (or resolve failures), then end the
-          loop again.
+          what the server holds. Wait for uploads to finish (or resolve failures), then end the loop
+          again.
         </Text>
         <Pressable style={styles.btnSmall} onPress={props.onCancel}>
           <Text style={styles.btnSmallLabel}>OK</Text>
@@ -885,7 +898,12 @@ const styles = StyleSheet.create({
   lockedBadge: { color: palette.faint, fontSize: 12, fontWeight: '600' },
   link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   dim: { opacity: 0.5 },
-  errorText: { color: palette.sub, fontSize: 14, textAlign: 'center', paddingHorizontal: 24 },
+  errorText: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
   notice: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -913,7 +931,12 @@ const styles = StyleSheet.create({
   slotHeader: { gap: 2 },
   itemName: { color: palette.ink, fontSize: 17, fontWeight: '700' },
   itemDesc: { color: palette.sub, fontSize: 13 },
-  camera: { flex: 1, borderRadius: 12, overflow: 'hidden', backgroundColor: '#000' },
+  camera: {
+    flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
   queuedBadge: {
     position: 'absolute',
     top: 10,
@@ -957,7 +980,12 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#fff',
   },
-  progress: { color: palette.faint, fontSize: 12, textAlign: 'center', paddingBottom: 10 },
+  progress: {
+    color: palette.faint,
+    fontSize: 12,
+    textAlign: 'center',
+    paddingBottom: 10,
+  },
   rowButtons: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   btnSmall: {
     backgroundColor: palette.accent,
@@ -977,7 +1005,11 @@ const styles = StyleSheet.create({
     backgroundColor: palette.panel,
   },
   btnSmallGhostLabel: { color: palette.sub, fontSize: 13, fontWeight: '600' },
-  sheetBackdrop: { flex: 1, backgroundColor: 'rgba(11,18,32,0.45)', justifyContent: 'flex-end' },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(11,18,32,0.45)',
+    justifyContent: 'flex-end',
+  },
   sheetBody: {
     backgroundColor: palette.bg,
     borderTopLeftRadius: 16,
@@ -1013,7 +1045,12 @@ const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   defectChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   defectChipLabel: { fontSize: 12.5, fontWeight: '600' },
-  customRow: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'center' },
+  customRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    alignItems: 'center',
+  },
   input: {
     flex: 1,
     borderWidth: 1,
@@ -1033,7 +1070,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: palette.lineSoft,
   },
-  measureRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  measureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+  },
   measureLabel: { color: palette.ink, fontSize: 13.5, flex: 1 },
   measureInput: { flex: 0, width: 110, textAlign: 'right' },
 });

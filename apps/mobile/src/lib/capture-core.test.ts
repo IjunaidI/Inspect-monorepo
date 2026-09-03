@@ -110,31 +110,57 @@ describe('effective slot state (server + queue overlay)', () => {
     const q = enqueue([], make({ inspectionLoopItemId: 'item-2', cycleIndex: 0 }));
     expect(effectiveSlotFilled(serverItems, q, 'insp-1', slot)).toBe(true); // server
     expect(
-      effectiveSlotFilled(serverItems, q, 'insp-1', { inspectionLoopItemId: 'item-2', cycleIndex: 0 }),
+      effectiveSlotFilled(serverItems, q, 'insp-1', {
+        inspectionLoopItemId: 'item-2',
+        cycleIndex: 0,
+      }),
     ).toBe(true); // queue
     expect(
-      effectiveSlotFilled(serverItems, q, 'insp-1', { inspectionLoopItemId: 'item-2', cycleIndex: 1 }),
+      effectiveSlotFilled(serverItems, q, 'insp-1', {
+        inspectionLoopItemId: 'item-2',
+        cycleIndex: 1,
+      }),
     ).toBe(false);
   });
 
   it('queue overlay is scoped to the inspection', () => {
     const q = enqueue([], make({ inspectionLoopItemId: 'item-2' }));
     expect(
-      effectiveSlotFilled(serverItems, q, 'OTHER', { inspectionLoopItemId: 'item-2', cycleIndex: 0 }),
+      effectiveSlotFilled(serverItems, q, 'OTHER', {
+        inspectionLoopItemId: 'item-2',
+        cycleIndex: 0,
+      }),
     ).toBe(false);
-    expect(queuedForSlot(q, 'OTHER', { inspectionLoopItemId: 'item-2', cycleIndex: 0 })).toBeUndefined();
+    expect(
+      queuedForSlot(q, 'OTHER', {
+        inspectionLoopItemId: 'item-2',
+        cycleIndex: 0,
+      }),
+    ).toBeUndefined();
   });
 });
 
 describe('cursor', () => {
   it('advances item-by-item and rolls to the next unit past the last item', () => {
-    expect(advanceCursor(3, { cycleIndex: 0, itemIndex: 1 })).toEqual({ cycleIndex: 0, itemIndex: 2 });
-    expect(advanceCursor(3, { cycleIndex: 0, itemIndex: 2 })).toEqual({ cycleIndex: 1, itemIndex: 0 });
+    expect(advanceCursor(3, { cycleIndex: 0, itemIndex: 1 })).toEqual({
+      cycleIndex: 0,
+      itemIndex: 2,
+    });
+    expect(advanceCursor(3, { cycleIndex: 0, itemIndex: 2 })).toEqual({
+      cycleIndex: 1,
+      itemIndex: 0,
+    });
   });
 
   it('retreats in mirror and refuses to go below unit 1 item 1', () => {
-    expect(retreatCursor(3, { cycleIndex: 1, itemIndex: 0 })).toEqual({ cycleIndex: 0, itemIndex: 2 });
-    expect(retreatCursor(3, { cycleIndex: 0, itemIndex: 0 })).toEqual({ cycleIndex: 0, itemIndex: 0 });
+    expect(retreatCursor(3, { cycleIndex: 1, itemIndex: 0 })).toEqual({
+      cycleIndex: 0,
+      itemIndex: 2,
+    });
+    expect(retreatCursor(3, { cycleIndex: 0, itemIndex: 0 })).toEqual({
+      cycleIndex: 0,
+      itemIndex: 0,
+    });
   });
 });
 
@@ -150,7 +176,10 @@ describe('canSubmit', () => {
     // Completeness is judged server-side against what the server HOLDS;
     // submitting with photos still on the device evaluates an inspection
     // that does not exist yet.
-    expect(canSubmit(clean, 1)).toEqual({ ok: false, reason: 'queue-not-empty' });
+    expect(canSubmit(clean, 1)).toEqual({
+      ok: false,
+      reason: 'queue-not-empty',
+    });
   });
 
   it('is blocked on a partial cycle, naming it', () => {

@@ -73,7 +73,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
   },
-  pickerBody: { backgroundColor: palette.bg, borderRadius: 12, maxHeight: '70%', overflow: 'hidden' },
+  pickerBody: {
+    backgroundColor: palette.bg,
+    borderRadius: 12,
+    maxHeight: '70%',
+    overflow: 'hidden',
+  },
   pickerRow: {
     paddingHorizontal: 16,
     paddingVertical: 13,

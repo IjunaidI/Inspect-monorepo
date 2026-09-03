@@ -28,20 +28,21 @@ import type {
   InviteGuestInput,
 } from '@inspect/shared-types';
 import * as Clipboard from 'expo-clipboard';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackButton } from '@/components/back-button';
 import { WEB_URL } from '@/lib/config';
 import { client, loadIdentity } from '@/lib/session';
 
@@ -86,7 +87,10 @@ async function fetchGuests(companyId: string): Promise<Load> {
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return { kind: 'missing' };
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -108,7 +112,6 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 export default function CompanyGuests() {
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const companyId = String(id);
 
@@ -135,11 +138,12 @@ export default function CompanyGuests() {
     setInviteError(null);
     try {
       const body: InviteGuestInput = { email: trimmed, ttlDays: ttl };
-      const res = await client.post<CompanyGuestInviteDto>(
-        `/companies/${companyId}/guests`,
-        body,
-      );
-      setInvited({ token: res.token, emailSent: res.emailSent, email: trimmed });
+      const res = await client.post<CompanyGuestInviteDto>(`/companies/${companyId}/guests`, body);
+      setInvited({
+        token: res.token,
+        emailSent: res.emailSent,
+        email: trimmed,
+      });
       setEmail('');
       reload();
     } catch (e) {
@@ -207,9 +211,7 @@ export default function CompanyGuests() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -309,7 +311,10 @@ export default function CompanyGuests() {
             <Text style={styles.hint}>No guests yet. Invite someone above.</Text>
           ) : (
             guests.map((g) => {
-              const ss = STATUS_STYLE[g.status] ?? { label: g.status, color: palette.sub };
+              const ss = STATUS_STYLE[g.status] ?? {
+                label: g.status,
+                color: palette.sub,
+              };
               const expired = new Date(g.tokenExpiresAt) < new Date();
               return (
                 <View key={g.id} style={styles.guestRow}>
@@ -349,10 +354,21 @@ export default function CompanyGuests() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+  mutedText: {
+    color: palette.sub,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   subtitle: { color: palette.sub, fontSize: 14 },
@@ -391,7 +407,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     backgroundColor: palette.bg,
   },
-  ttlChipActive: { backgroundColor: palette.accentSoft, borderColor: palette.accent },
+  ttlChipActive: {
+    backgroundColor: palette.accentSoft,
+    borderColor: palette.accent,
+  },
   ttlChipLabel: { color: palette.sub, fontSize: 12.5, fontWeight: '600' },
   ttlChipLabelActive: { color: palette.accent },
   errorText: { color: palette.danger, fontSize: 13 },
@@ -413,7 +432,12 @@ const styles = StyleSheet.create({
   successText: { color: palette.ink, fontSize: 13, lineHeight: 18 },
   linkValue: { color: palette.sub, fontSize: 12 },
   copyLink: { color: palette.accent, fontSize: 13, fontWeight: '600' },
-  inlineError: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  inlineError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
   guestRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -100,7 +100,11 @@ function transition(
 }
 
 export function markUploading(queue: readonly QueuedPhoto[], id: string): QueuedPhoto[] {
-  return transition(queue, id, (q) => ({ ...q, state: 'uploading', error: undefined }));
+  return transition(queue, id, (q) => ({
+    ...q,
+    state: 'uploading',
+    error: undefined,
+  }));
 }
 
 /** Upload registered server-side — the entry has served its purpose. */
@@ -116,7 +120,11 @@ export function markConflict(queue: readonly QueuedPhoto[], id: string): QueuedP
   return transition(queue, id, (q) => ({ ...q, state: 'conflict' }));
 }
 
-export function markFailed(queue: readonly QueuedPhoto[], id: string, error: string): QueuedPhoto[] {
+export function markFailed(
+  queue: readonly QueuedPhoto[],
+  id: string,
+  error: string,
+): QueuedPhoto[] {
   return transition(queue, id, (q) => ({
     ...q,
     state: 'failed',
@@ -184,7 +192,11 @@ export function retreatCursor(itemCount: number, cursor: Cursor): Cursor {
 export type CanSubmitResult =
   | { ok: true }
   | { ok: false; reason: 'queue-not-empty' }
-  | { ok: false; reason: 'partial-cycle'; partial: { cycleIndex: number; missingItemIds: string[] } }
+  | {
+      ok: false;
+      reason: 'partial-cycle';
+      partial: { cycleIndex: number; missingItemIds: string[] };
+    }
   | { ok: false; reason: 'no-complete-unit' };
 
 /**
@@ -200,7 +212,10 @@ export function canSubmit(cycleState: CycleStateDto, queuedCount: number): CanSu
     return {
       ok: false,
       reason: 'partial-cycle',
-      partial: { cycleIndex: partial.cycleIndex, missingItemIds: partial.missingItemIds },
+      partial: {
+        cycleIndex: partial.cycleIndex,
+        missingItemIds: partial.missingItemIds,
+      },
     };
   }
   if (cycleState.completedCycles === 0) return { ok: false, reason: 'no-complete-unit' };

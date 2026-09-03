@@ -23,15 +23,16 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OptionPicker } from '@/components/option-picker';
+import { BackButton } from '@/components/back-button';
 import { client, loadIdentity } from '@/lib/session';
 
 type Load =
@@ -49,10 +50,17 @@ async function fetchFormData(): Promise<Load> {
       client.get<CompanyDto[]>('/companies'),
       client.get<ProductDto[]>('/products'),
     ]);
-    return { kind: 'ready', companies: rankCompaniesByActivity(companies), products };
+    return {
+      kind: 'ready',
+      companies: rankCompaniesByActivity(companies),
+      products,
+    };
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
+    return {
+      kind: 'error',
+      message: e instanceof Error ? e.message : 'Load failed',
+    };
   }
 }
 
@@ -80,8 +88,7 @@ export default function NewPurchaseOrder() {
   // problem next to the field. The server check stays the authority.
   const selfDealing = clientCo !== null && clientCo.id === factoryCo?.id;
   const quantity = quantityText.trim() === '' ? undefined : Number(quantityText);
-  const quantityValid =
-    quantity === undefined || (Number.isFinite(quantity) && quantity >= 1);
+  const quantityValid = quantity === undefined || (Number.isFinite(quantity) && quantity >= 1);
   const ready =
     poNumber.trim() !== '' &&
     clientCo !== null &&
@@ -136,9 +143,7 @@ export default function NewPurchaseOrder() {
                 <Text style={styles.link}>Retry</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.back()} hitSlop={8}>
-              <Text style={styles.link}>Go back</Text>
-            </Pressable>
+            <BackButton label="Go back" />
           </View>
         </View>
       </SafeAreaView>
@@ -228,7 +233,13 @@ export default function NewPurchaseOrder() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 8 },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 8,
+  },
   centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
   errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
   mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
