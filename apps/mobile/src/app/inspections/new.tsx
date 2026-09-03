@@ -8,32 +8,32 @@
  * gap list: a real initial loading state, a real error + retry (the web
  * swallows failed GETs into fake-empty lists), and pre-submit required-field
  * gating so a tap never silently no-ops.
+ *
+ * INS-091: no dead-end empty state — the PO picker creates a PO (and its
+ * companies / product) in place via nested sheets; the client company's
+ * default preset is honoured until the user picks one by hand.
  */
 import { ApiError } from '@inspect/api-client';
 import { palette } from '@inspect/design-tokens';
 import { roleAtLeast } from '@inspect/domain';
 import type {
   AqlPreviewDto,
+  CompanyDto,
   InspectionDto,
   LoopPresetDto,
+  ProductDto,
   PurchaseOrderDto,
   UserDto,
 } from '@inspect/shared-types';
-import { useRouter } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OptionPicker } from '@/components/option-picker';
 import { BackButton } from '@/components/back-button';
+import { FormScreen } from '@/components/form-screen';
+import { QuickCreatePurchaseOrderSheet } from '@/components/quick-create/purchase-order';
 import { client, loadIdentity } from '@/lib/session';
 
 /** Mirrors the API's ALLOWED_AQL_VALUES; 0 = "any defect rejects". */
@@ -50,6 +50,9 @@ type Load =
       pos: PurchaseOrderDto[];
       presets: LoopPresetDto[];
       inspectors: UserDto[];
+      /** INS-091: seed lists for the PO quick-create sheet. */
+      companies: CompanyDto[];
+      products: ProductDto[];
     };
 
 /** Pure fetch — setState only ever happens in .then. */
@@ -57,16 +60,20 @@ async function fetchFormData(): Promise<Load> {
   const identity = await loadIdentity();
   if (!roleAtLeast(identity?.role, 'QA_MANAGER')) return { kind: 'forbidden' };
   try {
-    const [pos, presets, users] = await Promise.all([
+    const [pos, presets, users, companies, products] = await Promise.all([
       client.get<PurchaseOrderDto[]>('/purchase-orders'),
       client.get<LoopPresetDto[]>('/loop-presets'),
       client.get<UserDto[]>('/users'),
+      client.get<CompanyDto[]>('/companies'),
+      client.get<ProductDto[]>('/products'),
     ]);
     return {
       kind: 'ready',
       pos,
       presets,
       inspectors: users.filter((u) => u.role === 'INSPECTOR' && u.status === 'ACTIVE'),
+      companies,
+      products,
     };
   } catch (e) {
     return {
@@ -83,6 +90,10 @@ export default function NewInspection() {
   const router = useRouter();
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [po, setPo] = useState<PurchaseOrderDto | null>(null);
+  // Seeded from the load, then grown by the PO quick-create sheet.
+  const [pos, setPos] = useState<PurchaseOrderDto[]>([]);
+  const [creatingPo, setCreatingPo] = useState(false);
+  const [presetTouched, setPresetTouched] = useState(false);
   const [preset, setPreset] = useState<LoopPresetDto | null>(null);
   const [inspector, setInspector] = useState<UserDto | null>(null);
   const [lotSizeText, setLotSizeText] = useState('1000');
@@ -102,6 +113,7 @@ export default function NewInspection() {
     fetchFormData().then((result) => {
       setLoad(result);
       if (result.kind === 'ready') {
+        setPos(result.pos);
         setPreset((p) => p ?? result.presets[0] ?? null);
       }
     });
@@ -114,6 +126,16 @@ export default function NewInspection() {
 
   const lotSize = Number(lotSizeText);
   const lotValid = Number.isFinite(lotSize) && lotSize >= 2;
+
+  // INS-091 — honour the client company's default preset on PO change, until
+  // the user picks a preset by hand. Skipped when the id is not in the list.
+  function selectPo(next: PurchaseOrderDto, presets: LoopPresetDto[]) {
+    setPo(next);
+    if (presetTouched) return;
+    const preferred = next.clientCompany?.defaultLoopPresetId;
+    const match = preferred ? presets.find((p) => p.id === preferred) : undefined;
+    if (match) setPreset(match);
+  }
 
   // Live AQL preview, 300ms debounce, stale responses dropped — the preview
   // and the create send the SAME inputs so the preview can never show a plan
@@ -202,138 +224,148 @@ export default function NewInspection() {
     );
   }
 
-  if (load.pos.length === 0) {
-    return (
-      <SafeAreaView style={[styles.screen, styles.center]}>
-        <Text style={styles.mutedText}>
-          No purchase orders yet. Create two companies (the client and the factory), a product and a
-          PO in the console first, then return here.
-        </Text>
-        <BackButton />
-      </SafeAreaView>
-    );
-  }
+  const header = (
+    <View style={styles.header}>
+      <BackButton label="Cancel" />
+      <Text style={styles.headerTitle}>New inspection</Text>
+      <Pressable onPress={create} disabled={!canCreate} hitSlop={8}>
+        {pending ? (
+          <ActivityIndicator color={palette.accent} size="small" />
+        ) : (
+          <Text style={[styles.link, !canCreate && styles.dim]}>Create</Text>
+        )}
+      </Pressable>
+    </View>
+  );
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <BackButton label="Cancel" />
-        <Text style={styles.headerTitle}>New inspection</Text>
-        <Pressable onPress={create} disabled={!canCreate} hitSlop={8}>
-          {pending ? (
-            <ActivityIndicator color={palette.accent} size="small" />
-          ) : (
-            <Text style={[styles.link, !canCreate && styles.dim]}>Create</Text>
-          )}
-        </Pressable>
+    <FormScreen header={header}>
+      <OptionPicker
+        label="Purchase order *"
+        value={po}
+        options={pos}
+        display={(p) => p.poNumber}
+        placeholder="Select the PO…"
+        emptyText="No purchase orders yet — add one below."
+        createLabel="+ Add new purchase order…"
+        onCreate={() => setCreatingPo(true)}
+        onSelect={(p) => selectPo(p, load.presets)}
+      />
+      {po ? (
+        <View style={styles.poContext}>
+          <Text style={styles.poContextLine}>
+            Client: <Text style={styles.poContextValue}>{po.clientCompany?.name ?? '—'}</Text>
+          </Text>
+          <Text style={styles.poContextLine}>
+            Factory: <Text style={styles.poContextValue}>{po.factoryCompany?.name ?? '—'}</Text>
+          </Text>
+          <Text style={styles.poContextLine}>
+            Product: <Text style={styles.poContextValue}>{po.product?.styleNumber ?? '—'}</Text>
+          </Text>
+        </View>
+      ) : null}
+
+      {load.presets.length === 0 ? (
+        <Text style={styles.hint}>
+          No loop presets yet.{' '}
+          <Link href="/presets/new" style={styles.link}>
+            Create one in the preset builder
+          </Link>
+          , then return here.
+        </Text>
+      ) : (
+        <OptionPicker
+          label="Loop preset *"
+          value={preset}
+          options={load.presets}
+          display={presetLabel}
+          placeholder="Select the preset…"
+          onSelect={(p) => {
+            setPreset(p);
+            setPresetTouched(true);
+          }}
+        />
+      )}
+
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Lot size (pcs) *</Text>
+        <TextInput
+          style={styles.input}
+          value={lotSizeText}
+          onChangeText={setLotSizeText}
+          keyboardType="number-pad"
+          placeholder="e.g. 1200"
+          placeholderTextColor={palette.faint}
+        />
       </View>
 
-      <ScrollView contentContainerStyle={styles.body}>
+      <OptionPicker
+        label="Assigned inspector · optional"
+        value={inspector}
+        options={load.inspectors}
+        display={(u) => u.name || u.email}
+        placeholder="Unassigned (draft)"
+        onSelect={setInspector}
+      />
+
+      <Text style={styles.sectionLabel}>Acceptance quality limits</Text>
+      <Text style={styles.hint}>
+        General inspection Level II, single sampling, normal severity. The level is fixed; the
+        per-class AQL is the QA Manager&apos;s call and is frozen onto the inspection at creation.
+      </Text>
+      {AQL_CLASSES.map((cls) => (
         <OptionPicker
-          label="Purchase order *"
-          value={po}
-          options={load.pos}
-          display={(p) => p.poNumber}
-          placeholder="Select the PO…"
-          onSelect={setPo}
+          key={cls}
+          label={`${cls.charAt(0).toUpperCase() + cls.slice(1)} AQL`}
+          value={aql[cls]}
+          options={AQL_VALUES}
+          display={aqlLabel}
+          placeholder=""
+          onSelect={(v) => setAql((a) => ({ ...a, [cls]: v }))}
         />
-        {po ? (
-          <View style={styles.poContext}>
-            <Text style={styles.poContextLine}>
-              Client: <Text style={styles.poContextValue}>{po.clientCompany?.name ?? '—'}</Text>
+      ))}
+
+      {/* Computed plan */}
+      <Text style={styles.sectionLabel}>Computed AQL plan</Text>
+      {previewError ? (
+        <Text style={styles.errorText}>{previewError}</Text>
+      ) : preview ? (
+        <View style={styles.plan}>
+          <View style={styles.planRow}>
+            <Text style={styles.planStat}>
+              Code <Text style={styles.planStatValue}>{preview.sampleSizeCodeLetter}</Text>
             </Text>
-            <Text style={styles.poContextLine}>
-              Factory: <Text style={styles.poContextValue}>{po.factoryCompany?.name ?? '—'}</Text>
-            </Text>
-            <Text style={styles.poContextLine}>
-              Product: <Text style={styles.poContextValue}>{po.product?.styleNumber ?? '—'}</Text>
+            <Text style={styles.planStat}>
+              Sample n <Text style={styles.planStatValue}>{preview.sampleSize}</Text>
             </Text>
           </View>
-        ) : null}
-
-        {load.presets.length === 0 ? (
-          <Text style={styles.errorText}>
-            No loop presets exist yet — create one in the console first.
-          </Text>
-        ) : (
-          <OptionPicker
-            label="Loop preset *"
-            value={preset}
-            options={load.presets}
-            display={presetLabel}
-            placeholder="Select the preset…"
-            onSelect={setPreset}
-          />
-        )}
-
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Lot size (pcs) *</Text>
-          <TextInput
-            style={styles.input}
-            value={lotSizeText}
-            onChangeText={setLotSizeText}
-            keyboardType="number-pad"
-            placeholder="e.g. 1200"
-            placeholderTextColor={palette.faint}
-          />
-        </View>
-
-        <OptionPicker
-          label="Assigned inspector · optional"
-          value={inspector}
-          options={load.inspectors}
-          display={(u) => u.name || u.email}
-          placeholder="Unassigned (draft)"
-          onSelect={setInspector}
-        />
-
-        <Text style={styles.sectionLabel}>Acceptance quality limits</Text>
-        <Text style={styles.hint}>
-          General inspection Level II, single sampling, normal severity. The level is fixed; the
-          per-class AQL is the QA Manager&apos;s call and is frozen onto the inspection at creation.
-        </Text>
-        {AQL_CLASSES.map((cls) => (
-          <OptionPicker
-            key={cls}
-            label={`${cls.charAt(0).toUpperCase() + cls.slice(1)} AQL`}
-            value={aql[cls]}
-            options={AQL_VALUES}
-            display={aqlLabel}
-            placeholder=""
-            onSelect={(v) => setAql((a) => ({ ...a, [cls]: v }))}
-          />
-        ))}
-
-        {/* Computed plan */}
-        <Text style={styles.sectionLabel}>Computed AQL plan</Text>
-        {previewError ? (
-          <Text style={styles.errorText}>{previewError}</Text>
-        ) : preview ? (
-          <View style={styles.plan}>
-            <View style={styles.planRow}>
-              <Text style={styles.planStat}>
-                Code <Text style={styles.planStatValue}>{preview.sampleSizeCodeLetter}</Text>
-              </Text>
-              <Text style={styles.planStat}>
-                Sample n <Text style={styles.planStatValue}>{preview.sampleSize}</Text>
-              </Text>
+          {AQL_CLASSES.map((cls) => (
+            <View key={cls} style={styles.planClassRow}>
+              <Text style={styles.planClass}>{cls}</Text>
+              <Text style={styles.planCell}>AQL {preview.perClass[cls].aql}</Text>
+              <Text style={styles.planCell}>Ac {preview.perClass[cls].ac}</Text>
+              <Text style={styles.planCell}>Re {preview.perClass[cls].re}</Text>
             </View>
-            {AQL_CLASSES.map((cls) => (
-              <View key={cls} style={styles.planClassRow}>
-                <Text style={styles.planClass}>{cls}</Text>
-                <Text style={styles.planCell}>AQL {preview.perClass[cls].aql}</Text>
-                <Text style={styles.planCell}>Ac {preview.perClass[cls].ac}</Text>
-                <Text style={styles.planCell}>Re {preview.perClass[cls].re}</Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <ActivityIndicator color={palette.faint} size="small" />
-        )}
+          ))}
+        </View>
+      ) : (
+        <ActivityIndicator color={palette.faint} size="small" />
+      )}
 
-        {createError ? <Text style={styles.errorText}>{createError}</Text> : null}
-      </ScrollView>
-    </SafeAreaView>
+      {createError ? <Text style={styles.errorText}>{createError}</Text> : null}
+
+      <QuickCreatePurchaseOrderSheet
+        visible={creatingPo}
+        onClose={() => setCreatingPo(false)}
+        companies={load.companies}
+        products={load.products}
+        onCreated={(created) => {
+          setPos((prev) => [created, ...prev]);
+          setCreatingPo(false);
+          selectPo(created, load.presets);
+        }}
+      />
+    </FormScreen>
   );
 }
 
