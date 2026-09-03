@@ -209,7 +209,15 @@ export interface PurchaseOrderDto {
   poNumber: string;
   totalQuantity?: number | null;
   /** INS-055: a PO is explicitly two-party. Both are required on create. */
-  clientCompany?: { id: string; name: string } | null;
+  clientCompany?: {
+    id: string;
+    name: string;
+    /**
+     * INS-091: the API includes the full Company row here, so the client's
+     * default preset rides along — the new-inspection forms pre-select it.
+     */
+    defaultLoopPresetId?: string | null;
+  } | null;
   factoryCompany?: { id: string; name: string } | null;
   product?: { id: string; styleNumber: string } | null;
 }
