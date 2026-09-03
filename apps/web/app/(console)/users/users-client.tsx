@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Check, Plus, Search, MoreVertical } from 'lucide-react';
 import { Avatar, Mono, RoleBadge } from '@/components/inspect/shell';
 import { Spinner } from '@/components/inspect/loading';
+import { ErrorBanner } from '@/components/inspect/error-banner';
 import { severity, ui, type RoleKey } from '@/components/inspect/tokens';
 import type { ApiUser } from '@/lib/api';
 import { addMember, deactivateUser, inviteUser, reactivateUser, updateUserRole } from './actions';
@@ -71,6 +72,7 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
   // Controlled so a server-rejected role change (e.g. INS-058's last-active-owner
   // 400) can be visibly reverted instead of leaving the rejected role displayed.
   const [role, setRole] = useState<string>(row.apiRole);
+  const [rowError, setRowError] = useState<string | null>(null);
   const ss = statusStyle[row.status];
 
   const th = { fontSize: 11, fontWeight: 550, color: ui.sub, textTransform: 'uppercase' as const, letterSpacing: 0.4, padding: '13px 20px', textAlign: 'left' as const, borderBottom: `1px solid ${ui.line}`, background: ui.fill };
@@ -100,7 +102,7 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
             start(async () => {
               const r = await updateUserRole(row.id, next);
               if (r.error) {
-                alert(r.error);
+                setRowError(r.error);
                 setRole(row.apiRole);
               }
             });
@@ -111,6 +113,7 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
           <option value="QA_MANAGER">QA Manager</option>
           <option value="ORG_OWNER">Org Owner</option>
         </select>
+        {rowError && <ErrorBanner style={{ marginTop: 6, padding: '6px 10px', fontSize: 12 }}>{rowError}</ErrorBanner>}
       </td>
       <td style={td}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: ss.fg, fontWeight: 500 }}>
@@ -135,7 +138,7 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
                       setMenuOpen(false);
                       startDeactivate(async () => {
                         const r = await reactivateUser(row.id);
-                        if (r.error) alert(r.error);
+                        if (r.error) setRowError(r.error);
                       });
                     }}
                     disabled={deactivating}
@@ -149,7 +152,7 @@ function RoleRow({ row, currentUserRole }: { row: UserRow; currentUserRole: Role
                       setMenuOpen(false);
                       startDeactivate(async () => {
                         const r = await deactivateUser(row.id);
-                        if (r.error) alert(r.error);
+                        if (r.error) setRowError(r.error);
                       });
                     }}
                     disabled={deactivating}

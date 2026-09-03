@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { MoreVertical } from 'lucide-react';
 import { ConfirmDialog } from '@/components/inspect/confirm-dialog';
+import { ErrorBanner } from '@/components/inspect/error-banner';
 import { ui } from '@/components/inspect/tokens';
 import { reassignInspection, resetInspection, startInspection } from './actions';
 
@@ -28,6 +29,7 @@ export function RowActions({
   const [open, setOpen] = useState(false);
   const [confirmingStart, setConfirmingStart] = useState(false);
   const [reassigning, setReassigning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -49,7 +51,10 @@ export function RowActions({
   function run(fn: () => Promise<{ error?: string }>) {
     startTransition(async () => {
       const r = await fn();
-      if (r.error) alert(r.error);
+      if (r.error) {
+        setError(r.error);
+        return;
+      }
       router.refresh();
       setOpen(false);
       setReassigning(false);
@@ -59,7 +64,7 @@ export function RowActions({
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => { setOpen(!open); setError(null); }}
         aria-label="Inspection actions"
         style={{ width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ui.faint, background: 'transparent', border: 'none', cursor: 'pointer' }}
       >
@@ -74,10 +79,10 @@ export function RowActions({
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(`${window.location.origin}/inspections/${id}/review`);
+                setOpen(false);
               } catch {
-                alert('Could not copy the link — copy it from the address bar after opening the inspection.');
+                setError('Could not copy the link — copy it from the address bar after opening the inspection.');
               }
-              setOpen(false);
             }}
             style={item}
           >
@@ -109,6 +114,7 @@ export function RowActions({
               <button disabled={pending} onClick={() => setReassigning(true)} style={item}>Reassign…</button>
             )
           )}
+          {error && <ErrorBanner style={{ margin: 8, padding: '8px 10px', fontSize: 12 }}>{error}</ErrorBanner>}
         </div>
       )}
       {confirmingStart && (

@@ -15,6 +15,7 @@ import { brandFallbacks } from '@inspect/design-tokens';
 import { hashIndex, initialsFrom } from '@inspect/domain';
 import { Btn, Mono } from '@/components/inspect/shell';
 import { ConfirmDialog } from '@/components/inspect/confirm-dialog';
+import { ErrorBanner } from '@/components/inspect/error-banner';
 import { mono as monoStyle, ui } from '@/components/inspect/tokens';
 import type { ApiCompany, ApiCompanyKind, ApiLoopPreset } from '@/lib/api';
 import { archiveCompany, createCompany, presignCompanyLogo, restoreCompany } from './actions';
@@ -315,6 +316,7 @@ function RowMenu({ id, archived, onClose }: { id: string; archived: boolean; onC
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -334,7 +336,10 @@ function RowMenu({ id, archived, onClose }: { id: string; archived: boolean; onC
   function runArchiveOrRestore(fn: (id: string) => Promise<{ error?: string } | undefined>) {
     startTransition(async () => {
       const r = await fn(id);
-      if (r?.error) alert(r.error);
+      if (r?.error) {
+        setError(r.error); // keep the menu open so the message is read in place
+        return;
+      }
       router.refresh();
       onClose();
     });
@@ -373,6 +378,7 @@ function RowMenu({ id, archived, onClose }: { id: string; archived: boolean; onC
           onCancel={() => { setConfirming(false); onClose(); }}
         />
       )}
+      {error && <ErrorBanner style={{ margin: 8, padding: '8px 10px', fontSize: 12 }}>{error}</ErrorBanner>}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from 'react';
 import { ArrowRight, MoreVertical, Search } from 'lucide-react';
 import { Mono } from '@/components/inspect/shell';
+import { ErrorBanner } from '@/components/inspect/error-banner';
 import { ui } from '@/components/inspect/tokens';
 import { archivePreset } from './actions';
 import type { PresetRow } from './page';
@@ -16,6 +17,7 @@ export function PresetsList({ presets: initial, live }: { presets: PresetRow[]; 
   const [sort, setSort] = useState<'name' | 'edited'>('edited');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [presets, setPresets] = useState<PresetRow[]>(initial);
+  const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
@@ -52,8 +54,9 @@ export function PresetsList({ presets: initial, live }: { presets: PresetRow[]; 
     startTransition(async () => {
       const result = await archivePreset(id);
       if (result.error) {
-        alert(result.error);
+        setError(result.error);
       } else {
+        setError(null);
         setPresets((prev) => prev.filter((p) => p.id !== id));
       }
       setMenuOpen(null);
@@ -85,6 +88,7 @@ export function PresetsList({ presets: initial, live }: { presets: PresetRow[]; 
         </div>
       </div>
 
+      {error && <ErrorBanner style={{ marginBottom: 12 }}>{error}</ErrorBanner>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
         {filtered.map((p) => (
           <div key={p.id} style={card}>
