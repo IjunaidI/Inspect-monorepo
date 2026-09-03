@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { apiPost, apiPatch, apiDelete, ApiError } from '@/lib/api';
+import type { ApiCompany, ApiCompanyKind } from '@/lib/api';
 
 const msg = (e: unknown, fallback: string) =>
   e instanceof ApiError || e instanceof Error ? e.message : fallback;
@@ -167,4 +168,24 @@ export async function restoreCompany(id: string): Promise<{ error?: string }> {
   }
   revalidatePath('/dashboard');
   return {};
+}
+
+/**
+ * INS-091 — quick-create from a picker. Returns the DTO instead of redirecting
+ * (a redirect inside a modal would throw the host form away). Mirrors
+ * `createDefect` in presets/actions.ts.
+ */
+export async function quickCreateCompany(input: {
+  name: string;
+  kind?: ApiCompanyKind;
+}): Promise<{ data?: ApiCompany; error?: string }> {
+  const name = input.name.trim();
+  if (!name) return { error: 'Name is required' };
+  try {
+    const data = await apiPost<ApiCompany>('/companies', { name, kind: input.kind });
+    revalidatePath('/dashboard');
+    return { data };
+  } catch (e) {
+    return { error: msg(e, 'create failed') };
+  }
 }

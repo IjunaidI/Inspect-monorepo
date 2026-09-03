@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { apiPost, apiPatch, apiDelete, ApiError } from '@/lib/api';
+import type { ApiProduct } from '@/lib/api';
 
 const msg = (e: unknown, fallback: string) =>
   e instanceof ApiError || e instanceof Error ? e.message : fallback;
@@ -57,4 +58,22 @@ export async function archiveProduct(id: string): Promise<{ error?: string }> {
   }
   revalidatePath('/products');
   redirect('/products');
+}
+
+/** INS-091 — quick-create from a picker; returns the DTO, never redirects. */
+export async function quickCreateProduct(input: {
+  styleNumber: string;
+  description?: string | null;
+}): Promise<{ data?: ApiProduct; error?: string }> {
+  const styleNumber = input.styleNumber.trim();
+  if (!styleNumber) return { error: 'Style number is required' };
+  const description =
+    typeof input.description === 'string' && input.description.trim().length > 0 ? input.description : null;
+  try {
+    const data = await apiPost<ApiProduct>('/products', { styleNumber, description });
+    revalidatePath('/products');
+    return { data };
+  } catch (e) {
+    return { error: msg(e, 'Failed to create product') };
+  }
 }
