@@ -39,14 +39,14 @@ acceptance pass**:
 |---|---|
 | **Domain core** (AQL engine, tamper-proof crypto, audit chain, cycle state, auth primitives) | Pure TypeScript, unit-tested: **api 659 tests / 42 suites**. |
 | **API** (NestJS 11 + Prisma 6, 24 org-scoped models) | All routes role-floored (OpenAPI carries `x-required-role`); DB-backed integration suite **147/16** runs green in CI against containers. Duplicate styleNumber/poNumber now proper 409s (fixed 2026-09-02). |
-| **Web console** (Next.js 15) | All screens live-wired; clicked through end-to-end 2026-08-31 (signed report + guest portal verified in a real browser). Six live bugs found by the Phase 4 contract passes were fixed 2026-09-02 (see below). **38 Vitest tests.** |
-| **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **15 Vitest tests** on the pure capture core. Nothing device-verified yet. |
-| **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**29 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity`), `@inspect/design-tokens` (+`brandFallbacks`). |
+| **Web console** (Next.js 15) | All screens live-wired; clicked through end-to-end 2026-08-31 (signed report + guest portal verified in a real browser). Six live bugs found by the Phase 4 contract passes were fixed 2026-09-02 (see below). **INS-091 (2026-09-04):** searchable `EntityPicker`s with inline company/product/PO quick-create (nested one level), `Modal` + `ErrorBanner` (no `alert()` left), the new-inspection dead end removed, client default preset honoured. First component tests (jsdom + Testing Library) — **47 Vitest tests.** |
+| **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **15 Vitest tests** on the pure capture core. **INS-091 (2026-09-04):** `OptionPicker` search + "+ Add new…", quick-create sheets for company/product/PO, `FormScreen` keyboard handling on 11 form screens, company create from the directory. Device pass in progress (see above). |
+| **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**34 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity`, `filterOptions`), `@inspect/design-tokens` (+`brandFallbacks`). |
 | **Deploy** (Railway project QCLink — a DEV environment) | API `Main Application` live at `main-application-production-6fa4.up.railway.app` (Dockerfile build, `/health` check, pre-deploy `migrate deploy` + seed, fresh signing key), console `serene-vision` at `serene-vision-production-8387.up.railway.app`, Postgres + Redis + bucket. Auto-deploys on push to `main`. Runbook: [reference/deploy-railway.md](reference/deploy-railway.md). |
 | **CI** (`.github/workflows/ci.yml`) | migrate→seed→type-check→api Jest→all Vitest suites→integration→builds→lint→OpenAPI staleness→single-resolved-React assertion. **Green on every 2026-09-02 push (10/10 commits).** |
 
-**Verified numbers (2026-09-02):** type-check 11/11 · lint 0 errors (1 known font warning) ·
-api 659/42 (serial on Windows — INS-085) · web 38/3 · domain 29/6 · api-client 29/2 · mobile 15/1 ·
+**Verified numbers (2026-09-04):** type-check 11/11 · lint 0 errors (1 known font warning) ·
+api 661/42 (serial on Windows — INS-085) · web 47/5 · domain 34/7 · api-client 29/2 · mobile 15/1 ·
 integration 147/16 (CI) · `expo export` 25 routes.
 
 ## Fixed along the Phase 4 sweep (2026-09-02)
@@ -95,7 +95,9 @@ integration 147/16 (CI) · `expo export` 25 routes.
 - Dev workspace for manual passes: **Acme Apparel Group** (owner@acme-apparel.test — see the
   2026-08-31 click-through in git history for the full fixture set).
 
-## Open backlog (6 items)
+## Open backlog (7 items)
+
+[INS-092](future/BACKLOG.md) UX friction audit residue (filed 2026-09-04 from the INS-091 audit)
 
 [INS-002](future/BACKLOG.md) credential rotation
 (user-side) · [INS-086](future/BACKLOG.md) epic (device pass) · [INS-089](future/BACKLOG.md) record

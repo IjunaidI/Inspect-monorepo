@@ -58,6 +58,16 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - verify: An inspector completes a real multi-cycle inspection on a physical device, offline for part of it, and submits; every ledger row's on-device acceptance checked in the single post-Phase-4 pass.
 - refs: spec [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) · ledger [../reference/screen-migration-map.md](../reference/screen-migration-map.md) · procedure: the `migrate-screen` skill · `/admin/orgs`, `/portal`, `/r/[token]` permanently web-only
 
+### INS-091 · Pickers cannot create what is missing — four-screen detour to start an inspection   [HIGH]
+- status: done
+- done: 2026-09-04 — `EntityPicker` (web) / grown `OptionPicker` (mobile) are searchable via the shared `filterOptions` and end in "+ Add new…"; company, product and PO quick-create dialogs/sheets (nested one level) append + select; web `Modal` (portal, focus trap, stack, scroll lock) + `ErrorBanner` replaced every `alert()`; mobile `FormScreen` gives every form keyboard avoidance + persistent taps; `/companies` on mobile can create; both new-inspection forms lost their dead-end empty state and honour the client's `defaultLoopPresetId`. First web component tests (jsdom + Testing Library): `modal.test.tsx`, `entity-picker.test.tsx`. API: `POST /purchase-orders` now answers in the list/get shape (parties included) — found by the browser click-through, where a just-created PO showed "—" for its parties. Verified 2026-09-04 in Chrome (`/inspections/new` → nested PO → company dialogs → inspection created) and on the Android emulator (same nested flow via sheets; one tap on Create works with the keyboard up).
+- area: Console + mobile (forms/pickers) / shared contract
+- evidence: `apps/web/app/(console)/inspections/new/create-form.tsx` (former dead-end paragraph), `apps/mobile/src/app/inspections/new.tsx` ("create … in the console first"), no `/companies/new` on mobile.
+- problem: Every related-entity picker was an unsearchable list with no create path; starting an inspection on a fresh org meant four screens (two on another platform for mobile) and the form's typed state was lost.
+- fix: Inline quick-create from pickers on both platforms + the friction blockers on the same screens.
+- verify: On an org with zero POs, `/inspections/new` on web and mobile reaches a created inspection without leaving the screen; `grep alert(` finds nothing under `apps/web/app/(console)`.
+- refs: spec [../done/specs/2026-09-04-inline-create-and-friction-design.md](../done/specs/2026-09-04-inline-create-and-friction-design.md) · plan [../done/plans/2026-09-04-inline-create-and-friction.md](../done/plans/2026-09-04-inline-create-and-friction.md)
+
 ---
 
 ## Medium
@@ -101,6 +111,15 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - fix: Set `maxWorkers` (e.g. `50%`) in `apps/api/jest` config; close after a green stretch of parallel runs on this machine.
 - verify: `pnpm api test` exits 0 on Windows repeatedly without `--runInBand`; CI stays green.
 - refs: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) §3 P0-10
+
+### INS-092 · UX friction audit residue (2026-09-04)   [LOW]
+- status: todo
+- area: Console + mobile
+- evidence: audit recorded in the INS-091 spec §0; each line below names its file.
+- problem: Papercuts found while auditing for INS-091 and deliberately left out of it. **Web:** no shared Field/Input/Label primitives — styles copy-pasted in ~8 forms; create-from-list actions redirect to the detail page and lose the list (`dashboard/actions.ts` createCompany, `products/actions.ts`, `purchase-orders/actions.ts`); PO client/factory/product immutable after create with no UI hint (`purchase-orders/[id]/edit-form.tsx`); no breadcrumb component (three hand-rolled); `directory-client.tsx` row click uses `window.location.href`; the Create Company submit lacks `loading=` (no double-submit guard); `users-client.tsx` "Add member" toggle discards typed input; `/inspections/new` preset dropdown lists every version of every preset (INS-076 residue). **Mobile:** no shared Field/Input/Button primitives; sub-44pt targets (`presets/new.tsx` reorder glyphs, `users.tsx` deactivate link, `companies/index.tsx` chips); no `RefreshControl` on any `[id]`/`new` screen; retry re-runs the whole `Promise.all`; no success feedback after create (no toast primitive); `products/new.tsx` form flashes before the role probe resolves; AQL preview flickers to a spinner on every debounce; `users.tsx` role change is non-optimistic; PO list has no search/paging (API `GET /purchase-orders` takes no query params); `presets/new.tsx` dead `void seed;`.
+- fix: Pick per item; the shared-primitive extractions on each platform are the highest-leverage first steps.
+- verify: Per item.
+- refs: [BACKLOG.md](BACKLOG.md) INS-091 · INS-087 (per-role picker ranking, related)
 
 ---
 
