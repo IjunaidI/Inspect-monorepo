@@ -9,6 +9,15 @@
 
 ## Where the project stands
 
+**Latest landed: [INS-091](future/BACKLOG.md) (2026-09-04) — pickers create what is missing.** On
+both platforms the Client / Factory / Product / PO pickers are searchable and end in "+ Add new…"; a
+company, product or PO is created in a dialog (web) or bottom sheet (mobile), appended and selected,
+nesting one level (PO → company/product). The new-inspection dead end ("create four things elsewhere")
+is gone, every `alert()` on the console is an inline banner, every mobile form is keyboard-safe, mobile
+can create a company, and the client's default preset is honoured. Verified end to end in Chrome and on
+the Android emulator (16 commits on local `main`, **not yet pushed** — a push auto-deploys to Railway).
+The residue of the friction audit is [INS-092](future/BACKLOG.md).
+
 **INS-086 (React Native app) Phase 4 is CODE-COMPLETE — every screen-migration-ledger row is
 built.** 25 routes bundle green on Expo SDK 57. **The API is now reachable from a phone
 ([INS-090](future/BACKLOG.md) done 2026-09-02):** `https://main-application-production-6fa4.up.railway.app/health`
@@ -29,7 +38,10 @@ acceptance pass**:
    `react-native-safe-area-context`; and the hub-level lists, dashboard and product form had no visible
    back control → one shared `BackButton` (`src/components/back-button.tsx`, pops the stack or falls
    back to a given route when there is no history) replaced 18 ad-hoc back links and was added to 8
-   screens. Verified on the emulator: Inspections → Dashboard → Products → Back → Back.
+   screens. Verified on the emulator: Inspections → Dashboard → Products → Back → Back. Also verified
+   there (INS-091, driven via the `agent-device` MCP server): Inspections → New → PO picker →
+   "+ Add new purchase order…" → nested "+ Add new company…" → PO created and selected with its
+   parties shown → inspection created → review screen; one tap on Create works with the keyboard up.
 4. `eas build --profile preview --platform android` (`eas` is already authenticated as
    donanlumina; project `@donanlumina/inspect` is linked). Walk the rest of the ledger on the device.
 
@@ -37,13 +49,13 @@ acceptance pass**:
 
 | Pillar | State |
 |---|---|
-| **Domain core** (AQL engine, tamper-proof crypto, audit chain, cycle state, auth primitives) | Pure TypeScript, unit-tested: **api 659 tests / 42 suites**. |
-| **API** (NestJS 11 + Prisma 6, 24 org-scoped models) | All routes role-floored (OpenAPI carries `x-required-role`); DB-backed integration suite **147/16** runs green in CI against containers. Duplicate styleNumber/poNumber now proper 409s (fixed 2026-09-02). |
+| **Domain core** (AQL engine, tamper-proof crypto, audit chain, cycle state, auth primitives) | Pure TypeScript, unit-tested: **api 661 tests / 42 suites**. |
+| **API** (NestJS 11 + Prisma 6, 24 org-scoped models) | All routes role-floored (OpenAPI carries `x-required-role`); DB-backed integration suite **147/16** runs green in CI against containers. Duplicate styleNumber/poNumber now proper 409s (fixed 2026-09-02). `POST /purchase-orders` answers in the list/get shape with its three parties (INS-091, 2026-09-04 — a just-created PO showed "—" for them). |
 | **Web console** (Next.js 15) | All screens live-wired; clicked through end-to-end 2026-08-31 (signed report + guest portal verified in a real browser). Six live bugs found by the Phase 4 contract passes were fixed 2026-09-02 (see below). **INS-091 (2026-09-04):** searchable `EntityPicker`s with inline company/product/PO quick-create (nested one level), `Modal` + `ErrorBanner` (no `alert()` left), the new-inspection dead end removed, client default preset honoured. First component tests (jsdom + Testing Library) — **47 Vitest tests.** |
 | **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **15 Vitest tests** on the pure capture core. **INS-091 (2026-09-04):** `OptionPicker` search + "+ Add new…", quick-create sheets for company/product/PO, `FormScreen` keyboard handling on 11 form screens, company create from the directory. Device pass in progress (see above). |
 | **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**34 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity`, `filterOptions`), `@inspect/design-tokens` (+`brandFallbacks`). |
 | **Deploy** (Railway project QCLink — a DEV environment) | API `Main Application` live at `main-application-production-6fa4.up.railway.app` (Dockerfile build, `/health` check, pre-deploy `migrate deploy` + seed, fresh signing key), console `serene-vision` at `serene-vision-production-8387.up.railway.app`, Postgres + Redis + bucket. Auto-deploys on push to `main`. Runbook: [reference/deploy-railway.md](reference/deploy-railway.md). |
-| **CI** (`.github/workflows/ci.yml`) | migrate→seed→type-check→api Jest→all Vitest suites→integration→builds→lint→OpenAPI staleness→single-resolved-React assertion. **Green on every 2026-09-02 push (10/10 commits).** |
+| **CI** (`.github/workflows/ci.yml`) | migrate→seed→type-check→api Jest→all Vitest suites→integration→builds→lint→OpenAPI staleness→single-resolved-React assertion. **Green on every 2026-09-02 push (10/10 commits).** The 2026-09-04 INS-091 commits have not been pushed yet, so CI has not seen them; locally every gate is green. |
 
 **Verified numbers (2026-09-04):** type-check 11/11 · lint 0 errors (1 known font warning) ·
 api 661/42 (serial on Windows — INS-085) · web 47/5 · domain 34/7 · api-client 29/2 · mobile 15/1 ·
@@ -93,13 +105,20 @@ integration 147/16 (CI) · `expo export` 25 routes.
   deploy health check while the logs say "successfully started". Pre-deploy is `sh -c "…"` because Railway
   runs the string without a shell; a settings change only lands via a from-source deploy, never `redeploy`.
 - Dev workspace for manual passes: **Acme Apparel Group** (owner@acme-apparel.test — see the
-  2026-08-31 click-through in git history for the full fixture set).
+  2026-08-31 click-through in git history for the full fixture set; `qa.mobile@` /
+  `inspector.mobile@acme-apparel.test` are the device-pass users).
+- **Emulator + local API:** Metro must bake `EXPO_PUBLIC_INSPECT_API_URL=http://10.0.2.2:3000` (the
+  emulator's host alias) before `expo start`, or the app calls `localhost:3000` = the phone itself and
+  every screen fails to load. Launch the emulator and dev servers detached via PowerShell
+  `Start-Process`; Git Bash `cmd //c start … /min` mangles the flag into a path.
+- **Web component tests** (`apps/web`, since INS-091) need `oxc: { jsx: { runtime: 'automatic' } }` in
+  `vitest.config.mts` — Next's tsconfig says `jsx: preserve`, which Vite 8 would otherwise obey — and a
+  `// @vitest-environment jsdom` pragma per component test file; the server-side suite stays on `node`.
 
 ## Open backlog (7 items)
-
-[INS-092](future/BACKLOG.md) UX friction audit residue (filed 2026-09-04 from the INS-091 audit)
 
 [INS-002](future/BACKLOG.md) credential rotation
 (user-side) · [INS-086](future/BACKLOG.md) epic (device pass) · [INS-089](future/BACKLOG.md) record
 the report signer · [INS-034](future/BACKLOG.md) guest module spec · [INS-087](future/BACKLOG.md)
-per-role picker ranking · [INS-085](future/BACKLOG.md) Windows Jest workers (annotated).
+per-role picker ranking · [INS-085](future/BACKLOG.md) Windows Jest workers (annotated) ·
+[INS-092](future/BACKLOG.md) UX friction audit residue (filed 2026-09-04 from the INS-091 audit).
