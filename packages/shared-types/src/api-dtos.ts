@@ -269,10 +269,20 @@ export interface RegisterPhotoInput {
   clientRequestId?: string;
 }
 
-/** INS-081: replace the bytes in an occupied slot, keeping the slot itself. */
+/**
+ * INS-081: replace the bytes in an occupied slot, keeping the slot itself.
+ * INS-093: the provenance fields travel with the new bytes — the API writes
+ * them onto the row (and NULLs them when absent), so a retake that sent only
+ * the key + hash silently erased the slot's `capturedAt`/`deviceId`.
+ */
 export interface RetakePhotoInput {
   storageKey: string;
   contentHash: string;
+  thumbnailKey?: string;
+  capturedAt?: string;
+  deviceId?: string;
+  gps?: string;
+  exif?: Record<string, unknown>;
 }
 
 export interface AddDefectInput {

@@ -1,24 +1,33 @@
 /**
- * The capture loop (INS-086 Phase 3) — mobile's port of the web populate
- * screen. Behaviour comes from the screen contract + the domain invariants;
- * the LAYOUT deliberately does not: a phone gets a full-screen camera showing
- * one slot at a time, not a three-column console.
+ * The capture loop (INS-086 Phase 3, hardened in INS-093) — mobile's port of
+ * the web populate screen. Behaviour comes from the screen contract + the
+ * domain invariants; the LAYOUT deliberately does not: a phone gets a
+ * full-screen camera showing one slot at a time.
+ *
+ * How the loop moves (INS-093):
+ *  - There is NO free "next". The cursor walks the slots that already hold
+ *    evidence plus exactly one empty slot — the frontier — and the only way to
+ *    open a new slot is to shoot the frontier. A unit cannot be left with a hole.
+ *  - Going back is instant: shots are served from the device (`SlotImage`),
+ *    uploads run in the background (`photoQueue`) and keep running after the
+ *    screen is left. A retake is just another capture with `intent: 'replace'`;
+ *    it never waits for the network.
+ *  - Ending the loop with uploads outstanding opens the upload sheet in
+ *    finishing mode: failures are re-armed, progress is shown, and submit
+ *    follows automatically once every photo is on the server.
+ *  - Every photo stays on the device until the loop ends successfully (or the
+ *    inspection is found locked), then the cache for it is purged.
  *
  * Decisions live in `@/lib/capture-core` (pure, unit-tested); network and
- * files live in `@/lib/photo-queue`. This file is the thin, stateful glue.
+ * files live in `@/lib/photo-queue`. This file is the stateful glue.
  */
 import { ApiError } from '@inspect/api-client';
-import { palette, severity as severityTint } from '@inspect/design-tokens';
+import { palette } from '@inspect/design-tokens';
 import { isLockedStatus } from '@inspect/domain';
-import type {
-  DefectCatalogDto,
-  DefectSeverity,
-  InspectionDto,
-  MeasurementDto,
-  PhotoDto,
-} from '@inspect/shared-types';
+import type { DefectCatalogDto, InspectionDto, PhotoDto } from '@inspect/shared-types';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Device from 'expo-device';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -29,50 +38,47 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 
+import { EndGate } from '@/components/capture/end-gate';
+import { Gallery } from '@/components/capture/gallery';
+import { SlotImage } from '@/components/capture/slot-image';
+import { stateLabel, ui } from '@/components/capture/ui';
+import { measurementFor, UnitSheet } from '@/components/capture/unit-sheet';
+import { UploadSheet } from '@/components/capture/upload-sheet';
+import { BackButton } from '@/components/back-button';
 import {
-  advanceCursor,
+  activeEntries,
+  cachedUriForSlot,
   canSubmit,
   createQueuedPhoto,
-  discardQueued,
-  effectiveSlotFilled,
-  enqueue,
-  queuedForSlot,
-  retreatCursor,
-  retryFailed,
+  entryForSlot,
+  filledCursors,
+  frontier as frontierOf,
+  sameCursor,
+  slotSequence,
+  snapCursor,
+  stepCursor,
   type Cursor,
   type QueuedPhoto,
 } from '@/lib/capture-core';
-import {
-  defaultIo,
-  deleteQueuedBytes,
-  drainQueue,
-  hashFile,
-  loadQueue,
-  retakeWithQueued,
-  saveQueue,
-  stashCapture,
-} from '@/lib/photo-queue';
-import { BackButton } from '@/components/back-button';
+import { hashFile, photoQueue, stashCapture, summarize, type QueueSnapshot } from '@/lib/photo-queue';
 import { client } from '@/lib/session';
-
-const SEVERITIES: DefectSeverity[] = ['CRITICAL', 'MAJOR', 'MINOR'];
-const TINT: Record<DefectSeverity, { fg: string; bg: string }> = {
-  CRITICAL: severityTint.critical,
-  MAJOR: severityTint.major,
-  MINOR: severityTint.minor,
-};
 
 type Load =
   | { kind: 'loading' }
   | { kind: 'missing' }
   | { kind: 'error'; message: string }
   | { kind: 'ready'; inspection: InspectionDto; catalog: DefectCatalogDto[] };
+
+type Sheet = 'none' | 'unit' | 'endgate' | 'uploads' | 'gallery';
+
+/** Idempotency token for one add-defect write (INS-016). Minted per tap, outside render. */
+function newDefectRequestId(): string {
+  return `mob-defect-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 /** Pure fetch — no component state captured, so effects may call it freely. */
 async function fetchCapture(inspectionId: string): Promise<Load> {
@@ -84,10 +90,7 @@ async function fetchCapture(inspectionId: string): Promise<Load> {
     return { kind: 'ready', inspection, catalog };
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) return { kind: 'missing' };
-    return {
-      kind: 'error',
-      message: e instanceof Error ? e.message : 'Load failed',
-    };
+    return { kind: 'error', message: e instanceof Error ? e.message : 'Load failed' };
   }
 }
 
@@ -97,24 +100,22 @@ export default function Capture() {
   const inspectionId = String(id);
 
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
-  // Lazy init: the persisted queue is read once, synchronously, before first
-  // render — not inside an effect (react-compiler flags the cascade).
-  const [queue, setQueue] = useState<QueuedPhoto[]>(loadQueue);
-  const [cursor, setCursor] = useState<Cursor>({ cycleIndex: 0, itemIndex: 0 });
+  const [snap, setSnap] = useState<QueueSnapshot>(() => photoQueue().snapshot());
+  /** null = "follow the frontier"; set once the inspector navigates by hand. */
+  const [rawCursor, setRawCursor] = useState<Cursor | null>(null);
   const [busy, setBusy] = useState(false);
+  const [shooting, setShooting] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<'none' | 'unit' | 'endgate'>('none');
+  const [sheet, setSheet] = useState<Sheet>('none');
   const [retakeMode, setRetakeMode] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
-  const draining = useRef(false);
 
   const inspection = load.kind === 'ready' ? load.inspection : null;
   const items = useMemo(() => inspection?.items ?? [], [inspection]);
-  const myQueue = useMemo(
-    () => queue.filter((q) => q.inspectionId === inspectionId),
-    [queue, inspectionId],
-  );
   const locked = inspection ? isLockedStatus(inspection.status) : false;
 
   const refetch = useCallback(async (): Promise<InspectionDto | null> => {
@@ -123,41 +124,46 @@ export default function Capture() {
     return result.kind === 'ready' ? result.inspection : null;
   }, [inspectionId]);
 
-  /** Drain pending uploads, then refresh server state if anything landed. */
-  const drain = useCallback(
-    async (current: QueuedPhoto[]) => {
-      if (draining.current) return;
-      draining.current = true;
-      try {
-        const before = current.length;
-        const after = await drainQueue(current, defaultIo(), setQueue);
-        if (after.length < before) await refetch();
-      } finally {
-        draining.current = false;
-      }
-    },
-    [refetch],
-  );
-
+  // Initial load + follow the queue. A registered upload changes what the
+  // server holds (photoId, viewUrl, tag-ability), so each landing refetches.
   useEffect(() => {
-    fetchCapture(inspectionId).then((result) => {
-      setLoad(result);
-      if (result.kind === 'ready') {
-        const insp = result.inspection;
-        const next = insp.cycleState?.nextSlot;
-        if (next && insp.items) {
-          const idx = insp.items.findIndex((i) => i.id === next.itemId);
-          setCursor({
-            cycleIndex: next.cycleIndex,
-            itemIndex: Math.max(idx, 0),
-          });
-        }
+    let cachedBefore = summarize(photoQueue().snapshot().queue, inspectionId).cached;
+    let refetchTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = photoQueue().subscribe((s) => {
+      setSnap(s);
+      const cachedNow = summarize(s.queue, inspectionId).cached;
+      if (cachedNow !== cachedBefore) {
+        cachedBefore = cachedNow;
+        if (refetchTimer) clearTimeout(refetchTimer);
+        refetchTimer = setTimeout(() => void refetch(), 400);
       }
-      const persisted = loadQueue();
-      if (persisted.some((q) => q.state === 'pending')) drain(persisted);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
-  }, [inspectionId]);
+    void fetchCapture(inspectionId).then((result) => {
+      setLoad(result);
+      if (result.kind === 'ready' && isLockedStatus(result.inspection.status)) {
+        // The loop is over — the on-device cache has served its purpose.
+        photoQueue().purgeInspection(inspectionId);
+      }
+    });
+    photoQueue().kick(true);
+    return () => {
+      unsubscribe();
+      if (refetchTimer) clearTimeout(refetchTimer);
+    };
+  }, [inspectionId, refetch]);
+
+  // ── Slot geometry ─────────────────────────────────────────────────────────
+
+  const queue = snap.queue;
+  const filled = useMemo(
+    () => filledCursors(items, queue, inspectionId),
+    [items, queue, inspectionId],
+  );
+  const frontier = useMemo(() => frontierOf(items.length, filled), [items.length, filled]);
+  const sequence = useMemo(() => slotSequence(items.length, filled), [items.length, filled]);
+  const cursor: Cursor = rawCursor ? snapCursor(sequence, frontier, rawCursor) : frontier;
+  const atFrontier = sameCursor(cursor, frontier);
+  const seqIndex = sequence.findIndex((c) => sameCursor(c, cursor));
 
   const currentItem = items[cursor.itemIndex];
   const slot = currentItem
@@ -166,67 +172,53 @@ export default function Capture() {
   const serverPhoto: PhotoDto | undefined = currentItem?.photos?.find(
     (p) => p.cycleIndex === cursor.cycleIndex,
   );
-  const queuedPhoto = slot ? queuedForSlot(myQueue, inspectionId, slot) : undefined;
-  const slotFilled = Boolean(serverPhoto || queuedPhoto);
-  const conflicts = myQueue.filter((q) => q.state === 'conflict');
-  const failed = myQueue.filter((q) => q.state === 'failed');
-  const uploadingCount = myQueue.filter((q) => q.state !== 'conflict').length;
+  const slotEntry = slot ? entryForSlot(queue, inspectionId, slot) : undefined;
+  const localUri = slot
+    ? cachedUriForSlot(queue, inspectionId, slot, serverPhoto?.contentHash)
+    : undefined;
+  const slotHasEvidence = Boolean(serverPhoto || slotEntry);
 
-  /** Advance to the next effective-empty slot (bounded scan past the cursor). */
-  const advanceToEmpty = useCallback(
-    (from: Cursor, nextQueue: QueuedPhoto[]) => {
-      let c = advanceCursor(items.length, from);
-      for (let hops = 0; hops < items.length * 2; hops++) {
-        const item = items[c.itemIndex];
-        if (
-          !item ||
-          !effectiveSlotFilled(items, nextQueue, inspectionId, {
-            inspectionLoopItemId: item.id,
-            cycleIndex: c.cycleIndex,
-          })
-        ) {
-          break;
-        }
-        c = advanceCursor(items.length, c);
-      }
-      setCursor(c);
-    },
-    [items, inspectionId],
-  );
+  const counts = summarize(queue, inspectionId);
+  const myActive = useMemo(() => activeEntries(queue, inspectionId), [queue, inspectionId]);
+  const inflight = myActive.find((q) => q.state === 'uploading');
+
+  // ── Actions ───────────────────────────────────────────────────────────────
 
   async function capture() {
-    if (!cameraRef.current || !slot || busy) return;
-    setBusy(true);
+    if (!cameraRef.current || !slot || shooting || !cameraReady) return;
+    setShooting(true);
     setActionError(null);
     try {
-      const shot = await cameraRef.current.takePictureAsync();
+      const shot = await cameraRef.current.takePictureAsync({ quality: 0.85 });
+      if (!shot?.uri) throw new Error('The camera returned no image');
+      // Freeze the frame on screen while we hash + stash — the inspector sees
+      // their shot, not a spinner over a live viewfinder.
+      setPreview(shot.uri);
       // Hash-at-capture, before the bytes can be touched again.
       const sha256 = await hashFile(shot.uri);
+      const intent = retakeMode || slotHasEvidence ? 'replace' : 'fill';
       const entry = createQueuedPhoto({
         inspectionId,
         inspectionLoopItemId: slot.inspectionLoopItemId,
         cycleIndex: slot.cycleIndex,
         localUri: shot.uri,
         sha256,
+        intent,
+        retakeOf: serverPhoto?.id,
       });
       entry.localUri = stashCapture(shot.uri, entry.id);
-
-      if (retakeMode && serverPhoto) {
-        // Retake replaces the slot's bytes in place — connectivity required.
-        await retakeWithQueued(entry, serverPhoto.id);
-        setRetakeMode(false);
-        await refetch();
+      photoQueue().add(entry);
+      if (intent === 'fill') {
+        setRawCursor(null); // follow the frontier to the next empty slot
       } else {
-        const next = enqueue(queue, entry);
-        setQueue(next);
-        saveQueue(next);
-        advanceToEmpty(cursor, next);
-        drain(next);
+        setRawCursor(cursor); // stay: show the retake where it was taken
+        setRetakeMode(false);
       }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Capture failed');
     } finally {
-      setBusy(false);
+      setPreview(null);
+      setShooting(false);
     }
   }
 
@@ -252,7 +244,7 @@ export default function Capture() {
       severity: catalogItem.defaultSeverity,
       inspectionLoopItemId: slot.inspectionLoopItemId,
       cycleIndex: slot.cycleIndex,
-      clientRequestId: `mob-defect-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      clientRequestId: newDefectRequestId(),
     });
   }
 
@@ -272,17 +264,9 @@ export default function Capture() {
     setActionError(null);
     try {
       await client.del(`/inspections/${inspectionId}/populate/cycles/${cycleIndex}`);
-      // Drop any queued photos aimed at the discarded unit.
-      const survivors = queue.filter(
-        (q) => !(q.inspectionId === inspectionId && q.cycleIndex === cycleIndex),
-      );
-      queue
-        .filter((q) => q.inspectionId === inspectionId && q.cycleIndex === cycleIndex)
-        .forEach(deleteQueuedBytes);
-      setQueue(survivors);
-      saveQueue(survivors);
+      photoQueue().discardCycle(inspectionId, cycleIndex);
       setSheet('none');
-      setCursor({ cycleIndex, itemIndex: 0 });
+      setRawCursor(null);
       await refetch();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Discard failed');
@@ -291,84 +275,95 @@ export default function Capture() {
     }
   }
 
-  async function endLoop() {
-    const state = inspection?.cycleState;
+  /** Re-check the server, then submit or explain. Called only with an empty queue. */
+  const submitIfClean = useCallback(async () => {
+    const fresh = await refetch();
+    const state = fresh?.cycleState;
     if (!state) return;
-    const verdict = canSubmit(state, uploadingCount);
+    const verdict = canSubmit(state, summarize(photoQueue().snapshot().queue, inspectionId).active);
     if (!verdict.ok) {
       setSheet('endgate');
       return;
     }
-    const ok = await post(`/inspections/${inspectionId}/submit`, {
-      deviceId: `mobile-${Device.modelName ?? 'unknown'}`,
-    });
-    if (ok) {
-      Alert.alert('Submitted', 'The inspection is now with QA for review.');
-      router.replace(`/inspections/${inspectionId}/review`);
+    Alert.alert(
+      'End loop?',
+      `${state.completedCycles} complete unit${state.completedCycles === 1 ? '' : 's'} will be submitted to QA for review. This cannot be undone.`,
+      [
+        { text: 'Not yet', style: 'cancel' },
+        {
+          text: 'Submit',
+          style: 'default',
+          onPress: async () => {
+            const ok = await post(`/inspections/${inspectionId}/submit`, {
+              deviceId: `mobile-${Device.modelName ?? 'unknown'}`,
+            });
+            if (ok) {
+              photoQueue().purgeInspection(inspectionId);
+              router.replace(`/inspections/${inspectionId}/review`);
+            }
+          },
+        },
+      ],
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- post/router are stable for this screen
+  }, [inspectionId, refetch]);
+
+  function endLoop() {
+    if (counts.active > 0) {
+      // Finishing mode: re-arm failures, show the queue landing, submit after.
+      setFinishing(true);
+      setSheet('uploads');
+      photoQueue().retryNow(inspectionId);
+      return;
     }
+    void submitIfClean();
   }
 
-  async function resolveConflictKeepMine(entry: QueuedPhoto) {
-    setBusy(true);
-    setActionError(null);
-    try {
-      const insp = await refetch();
-      const occupying = insp?.items
-        ?.find((i) => i.id === entry.inspectionLoopItemId)
-        ?.photos?.find((p) => p.cycleIndex === entry.cycleIndex);
-      if (!occupying) {
-        // The occupying photo vanished (unit discarded elsewhere) — the slot is
-        // free again, so re-arm the entry as a plain pending upload.
-        const rearmed = retryFailed(
-          queue.map((q) => (q.id === entry.id ? { ...q, state: 'failed' as const } : q)),
-        );
-        setQueue(rearmed);
-        saveQueue(rearmed);
-        drain(rearmed);
-        return;
-      }
-      await retakeWithQueued(entry, occupying.id);
-      const next = discardQueued(queue, entry.id);
-      setQueue(next);
-      saveQueue(next);
-      await refetch();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : 'Retake failed');
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Finishing mode completes itself when the last upload lands.
+  useEffect(() => {
+    if (!finishing || counts.active > 0) return;
+    const t = setTimeout(() => {
+      setFinishing(false);
+      setSheet('none');
+      void submitIfClean();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [finishing, counts.active, submitIfClean]);
 
-  function resolveConflictDiscard(entry: QueuedPhoto) {
-    deleteQueuedBytes(entry);
-    const next = discardQueued(queue, entry.id);
-    setQueue(next);
-    saveQueue(next);
+  function jumpTo(c: Cursor) {
+    setRetakeMode(false);
+    setRawCursor(c);
+    setSheet('none');
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (load.kind === 'loading') {
     return (
-      <SafeAreaView style={[styles.screen, styles.center]}>
+      <SafeAreaView style={[ui.screen, ui.center]}>
         <ActivityIndicator color={palette.accent} />
       </SafeAreaView>
     );
   }
   if (load.kind === 'missing' || load.kind === 'error') {
     return (
-      <SafeAreaView style={[styles.screen, styles.center]}>
-        <Text style={styles.errorText}>
+      <SafeAreaView style={[ui.screen, ui.center]}>
+        <Text style={ui.errorText}>
           {load.kind === 'missing' ? 'Inspection not found.' : load.message}
         </Text>
+        {load.kind === 'error' ? (
+          <Pressable onPress={() => void refetch()}>
+            <Text style={ui.link}>Try again</Text>
+          </Pressable>
+        ) : null}
         <BackButton />
       </SafeAreaView>
     );
   }
   if (!items.length) {
     return (
-      <SafeAreaView style={[styles.screen, styles.center]}>
-        <Text style={styles.errorText}>No loop items defined on this inspection.</Text>
+      <SafeAreaView style={[ui.screen, ui.center]}>
+        <Text style={ui.errorText}>No loop items defined on this inspection.</Text>
         <BackButton />
       </SafeAreaView>
     );
@@ -376,30 +371,83 @@ export default function Capture() {
 
   const state = inspection!.cycleState;
   const target = inspection!.computedSampling?.sampleSize;
-  const showCamera = !locked && (!slotFilled || retakeMode);
+  const showCamera = !locked && (atFrontier || retakeMode);
+  const stageBadge = slotEntry
+    ? stateLabel(slotEntry.state, snap.progress[slotEntry.id])
+    : serverPhoto
+      ? stateLabel('server')
+      : null;
+  const lastShot = [...queue]
+    .filter((q) => q.inspectionId === inspectionId)
+    .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))[0];
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={ui.screen}>
       {/* Header */}
       <View style={styles.header}>
-        <BackButton label="Close" />
+        <BackButton
+          label="Close"
+          onPress={() => {
+            if (counts.active > 0) {
+              Alert.alert(
+                'Uploads still running',
+                `${counts.active} photo${counts.active === 1 ? ' is' : 's are'} still uploading. They keep going in the background while the app stays open, and resume when you come back.`,
+                [
+                  { text: 'Stay', style: 'cancel' },
+                  { text: 'Leave', onPress: () => router.back() },
+                ],
+              );
+            } else {
+              router.back();
+            }
+          }}
+        />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {inspection!.purchaseOrder?.poNumber ?? 'Capture'}
           </Text>
           <Text style={styles.headerSub}>
             Unit {cursor.cycleIndex + 1}
-            {target ? ` of ${target}` : ''} · item {cursor.itemIndex + 1}/{items.length}
+            {target ? ` of ${target}` : ''} · {cursor.itemIndex + 1}/{items.length}
           </Text>
         </View>
         {locked ? (
           <Text style={styles.lockedBadge}>Read-only</Text>
         ) : (
-          <Pressable onPress={endLoop} disabled={busy} hitSlop={8}>
-            <Text style={[styles.link, busy && styles.dim]}>End loop</Text>
+          <Pressable onPress={endLoop} disabled={busy} hitSlop={8} accessibilityRole="button">
+            <Text style={[ui.link, busy && ui.dim]}>End loop</Text>
           </Pressable>
         )}
       </View>
+
+      {/* Upload strip — tap for the full sheet */}
+      {counts.active > 0 ? (
+        <Pressable style={styles.strip} onPress={() => setSheet('uploads')}>
+          <View style={styles.stripRow}>
+            {counts.uploading > 0 ? <ActivityIndicator size="small" color={palette.accent} /> : null}
+            <Text style={styles.stripText} numberOfLines={1}>
+              {counts.uploading > 0 ? `${counts.uploading} uploading` : null}
+              {counts.uploading > 0 && (counts.failed > 0 || counts.conflicts > 0) ? ' · ' : null}
+              {counts.failed > 0 ? `${counts.failed} failed, retrying` : null}
+              {counts.failed > 0 && counts.conflicts > 0 ? ' · ' : null}
+              {counts.conflicts > 0
+                ? `${counts.conflicts} need${counts.conflicts === 1 ? 's' : ''} your decision`
+                : null}
+            </Text>
+            <Text style={ui.link}>Details</Text>
+          </View>
+          {inflight ? (
+            <View style={ui.progressTrack}>
+              <View
+                style={[
+                  ui.progressFill,
+                  { width: `${Math.round((snap.progress[inflight.id] ?? 0) * 100)}%` },
+                ]}
+              />
+            </View>
+          ) : null}
+        </Pressable>
+      ) : null}
 
       {locked ? (
         <View style={styles.notice}>
@@ -410,118 +458,108 @@ export default function Capture() {
         </View>
       ) : null}
       {actionError ? (
-        <View style={styles.notice}>
+        <Pressable style={styles.notice} onPress={() => setActionError(null)}>
           <Text style={styles.noticeError} numberOfLines={3}>
             {actionError}
           </Text>
-        </View>
-      ) : null}
-
-      {/* Conflicts + failures need a human */}
-      {conflicts.map((c) => (
-        <View key={c.id} style={styles.conflict}>
-          <Text style={styles.conflictText}>
-            A photo for unit {c.cycleIndex + 1} ·{' '}
-            {items.find((i) => i.id === c.inspectionLoopItemId)?.itemName ?? 'item'} was taken
-            elsewhere while yours waited. Keep yours (replaces it) or discard yours.
-          </Text>
-          <View style={styles.rowButtons}>
-            <Pressable
-              style={styles.btnSmall}
-              disabled={busy}
-              onPress={() => resolveConflictKeepMine(c)}
-            >
-              <Text style={styles.btnSmallLabel}>Keep mine</Text>
-            </Pressable>
-            <Pressable style={styles.btnSmallGhost} onPress={() => resolveConflictDiscard(c)}>
-              <Text style={styles.btnSmallGhostLabel}>Discard mine</Text>
-            </Pressable>
-          </View>
-        </View>
-      ))}
-      {failed.length > 0 ? (
-        <View style={styles.notice}>
-          <Text style={styles.noticeText}>
-            {failed.length} upload{failed.length === 1 ? '' : 's'} failed — {failed[0].error}
-          </Text>
-          <Pressable
-            onPress={() => {
-              const next = retryFailed(queue);
-              setQueue(next);
-              saveQueue(next);
-              drain(next);
-            }}
-          >
-            <Text style={styles.link}>Retry uploads</Text>
-          </Pressable>
-        </View>
+        </Pressable>
       ) : null}
 
       {/* The slot */}
       <View style={styles.stage}>
-        <View style={styles.slotHeader}>
-          <Text style={styles.itemName} numberOfLines={1}>
-            {currentItem?.itemName}
-          </Text>
-          {currentItem?.description ? (
-            <Text style={styles.itemDesc} numberOfLines={2}>
-              {currentItem.description}
+        <View style={styles.stageFrame}>
+          {showCamera ? (
+            permission?.granted ? (
+              <CameraView
+                ref={cameraRef}
+                style={StyleSheet.absoluteFill}
+                facing="back"
+                animateShutter={false}
+                onCameraReady={() => setCameraReady(true)}
+              />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, ui.center]}>
+                <Text style={[ui.errorText, { color: '#fff' }]}>
+                  Camera permission is required to capture.
+                </Text>
+                <Pressable onPress={requestPermission} style={ui.btn}>
+                  <Text style={ui.btnLabel}>Grant camera access</Text>
+                </Pressable>
+              </View>
+            )
+          ) : (
+            <SlotImage
+              localUri={localUri}
+              remoteUri={serverPhoto?.viewUrl}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+              emptyLabel={slotHasEvidence ? 'Photo saved — preview unavailable' : 'No photo'}
+            />
+          )}
+
+          {/* Frozen frame while the shot is hashed + stashed */}
+          {preview ? (
+            <View style={StyleSheet.absoluteFill}>
+              <Image source={{ uri: preview }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              <View style={[styles.pill, styles.pillCenter]}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.pillText}>Saving…</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {/* Item overlay */}
+          <View style={styles.slotHeader} pointerEvents="none">
+            <Text style={styles.itemName} numberOfLines={1}>
+              {currentItem?.itemName}
             </Text>
+            {currentItem?.description ? (
+              <Text style={styles.itemDesc} numberOfLines={2}>
+                {currentItem.description}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* State badge */}
+          {!showCamera && stageBadge ? (
+            <View style={[styles.pill, styles.pillBottomLeft, { backgroundColor: stageBadge.bg }]}>
+              <Text style={[styles.pillText, { color: stageBadge.color }]}>{stageBadge.text}</Text>
+            </View>
+          ) : null}
+          {retakeMode ? (
+            <View style={[styles.pill, styles.pillBottomLeft, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+              <Text style={styles.pillText}>
+                Retaking · unit {cursor.cycleIndex + 1} · {currentItem?.itemName}
+              </Text>
+            </View>
+          ) : null}
+          {showCamera && !retakeMode && !locked && permission?.granted ? (
+            <View style={[styles.pill, styles.pillBottomLeft, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+              <Text style={styles.pillText}>Next shot</Text>
+            </View>
           ) : null}
         </View>
 
-        {showCamera ? (
-          permission?.granted ? (
-            <CameraView ref={cameraRef} style={styles.camera} facing="back" />
-          ) : (
-            <View style={[styles.camera, styles.center]}>
-              <Text style={styles.errorText}>Camera permission is required to capture.</Text>
-              <Pressable onPress={requestPermission}>
-                <Text style={styles.link}>Grant camera access</Text>
-              </Pressable>
-            </View>
-          )
-        ) : (
-          <View style={styles.camera}>
-            {serverPhoto?.viewUrl || queuedPhoto ? (
-              <Image
-                source={{ uri: serverPhoto?.viewUrl ?? queuedPhoto?.localUri }}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[StyleSheet.absoluteFill, styles.center]}>
-                <Text style={styles.errorText}>Photo uploaded (preview unavailable).</Text>
-              </View>
-            )}
-            {queuedPhoto ? (
-              <View style={styles.queuedBadge}>
-                <Text style={styles.queuedBadgeText}>
-                  {queuedPhoto.state === 'pending' || queuedPhoto.state === 'uploading'
-                    ? 'Uploading…'
-                    : queuedPhoto.state}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        )}
-
-        {/* Slot dots for the current unit */}
+        {/* Slot dots for the current unit — reachable ones only */}
         <View style={styles.dots}>
           {items.map((item, i) => {
-            const filled = effectiveSlotFilled(items, myQueue, inspectionId, {
-              inspectionLoopItemId: item.id,
-              cycleIndex: cursor.cycleIndex,
-            });
+            const c = { cycleIndex: cursor.cycleIndex, itemIndex: i };
+            const reachable = sequence.some((s) => sameCursor(s, c));
+            const isFilled = reachable && !sameCursor(c, frontier);
             return (
               <Pressable
                 key={item.id}
-                onPress={() => setCursor({ cycleIndex: cursor.cycleIndex, itemIndex: i })}
-                hitSlop={6}
+                disabled={!reachable}
+                onPress={() => jumpTo(c)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={item.itemName}
                 style={[
                   styles.dot,
-                  filled && styles.dotFilled,
+                  isFilled && styles.dotFilled,
+                  sameCursor(c, frontier) && styles.dotFrontier,
                   i === cursor.itemIndex && styles.dotCurrent,
+                  !reachable && ui.dim,
                 ]}
               />
             );
@@ -529,77 +567,144 @@ export default function Capture() {
         </View>
       </View>
 
+      {/* Navigation: only across shot slots + the frontier */}
+      <View style={styles.nav}>
+        <Pressable
+          onPress={() => jumpTo(stepCursor(sequence, cursor, -1))}
+          disabled={seqIndex <= 0}
+          hitSlop={8}
+          style={[styles.navBtn, seqIndex <= 0 && ui.dim]}
+          accessibilityRole="button"
+          accessibilityLabel="Previous shot"
+        >
+          <Text style={styles.navGlyph}>‹</Text>
+          <Text style={ui.link}>Prev</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setRawCursor(null)}
+          disabled={atFrontier}
+          hitSlop={8}
+          style={[styles.navCenter, atFrontier && { opacity: 0 }]}
+          accessibilityRole="button"
+        >
+          <Text style={styles.jump}>Jump to next shot ⇥</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => jumpTo(stepCursor(sequence, cursor, 1))}
+          disabled={atFrontier || seqIndex < 0 || seqIndex >= sequence.length - 1}
+          hitSlop={8}
+          style={[
+            styles.navBtn,
+            (atFrontier || seqIndex >= sequence.length - 1) && ui.dim,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Next shot"
+        >
+          <Text style={ui.link}>Next</Text>
+          <Text style={styles.navGlyph}>›</Text>
+        </Pressable>
+      </View>
+
       {/* Controls */}
       <View style={styles.controls}>
         <Pressable
-          onPress={() => {
-            setRetakeMode(false);
-            setCursor(retreatCursor(items.length, cursor));
-          }}
-          hitSlop={8}
+          style={styles.galleryBtn}
+          onPress={() => setSheet('gallery')}
+          accessibilityRole="button"
+          accessibilityLabel="Open gallery"
         >
-          <Text style={styles.link}>Back</Text>
+          {lastShot ? (
+            <SlotImage localUri={lastShot.localUri} style={StyleSheet.absoluteFill} />
+          ) : (
+            <Text style={styles.galleryGlyph}>▦</Text>
+          )}
+          <View style={styles.galleryCount}>
+            <Text style={styles.galleryCountText}>{filled.length}</Text>
+          </View>
         </Pressable>
 
         {showCamera ? (
           <Pressable
-            style={[styles.shutter, (busy || !permission?.granted) && styles.dim]}
-            disabled={busy || !permission?.granted}
+            style={[styles.shutter, (shooting || !permission?.granted || !cameraReady) && ui.dim]}
+            disabled={shooting || !permission?.granted || !cameraReady}
             onPress={capture}
+            accessibilityRole="button"
+            accessibilityLabel="Take photo"
           >
-            {busy ? <ActivityIndicator color="#fff" /> : <View style={styles.shutterInner} />}
+            {shooting ? <ActivityIndicator color="#fff" /> : <View style={styles.shutterInner} />}
           </Pressable>
         ) : (
-          <View style={styles.rowButtons}>
-            {!locked && serverPhoto ? (
-              <Pressable style={styles.btnSmallGhost} onPress={() => setRetakeMode(true)}>
-                <Text style={styles.btnSmallGhostLabel}>Retake</Text>
+          <View style={ui.rowButtons}>
+            {!locked && slotHasEvidence ? (
+              <Pressable
+                style={ui.btnGhost}
+                onPress={() => setRetakeMode(true)}
+                accessibilityRole="button"
+              >
+                <Text style={ui.btnGhostLabel}>Retake</Text>
               </Pressable>
             ) : null}
-            <Pressable style={styles.btnSmall} onPress={() => setSheet('unit')}>
-              <Text style={styles.btnSmallLabel}>Defects & measurements</Text>
+            <Pressable style={ui.btn} onPress={() => setSheet('unit')} accessibilityRole="button">
+              <Text style={ui.btnLabel}>Defects & measurements</Text>
             </Pressable>
           </View>
         )}
 
-        <Pressable
-          onPress={() => {
-            setRetakeMode(false);
-            setCursor(advanceCursor(items.length, cursor));
-          }}
-          hitSlop={8}
-        >
-          <Text style={styles.link}>Next</Text>
-        </Pressable>
+        {retakeMode ? (
+          <Pressable
+            style={styles.sideBtn}
+            onPress={() => setRetakeMode(false)}
+            hitSlop={8}
+            accessibilityRole="button"
+          >
+            <Text style={ui.link}>Cancel</Text>
+          </Pressable>
+        ) : showCamera ? (
+          <Pressable
+            style={styles.sideBtn}
+            onPress={() => setSheet('unit')}
+            hitSlop={8}
+            accessibilityRole="button"
+          >
+            <Text style={ui.link}>Unit notes</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.sideBtn} />
+        )}
       </View>
 
       <Text style={styles.progress}>
         {state
           ? `${state.completedCycles} unit${state.completedCycles === 1 ? '' : 's'} complete`
           : ''}
-        {target ? ` / ${target} target — you may end on any complete unit` : ''}
-        {uploadingCount > 0 ? `  ·  ${uploadingCount} in queue` : ''}
+        {target ? ` / ${target} target — end on any complete unit` : ''}
+        {counts.active > 0 ? `  ·  ${counts.active} uploading` : ''}
       </Text>
 
       {/* Unit sheet: defects + measurements */}
-      <Modal visible={sheet === 'unit'} animationType="slide" transparent>
-        <View style={styles.sheetBackdrop}>
-          <View style={styles.sheetBody}>
-            <View style={styles.sheetHandleRow}>
-              <Text style={styles.sheetTitle}>
+      <Modal
+        visible={sheet === 'unit'}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSheet('none')}
+      >
+        <View style={ui.sheetBackdrop}>
+          <View style={ui.sheetBody}>
+            <View style={ui.sheetHandleRow}>
+              <Text style={ui.sheetTitle}>
                 Unit {cursor.cycleIndex + 1} · {currentItem?.itemName}
               </Text>
               <Pressable onPress={() => setSheet('none')} hitSlop={8}>
-                <Text style={styles.link}>Done</Text>
+                <Text style={ui.link}>Done</Text>
               </Pressable>
             </View>
-            <ScrollView>
+            <ScrollView keyboardShouldPersistTaps="handled">
               <UnitSheet
                 catalog={load.kind === 'ready' ? load.catalog : []}
                 inspection={inspection!}
                 cursor={cursor}
-                itemId={currentItem?.id}
                 canTag={!locked && Boolean(serverPhoto)}
+                pendingUpload={!serverPhoto && Boolean(slotEntry)}
                 busy={busy}
                 onTag={tagDefect}
                 onCustom={(text, sev) =>
@@ -620,19 +725,27 @@ export default function Capture() {
         </View>
       </Modal>
 
-      {/* End-loop gate */}
-      <Modal visible={sheet === 'endgate'} animationType="fade" transparent>
-        <View style={[styles.sheetBackdrop, styles.center]}>
-          <View style={styles.gateBody}>
+      {/* End-loop gate (server verdicts) */}
+      <Modal
+        visible={sheet === 'endgate'}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setSheet('none')}
+      >
+        <View style={[ui.sheetBackdrop, ui.center]}>
+          <View style={ui.gateBody}>
             <EndGate
               verdict={
-                state ? canSubmit(state, uploadingCount) : { ok: false, reason: 'no-complete-unit' }
+                state ? canSubmit(state, counts.active) : { ok: false, reason: 'no-complete-unit' }
               }
               items={items}
               busy={busy}
-              onFinish={(cycleIndex) => {
+              // The frontier IS the first missing slot of the lowest partial
+              // unit — land on it, not on item 1 of the unit.
+              onFinish={() => {
+                setRetakeMode(false);
+                setRawCursor(null);
                 setSheet('none');
-                setCursor({ cycleIndex, itemIndex: 0 });
               }}
               onDiscard={discardUnit}
               onCancel={() => setSheet('none')}
@@ -640,249 +753,70 @@ export default function Capture() {
           </View>
         </View>
       </Modal>
+
+      {/* Upload status / finishing */}
+      <UploadSheet
+        visible={sheet === 'uploads'}
+        title={finishing ? 'Finishing uploads' : 'Uploads'}
+        subtitle={
+          finishing
+            ? `${counts.active} photo${counts.active === 1 ? '' : 's'} still to land — the loop ends as soon as they do.`
+            : 'Photos on their way to the server. Failures retry on their own.'
+        }
+        entries={myActive}
+        progress={snap.progress}
+        items={items}
+        busy={busy}
+        onRetryAll={() => photoQueue().retryNow(inspectionId)}
+        onKeepMine={(e: QueuedPhoto) => photoQueue().resolveConflictKeepMine(e.id)}
+        onDiscard={(e: QueuedPhoto) =>
+          Alert.alert(
+            'Discard this photo?',
+            'The shot is deleted from this device and its slot opens again for a new photo.',
+            [
+              { text: 'Keep', style: 'cancel' },
+              {
+                text: 'Discard',
+                style: 'destructive',
+                onPress: () => {
+                  photoQueue().discard(e.id);
+                  setRawCursor(null);
+                },
+              },
+            ],
+          )
+        }
+        onClose={() => {
+          setFinishing(false);
+          setSheet('none');
+        }}
+        footer={
+          finishing && counts.conflicts > 0 ? (
+            <Text style={ui.hint}>
+              Resolve the decision{counts.conflicts === 1 ? '' : 's'} above to continue.
+            </Text>
+          ) : null
+        }
+      />
+
+      <Gallery
+        visible={sheet === 'gallery'}
+        onClose={() => setSheet('none')}
+        inspectionId={inspectionId}
+        items={items}
+        queue={queue}
+        progress={snap.progress}
+        sequence={sequence}
+        frontier={frontier}
+        cursor={cursor}
+        target={target}
+        onJump={jumpTo}
+      />
     </SafeAreaView>
   );
 }
 
-function measurementFor(
-  measurements: MeasurementDto[] | undefined,
-  cycleIndex: number,
-  label: string,
-): MeasurementDto | undefined {
-  return measurements?.find((m) => m.cycleIndex === cycleIndex && m.label === label);
-}
-
-function UnitSheet(props: {
-  catalog: DefectCatalogDto[];
-  inspection: InspectionDto;
-  cursor: Cursor;
-  itemId?: string;
-  canTag: boolean;
-  busy: boolean;
-  readOnly: boolean;
-  onTag: (item: DefectCatalogDto) => void;
-  onCustom: (text: string, severity: DefectSeverity) => Promise<boolean>;
-  onMeasure: (label: string, unit: string | undefined, value: string) => void;
-}) {
-  const { catalog, inspection, cursor, canTag, busy, readOnly } = props;
-  const [customText, setCustomText] = useState('');
-  const [customSeverity, setCustomSeverity] = useState<DefectSeverity>('MINOR');
-
-  const unitDefects = (inspection.items ?? []).flatMap((item) =>
-    (item.defects ?? [])
-      .filter((d) => d.cycleIndex === cursor.cycleIndex)
-      .map((d) => ({ ...d, itemName: item.itemName })),
-  );
-  const fields = inspection.loopPresetSnapshot?.measurementFields ?? [];
-
-  return (
-    <View style={{ gap: 16, paddingBottom: 24 }}>
-      <View>
-        <Text style={styles.sectionLabel}>Defect tags</Text>
-        {!canTag && !readOnly ? (
-          <Text style={styles.hint}>
-            Upload this item&apos;s photo first — a defect is recorded against the shot it was seen
-            on.
-          </Text>
-        ) : null}
-        {SEVERITIES.map((sev) => {
-          const group = catalog.filter((c) => c.defaultSeverity === sev && !c.isArchived);
-          if (!group.length) return null;
-          return (
-            <View key={sev} style={{ marginTop: 8 }}>
-              <Text style={[styles.severityLabel, { color: TINT[sev].fg }]}>
-                {sev.charAt(0) + sev.slice(1).toLowerCase()}
-              </Text>
-              <View style={styles.chipWrap}>
-                {group.map((c) => (
-                  <Pressable
-                    key={c.id}
-                    disabled={!canTag || busy || readOnly}
-                    onPress={() => props.onTag(c)}
-                    style={[
-                      styles.defectChip,
-                      { backgroundColor: TINT[sev].bg },
-                      (!canTag || readOnly) && styles.dim,
-                    ]}
-                  >
-                    <Text style={[styles.defectChipLabel, { color: TINT[sev].fg }]}>{c.name}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-          );
-        })}
-        {!readOnly ? (
-          <View style={styles.customRow}>
-            <TextInput
-              style={styles.input}
-              placeholder="Add custom defect tag…"
-              placeholderTextColor={palette.faint}
-              value={customText}
-              onChangeText={setCustomText}
-              editable={canTag && !busy}
-            />
-            <Pressable
-              onPress={() =>
-                setCustomSeverity(
-                  SEVERITIES[(SEVERITIES.indexOf(customSeverity) + 1) % SEVERITIES.length],
-                )
-              }
-              style={[styles.btnSmallGhost, { backgroundColor: TINT[customSeverity].bg }]}
-            >
-              <Text style={[styles.btnSmallGhostLabel, { color: TINT[customSeverity].fg }]}>
-                {customSeverity.charAt(0) + customSeverity.slice(1).toLowerCase()}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.btnSmall, (!canTag || !customText.trim() || busy) && styles.dim]}
-              disabled={!canTag || !customText.trim() || busy}
-              onPress={async () => {
-                if (await props.onCustom(customText.trim(), customSeverity)) setCustomText('');
-              }}
-            >
-              <Text style={styles.btnSmallLabel}>Add</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
-
-      <View>
-        <Text style={styles.sectionLabel}>On this unit · {unitDefects.length}</Text>
-        {unitDefects.length === 0 ? (
-          <Text style={styles.hint}>No defects recorded.</Text>
-        ) : (
-          unitDefects.map((d) => (
-            <View key={d.id} style={styles.unitDefectRow}>
-              <Text style={[styles.defectChipLabel, { color: TINT[d.severity].fg }]}>
-                {d.defectCatalog?.name ?? d.customText ?? '—'}
-              </Text>
-              <Text style={styles.hint}>{d.itemName}</Text>
-            </View>
-          ))
-        )}
-      </View>
-
-      <View>
-        <Text style={styles.sectionLabel}>Measurements · this unit</Text>
-        {fields.length === 0 ? (
-          <Text style={styles.hint}>No measurement sheet on this loop.</Text>
-        ) : (
-          fields.map((f) => (
-            <MeasurementRow
-              key={f.label}
-              label={f.label}
-              unit={f.unit}
-              initial={
-                measurementFor(inspection.measurements, cursor.cycleIndex, f.label)
-                  ?.recordedValue ?? ''
-              }
-              readOnly={readOnly}
-              onSave={(v) => props.onMeasure(f.label, f.unit, v)}
-            />
-          ))
-        )}
-      </View>
-    </View>
-  );
-}
-
-function MeasurementRow(props: {
-  label: string;
-  unit?: string;
-  initial: string;
-  readOnly: boolean;
-  onSave: (value: string) => void;
-}) {
-  const [value, setValue] = useState(props.initial);
-  return (
-    <View style={styles.measureRow}>
-      <Text style={styles.measureLabel}>{props.label}</Text>
-      <TextInput
-        style={[styles.input, styles.measureInput]}
-        value={value}
-        onChangeText={setValue}
-        onEndEditing={() => props.onSave(value)}
-        editable={!props.readOnly}
-        placeholder="—"
-        placeholderTextColor={palette.faint}
-      />
-      <Text style={styles.hint}>{props.unit ?? ''}</Text>
-    </View>
-  );
-}
-
-function EndGate(props: {
-  verdict: ReturnType<typeof canSubmit>;
-  items: { id: string; itemName: string }[];
-  busy: boolean;
-  onFinish: (cycleIndex: number) => void;
-  onDiscard: (cycleIndex: number) => void;
-  onCancel: () => void;
-}) {
-  const { verdict } = props;
-  if (verdict.ok) return null; // endLoop() submits directly when clean
-  if (verdict.reason === 'queue-not-empty') {
-    return (
-      <View style={{ gap: 12 }}>
-        <Text style={styles.gateTitle}>Photos still uploading</Text>
-        <Text style={styles.gateText}>
-          Submit is blocked while the upload queue is non-empty — completeness is judged against
-          what the server holds. Wait for uploads to finish (or resolve failures), then end the loop
-          again.
-        </Text>
-        <Pressable style={styles.btnSmall} onPress={props.onCancel}>
-          <Text style={styles.btnSmallLabel}>OK</Text>
-        </Pressable>
-      </View>
-    );
-  }
-  if (verdict.reason === 'no-complete-unit') {
-    return (
-      <View style={{ gap: 12 }}>
-        <Text style={styles.gateTitle}>No complete unit yet</Text>
-        <Text style={styles.gateText}>
-          A loop can only be ended on a complete unit. Finish at least one unit first.
-        </Text>
-        <Pressable style={styles.btnSmall} onPress={props.onCancel}>
-          <Text style={styles.btnSmallLabel}>OK</Text>
-        </Pressable>
-      </View>
-    );
-  }
-  const { partial } = verdict;
-  const missing = partial.missingItemIds
-    .map((mid) => props.items.find((i) => i.id === mid)?.itemName ?? 'item')
-    .join(', ');
-  return (
-    <View style={{ gap: 12 }}>
-      <Text style={styles.gateTitle}>Unit {partial.cycleIndex + 1} is incomplete</Text>
-      <Text style={styles.gateText}>
-        Still missing: {missing}. A loop can only be ended on a complete unit — finish this one, or
-        discard it.
-      </Text>
-      <Pressable style={styles.btnSmall} onPress={() => props.onFinish(partial.cycleIndex)}>
-        <Text style={styles.btnSmallLabel}>Finish unit {partial.cycleIndex + 1}</Text>
-      </Pressable>
-      <Pressable
-        style={styles.btnSmallGhost}
-        disabled={props.busy}
-        onPress={() => props.onDiscard(partial.cycleIndex)}
-      >
-        <Text style={[styles.btnSmallGhostLabel, { color: palette.danger }]}>
-          Discard unit {partial.cycleIndex + 1}
-        </Text>
-      </Pressable>
-      <Pressable style={styles.btnSmallGhost} onPress={props.onCancel}>
-        <Text style={styles.btnSmallGhostLabel}>Cancel</Text>
-      </Pressable>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  center: { alignItems: 'center', justifyContent: 'center', gap: 12 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -896,14 +830,18 @@ const styles = StyleSheet.create({
   headerTitle: { color: palette.ink, fontSize: 15, fontWeight: '700' },
   headerSub: { color: palette.sub, fontSize: 12, marginTop: 1 },
   lockedBadge: { color: palette.faint, fontSize: 12, fontWeight: '600' },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
-  dim: { opacity: 0.5 },
-  errorText: {
-    color: palette.sub,
-    fontSize: 14,
-    textAlign: 'center',
-    paddingHorizontal: 24,
+  strip: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.line,
+    backgroundColor: palette.panel,
+    gap: 8,
   },
+  stripRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stripText: { color: palette.sub, fontSize: 12.5, flex: 1 },
   notice: {
     marginHorizontal: 16,
     marginTop: 8,
@@ -916,38 +854,37 @@ const styles = StyleSheet.create({
   },
   noticeText: { color: palette.sub, fontSize: 12.5 },
   noticeError: { color: palette.danger, fontSize: 12.5 },
-  conflict: {
-    marginHorizontal: 16,
-    marginTop: 8,
-    padding: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: severityTint.major.fg,
-    backgroundColor: severityTint.major.bg,
-    gap: 8,
-  },
-  conflictText: { color: severityTint.major.fg, fontSize: 12.5 },
-  stage: { flex: 1, margin: 16, gap: 10 },
-  slotHeader: { gap: 2 },
-  itemName: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  itemDesc: { color: palette.sub, fontSize: 13 },
-  camera: {
+  stage: { flex: 1, marginHorizontal: 16, marginTop: 12, gap: 10 },
+  stageFrame: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#000',
   },
-  queuedBadge: {
+  slotHeader: {
     position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    top: 0,
+    left: 0,
+    right: 0,
+    padding: 12,
+    gap: 2,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  queuedBadgeText: { color: '#fff', fontSize: 11, fontWeight: '600' },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  itemName: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  itemDesc: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
+  pill: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  pillBottomLeft: { left: 10, bottom: 10 },
+  pillCenter: { alignSelf: 'center', top: '46%', backgroundColor: 'rgba(0,0,0,0.6)' },
+  pillText: { color: '#fff', fontSize: 11.5, fontWeight: '700' },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 10 },
   dot: {
     width: 10,
     height: 10,
@@ -957,25 +894,60 @@ const styles = StyleSheet.create({
     backgroundColor: palette.panel,
   },
   dotFilled: { backgroundColor: palette.accent, borderColor: palette.accent },
-  dotCurrent: { transform: [{ scale: 1.4 }] },
+  dotFrontier: { borderColor: palette.accent, borderStyle: 'dashed' },
+  dotCurrent: { transform: [{ scale: 1.5 }] },
+  nav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  navBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 40, minWidth: 64 },
+  navGlyph: { color: palette.accent, fontSize: 24, lineHeight: 26, fontWeight: '600' },
+  navCenter: { minHeight: 40, justifyContent: 'center' },
+  jump: { color: palette.sub, fontSize: 12.5, fontWeight: '600' },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 6,
   },
+  galleryBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: palette.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  galleryGlyph: { color: palette.sub, fontSize: 20 },
+  galleryCount: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    backgroundColor: palette.accent,
+    borderTopLeftRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  galleryCountText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+  sideBtn: { minWidth: 52, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
   shutter: {
-    width: 68,
-    height: 68,
+    width: 72,
+    height: 72,
     borderRadius: 999,
     backgroundColor: palette.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   shutterInner: {
-    width: 54,
-    height: 54,
+    width: 58,
+    height: 58,
     borderRadius: 999,
     borderWidth: 3,
     borderColor: '#fff',
@@ -985,97 +957,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     paddingBottom: 10,
+    paddingHorizontal: 16,
   },
-  rowButtons: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  btnSmall: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
-  btnSmallLabel: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  btnSmallGhost: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    alignItems: 'center',
-    backgroundColor: palette.panel,
-  },
-  btnSmallGhostLabel: { color: palette.sub, fontSize: 13, fontWeight: '600' },
-  sheetBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(11,18,32,0.45)',
-    justifyContent: 'flex-end',
-  },
-  sheetBody: {
-    backgroundColor: palette.bg,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '80%',
-    padding: 16,
-  },
-  sheetHandleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  sheetTitle: { color: palette.ink, fontSize: 16, fontWeight: '700' },
-  gateBody: {
-    backgroundColor: palette.bg,
-    borderRadius: 14,
-    padding: 18,
-    marginHorizontal: 24,
-    alignSelf: 'stretch',
-  },
-  gateTitle: { color: palette.ink, fontSize: 16, fontWeight: '700' },
-  gateText: { color: palette.sub, fontSize: 13.5, lineHeight: 19 },
-  sectionLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  severityLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
-  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  defectChip: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  defectChipLabel: { fontSize: 12.5, fontWeight: '600' },
-  customRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: palette.ink,
-    backgroundColor: palette.panel,
-    fontSize: 13.5,
-  },
-  hint: { color: palette.faint, fontSize: 12 },
-  unitDefectRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.lineSoft,
-  },
-  measureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 8,
-  },
-  measureLabel: { color: palette.ink, fontSize: 13.5, flex: 1 },
-  measureInput: { flex: 0, width: 110, textAlign: 'right' },
 });

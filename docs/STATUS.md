@@ -9,7 +9,17 @@
 
 ## Where the project stands
 
-**Latest landed: [INS-091](future/BACKLOG.md) (2026-09-04) — pickers create what is missing.** On
+**Latest landed: [INS-093](future/BACKLOG.md) (2026-09-04) — the mobile camera loop hardened.** The
+first hands-on look at the capture screen found it "weird and nonsensical": a free "Next" button left
+units with holes, a retake blocked on the network, and uploads died with the screen. Now the cursor
+walks only shot slots plus one frontier, retakes are queued like any capture, uploads run in a
+background singleton (progress, timeouts, backoff, resume on foreground), every photo is cached
+on-device until the loop is submitted, End loop waits for uploads in a finishing sheet, and a gallery
+shows every unit × item. Verified by tests (mobile 15 → 39), type-check, lint, `expo export` **and on
+the Android emulator** (shoot → saved → retake in place → gate → discard → submit → review; two fixes
+fell out, see the backlog entry).
+
+**Before that: [INS-091](future/BACKLOG.md) (2026-09-04) — pickers create what is missing.** On
 both platforms the Client / Factory / Product / PO pickers are searchable and end in "+ Add new…"; a
 company, product or PO is created in a dialog (web) or bottom sheet (mobile), appended and selected,
 nesting one level (PO → company/product). The new-inspection dead end ("create four things elsewhere")
@@ -52,13 +62,13 @@ acceptance pass**:
 | **Domain core** (AQL engine, tamper-proof crypto, audit chain, cycle state, auth primitives) | Pure TypeScript, unit-tested: **api 661 tests / 42 suites**. |
 | **API** (NestJS 11 + Prisma 6, 24 org-scoped models) | All routes role-floored (OpenAPI carries `x-required-role`); DB-backed integration suite **147/16** runs green in CI against containers. Duplicate styleNumber/poNumber now proper 409s (fixed 2026-09-02). `POST /purchase-orders` answers in the list/get shape with its three parties (INS-091, 2026-09-04 — a just-created PO showed "—" for them). |
 | **Web console** (Next.js 15) | All screens live-wired; clicked through end-to-end 2026-08-31 (signed report + guest portal verified in a real browser). Six live bugs found by the Phase 4 contract passes were fixed 2026-09-02 (see below). **INS-091 (2026-09-04):** searchable `EntityPicker`s with inline company/product/PO quick-create (nested one level), `Modal` + `ErrorBanner` (no `alert()` left), the new-inspection dead end removed, client default preset honoured. First component tests (jsdom + Testing Library) — **47 Vitest tests.** |
-| **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **15 Vitest tests** on the pure capture core. **INS-091 (2026-09-04):** `OptionPicker` search + "+ Add new…", quick-create sheets for company/product/PO, `FormScreen` keyboard handling on 11 form screens, company create from the directory. Device pass in progress (see above). |
+| **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **INS-093 (2026-09-04) hardened the camera loop:** no free "Next" (the cursor walks shot slots + one frontier), retakes go through the queue (`intent: replace`), uploads run in a background singleton with progress/timeouts/backoff and survive leaving the screen, every photo is cached on-device until the loop is submitted, End loop waits for uploads in a finishing sheet, and a gallery shows every unit × item. **39 Vitest tests** on the pure capture core. **INS-091 (2026-09-04):** `OptionPicker` search + "+ Add new…", quick-create sheets for company/product/PO, `FormScreen` keyboard handling on 11 form screens, company create from the directory. Device pass in progress (see above). |
 | **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**34 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity`, `filterOptions`), `@inspect/design-tokens` (+`brandFallbacks`). |
 | **Deploy** (Railway project QCLink — a DEV environment) | API `Main Application` live at `main-application-production-6fa4.up.railway.app` (Dockerfile build, `/health` check, pre-deploy `migrate deploy` + seed, fresh signing key), console `serene-vision` at `serene-vision-production-8387.up.railway.app`, Postgres + Redis + bucket. Auto-deploys on push to `main`. Runbook: [reference/deploy-railway.md](reference/deploy-railway.md). |
 | **CI** (`.github/workflows/ci.yml`) | migrate→seed→type-check→api Jest→all Vitest suites→integration→builds→lint→OpenAPI staleness→single-resolved-React assertion. **Green on every 2026-09-02 push (10/10 commits).** The 2026-09-04 INS-091 commits have not been pushed yet, so CI has not seen them; locally every gate is green. |
 
 **Verified numbers (2026-09-04):** type-check 11/11 · lint 0 errors (1 known font warning) ·
-api 661/42 (serial on Windows — INS-085) · web 47/5 · domain 34/7 · api-client 29/2 · mobile 15/1 ·
+api 661/42 (serial on Windows — INS-085) · web 47/5 · domain 34/7 · api-client 29/2 · mobile 39/3 ·
 integration 147/16 (CI) · `expo export` 25 routes.
 
 ## Fixed along the Phase 4 sweep (2026-09-02)

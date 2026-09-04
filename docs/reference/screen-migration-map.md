@@ -51,6 +51,15 @@
 > Capture's submit now lands on review. The review status machine reads `@inspect/domain`'s shared sets —
 > and the WEB review page was re-pointed at them in the same change (it held five local copies;
 > `REPORTABLE`/`REINSPECTABLE` moved up to the package). `expo export` bundles **8 routes**.
+> **2026-09-04 (INS-093) — the capture loop was hardened after the first hands-on look** ("weird and
+> nonsensical"): the free "Next" button is gone — the cursor walks `slotSequence` (every shot slot + ONE
+> frontier, mirroring the server's `nextSlot` rule with device photos overlaid), so a unit can never be left
+> with a hole; a retake is a queued capture with `intent: 'replace'` (a filled slot is expected → INS-081
+> retake, never a conflict) and needs no network; `photoQueue()` is a module singleton (native `File.upload`
+> with progress + abort, 20 s/120 s timeouts, 2→60 s backoff ladder, foreground kick) so uploads outlive the
+> screen; uploaded bytes stay on-device as `uploaded` cache records until submit and are served local-first;
+> End loop with uploads outstanding opens a finishing sheet and submits (after confirm) when the queue drains;
+> a gallery shows every unit × item. Mobile Vitest 15 → 39. Screen split into `components/capture/*`.
 > Prior update (Phase 3): **the capture screen exists**: `/inspections/[id]/capture`
 > (guided full-screen camera, one slot at a time) with the spec §5.1 offline photo queue —
 > hash-at-capture, presign→PUT→register drain with a stable `clientRequestId`, 409→conflict for a human,
@@ -96,7 +105,7 @@ whose floor reads `PLATFORM_ADMIN` is blocked until the API is re-graded.
 |---|---|---|---|---|---|---|
 | `/login` | `/login` | `POST /auth/login`, `GET /auth/me` | public | 2 | in-progress (built 2026-08-31; device acceptance pending — API deployed 2026-09-02, INS-090 done) | INS-086 |
 | `/inspections` | `/inspections` | `GET /inspections` | `INSPECTOR` | 2 | in-progress (built 2026-08-31; device acceptance pending — API deployed 2026-09-02, INS-090 done) | INS-086 |
-| `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*`, `POST /inspections/:id/submit` | `INSPECTOR` ✅ | 3 | in-progress (built 2026-08-31: guided camera + offline queue + submit gate; device acceptance pending — API deployed 2026-09-02, INS-090 done) | INS-086 |
+| `/inspections/[id]/populate` | `/inspections/[id]/capture` | `GET/POST /inspections/:id/populate/*`, `POST /inspections/:id/submit` | `INSPECTOR` ✅ | 3 | in-progress (built 2026-08-31: guided camera + offline queue + submit gate; **hardened 2026-09-04, INS-093**: frontier-only navigation, queued retakes, background uploads w/ progress + timeouts + backoff, on-device cache until submit, finishing sheet on End loop, gallery; **emulator pass 2026-09-04 green**: capture → retake → gate → discard → submit → review) | INS-086, INS-093 |
 | `/dashboard` | `/dashboard` + `/companies` | `GET /dashboard/summary`, `GET /companies` | `QA_MANAGER` | 4 | in-progress (built 2026-09-02: KPI hub + the directory SPLIT to its own `/companies` screen — search/kind/archived filters, load-more; directory is read-only v1: create/edit/archive land with `/companies/[id]`; device acceptance pending — API deployed 2026-09-02, INS-090 done; INS-091 2026-09-04: directory can create a company via the quick-create sheet → `/companies/[id]`) | INS-086 |
 | `/inspections/new` | `/inspections/new` | `POST /inspections`, `GET /inspections/aql-preview` | `QA_MANAGER` | 4 | in-progress (built 2026-08-31: PO/preset/inspector pickers, live AQL preview, idempotent create; device acceptance pending — API deployed 2026-09-02, INS-090 done; INS-091 2026-09-04: PO quick-create in place (nested company/product sheets), no dead-end empty state, client default preset honoured) | INS-086 |
 | `/inspections/[id]/review` | `/inspections/[id]/review` | `POST /inspections/:id/decision` | view: any · decide: `QA_MANAGER` | 4 | in-progress (built 2026-08-31: AQL result, submit-for-review, decision form, linked re-inspection; device acceptance pending — API deployed 2026-09-02, INS-090 done) | INS-086 |

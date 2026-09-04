@@ -54,6 +54,19 @@ These follow from the domain invariants in the root `CLAUDE.md`; they are the mo
   chain is the tamper-proof guarantee.
 - **Never compute an AQL verdict on the device.** The engine is server-side and its result is what gets
   signed. The app displays; the API decides.
+- **The loop only moves forward by capturing (INS-093).** The cursor may stand on a slot that holds
+  evidence or on exactly one empty slot — the `frontier`, which mirrors the server's `nextSlot` rule with
+  the device's photos overlaid. There is no "next" that opens an empty slot without a shot; that is how
+  a unit ends up with a hole the end gate then refuses. Rules: `slotSequence`/`frontier` in
+  `apps/mobile/src/lib/capture-core.ts`.
+- **A retake is a queued capture, never a synchronous call (INS-093).** A capture carries an `intent`:
+  `fill` (slot believed empty → a 409 is a human-resolved conflict) or `replace` (deliberate retake → the
+  filled slot is expected and replaced via the INS-081 retake endpoint, never a conflict). The shutter
+  must never wait on the network.
+- **Photos stay on the device until the loop ends (INS-093).** An uploaded entry becomes an `uploaded`
+  cache record whose bytes are kept — and served local-first, hash-matched against the server's
+  `contentHash` — until the inspection is submitted or found locked. Delete on register is a data-loss
+  path (the server copy is the only copy the moment the device is offline again).
 
 ## The packages already exist
 
