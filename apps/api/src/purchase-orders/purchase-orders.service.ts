@@ -115,6 +115,10 @@ export class PurchaseOrdersService {
           totalQuantity: input.totalQuantity,
           createdByUserId: actor.userId,
         },
+        // INS-091: the create answers with the SAME shape as list/get, so a
+        // picker that just created this PO can show its parties (and read the
+        // client's defaultLoopPresetId) without a second round trip.
+        include: { clientCompany: true, factoryCompany: true, product: true },
       });
       await this.audit.append(
         {

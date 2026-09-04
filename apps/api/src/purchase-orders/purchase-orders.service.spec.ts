@@ -229,6 +229,9 @@ describe('PurchaseOrdersService.create write', () => {
         productId: VALID.productId,
         createdByUserId: ACTOR.userId,
       }),
+      // INS-091: create answers in the list/get shape so a picker that just
+      // created the PO can show its parties without a second round trip.
+      include: { clientCompany: true, factoryCompany: true, product: true },
     });
   });
 
