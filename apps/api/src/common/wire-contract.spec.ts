@@ -114,6 +114,10 @@ const COMPUTED = new Set([
 const DECORATIONS: Record<string, string[]> = {
   // Relation counts on list rows (INS-005).
   '*': ['_count'],
+  // Per-trade-role split of the same edges, computed in CompaniesService.list
+  // (INS-087). CompanyDto lives in dtos.ts, outside this spec's scan today;
+  // registered so the field is already explained if that file is folded in.
+  CompanyDto: ['roleCounts'],
   // Short-lived presigned GET decorated onto reads (INS-049/052/072).
   PhotoDto: ['viewUrl'],
   PresetItemDto: ['referenceImage'],

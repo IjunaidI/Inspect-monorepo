@@ -4,7 +4,11 @@
  */
 export { ROLE_RANK, roleAtLeast } from './roles';
 export { hashIndex, initialsFrom } from './text';
-export { rankCompaniesByActivity } from './company-ranking';
+export {
+  rankCompaniesByActivity,
+  type CompanyTradeRole,
+  type RankableCompany,
+} from './company-ranking';
 export { filterOptions } from './filter-options';
 export { reportNumber } from './report-number';
 export {

@@ -35,6 +35,16 @@ type ReportRow = {
 
 const DEFAULT_WEB_BASE_URL = 'http://localhost:3001';
 
+/**
+ * INS-089: the person who generated the report, decorated onto every report read
+ * the consoles render (`ReportDto.generatedBy`). An unsigned row relation — it
+ * names who stood behind the act and lives OUTSIDE canonicalSnapshot, so a
+ * later rename of the user cannot touch the hash or the signature.
+ */
+const GENERATED_BY_SELECT = {
+  generatedBy: { select: { id: true, name: true, email: true } },
+} as const;
+
 /** TTL of a presigned report-PDF URL — short, because the link is handed out. */
 const REPORT_PDF_URL_TTL_SECONDS = 300;
 
@@ -113,7 +123,7 @@ export class ReportsService {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           include: { photos: true },
         },
-        report: true,
+        report: { include: GENERATED_BY_SELECT },
       },
     });
     if (!inspection) throw new NotFoundException('Inspection not found');
@@ -270,9 +280,13 @@ export class ReportsService {
             contentHash: hash,
             signature,
             status: 'GENERATED',
+            // INS-089: who generated it. Row metadata, not signed content — see
+            // GENERATED_BY_SELECT.
+            generatedByUserId: actor.userId,
             // pdfStorageKey is attached right after commit (INS-003): the signed
             // row is the product guarantee and must not depend on object storage.
           },
+          include: GENERATED_BY_SELECT,
         });
         await tx.inspection.update({
           where: { id: inspection.id },
@@ -303,6 +317,7 @@ export class ReportsService {
       ) {
         const existing = await this.prisma.report.findFirst({
           where: { inspectionId, orgId },
+          include: GENERATED_BY_SELECT,
         });
         if (existing) return existing;
       }
@@ -611,7 +626,7 @@ export class ReportsService {
   async getForOrg(orgId: string, reportId: string) {
     const report = await this.prisma.report.findFirst({
       where: { id: reportId, orgId },
-      include: { deliveries: true, accesses: true },
+      include: { deliveries: true, accesses: true, ...GENERATED_BY_SELECT },
     });
     if (!report) throw new NotFoundException('Report not found');
     return report;

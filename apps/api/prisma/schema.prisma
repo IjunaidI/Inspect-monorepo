@@ -221,6 +221,7 @@ model User {
   inspectionsAssigned Inspection[] @relation("InspectionAssignedInspector")
   photosUploaded      Photo[]      @relation("PhotoUploader")
   aqlDecisions        AqlResult[]  @relation("AqlDecidedBy")
+  reportsGenerated    Report[]     @relation("ReportGeneratedBy")
   auditLogs           AuditLog[]   @relation("AuditActorUser")
 
   @@index([orgId])
@@ -805,10 +806,17 @@ model Report {
   status            ReportStatus @default(GENERATED)
   deliveredAt       DateTime?
   generatedAt       DateTime     @default(now())
+  /// INS-089: the human who triggered generate() — the "signed by" line on the
+  /// branded report. An UNSIGNED row column, deliberately outside
+  /// canonicalSnapshot: the Ed25519 signature is the platform's, and this names
+  /// who stood behind the act, not what was signed. Nullable because reports
+  /// generated before INS-089 have no signer on record and are never backfilled.
+  generatedByUserId String?
 
   inspection    Inspection       @relation(fields: [inspectionId], references: [id], onDelete: Restrict)
   organization  Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
   clientCompany Company          @relation("ReportClient", fields: [clientCompanyId], references: [id], onDelete: Restrict)
+  generatedBy   User?            @relation("ReportGeneratedBy", fields: [generatedByUserId], references: [id], onDelete: SetNull)
   deliveries    ReportDelivery[]
   accesses      ReportAccess[]
 

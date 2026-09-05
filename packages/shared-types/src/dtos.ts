@@ -21,7 +21,6 @@ export interface RelationCounts {
   reports?: number;
 }
 
-
 export interface ProductDto {
   id: string;
   styleNumber: string;
@@ -92,6 +91,14 @@ export interface CompanyDto {
    * console and a future mobile client cannot each invent their own arithmetic.
    */
   _count?: RelationCounts;
+  /**
+   * INS-087: the same edges split by trade role, so a PO party picker can rank
+   * by how often the company played THAT role. `asClient` counts the
+   * `clientCompanyId` edges (POs + inspections), `asFactory` the
+   * `factoryCompanyId` ones; each sums to the matching `_count` figure.
+   * Decorated onto list rows only — never a column (spec §0 P3 rejected flags).
+   */
+  roleCounts?: { asClient: number; asFactory: number };
 }
 
 export interface CreateCompanyInput {

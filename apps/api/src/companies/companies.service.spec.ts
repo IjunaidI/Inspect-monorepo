@@ -165,10 +165,69 @@ describe('CompaniesService.list aggregates', () => {
     });
   });
 
+  /**
+   * INS-087: the SAME four edges, split by trade role instead of by entity. A
+   * PO party picker ranks on these so the Client picker and the Factory picker
+   * stop rendering identically ordered. The flattened `_count` above must stay
+   * exactly as it was — the directory renders it.
+   */
+  it('splits the four role-edge counts by trade role as roleCounts', async () => {
+    const { service } = makeListService([
+      {
+        id: 'c1',
+        name: 'ACME',
+        _count: {
+          poAsClient: 3,
+          poAsFactory: 2,
+          inspAsClient: 7,
+          inspAsFactory: 1,
+          reports: 4,
+        },
+      },
+    ]);
+    const [row] = (await service.list('orgA')) as any[];
+    expect(row.roleCounts).toEqual({ asClient: 10, asFactory: 3 });
+    // The split and the flatten are two views of one set of edges.
+    expect(row.roleCounts.asClient + row.roleCounts.asFactory).toBe(
+      row._count.purchaseOrders + row._count.inspections,
+    );
+  });
+
+  it('a pure-factory company has zero client activity, and vice versa', async () => {
+    const { service } = makeListService([
+      {
+        id: 'mill',
+        name: 'Mill',
+        _count: {
+          poAsClient: 0,
+          poAsFactory: 4,
+          inspAsClient: 0,
+          inspAsFactory: 2,
+          reports: 1,
+        },
+      },
+      {
+        id: 'brand',
+        name: 'Brand',
+        _count: {
+          poAsClient: 5,
+          poAsFactory: 0,
+          inspAsClient: 3,
+          inspAsFactory: 0,
+          reports: 2,
+        },
+      },
+    ]);
+    const [mill, brand] = (await service.list('orgA')) as any[];
+    expect(mill.roleCounts).toEqual({ asClient: 0, asFactory: 6 });
+    expect(brand.roleCounts).toEqual({ asClient: 8, asFactory: 0 });
+  });
+
   it('leaves a row without _count untouched', async () => {
     const { service } = makeListService([{ id: 'c1', name: 'ACME' }]);
     const [row] = (await service.list('orgA')) as any[];
     expect(row._count).toBeUndefined();
+    expect(row.roleCounts).toBeUndefined();
   });
 });
 

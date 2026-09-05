@@ -2,18 +2,37 @@
  * Picker ranking for the two PO party selects (INS-055 / INS-087).
  *
  * Spec §0 P3 replaced `canBeClient`/`canBeFactory` flags with "rank by how
- * often the company already played that role" — but the API flattens `_count`
- * across both edges, so per-role ranking is not yet possible (INS-087). Until
- * it is, rank by overall PO activity, then name. This is THE one place to
- * change when per-role counts land; ranking is a hint and every company stays
- * selectable in either slot.
+ * often the company already played that role". INS-087 delivers that: when a
+ * `role` is given and the row carries the API's per-role `roleCounts`, rank by
+ * that role's count; otherwise (no role, or a row without `roleCounts`) rank
+ * by overall PO activity exactly as before. Name is always the final tiebreak.
+ *
+ * Ranking is a hint — every company stays selectable in either slot.
  */
-export function rankCompaniesByActivity<
-  T extends { name: string; _count?: { purchaseOrders?: number } },
->(companies: readonly T[]): T[] {
+export type CompanyTradeRole = 'client' | 'factory';
+
+export interface RankableCompany {
+  name: string;
+  _count?: { purchaseOrders?: number };
+  roleCounts?: { asClient: number; asFactory: number };
+}
+
+function activityScore(row: RankableCompany, role?: CompanyTradeRole): number {
+  if (role && row.roleCounts) {
+    return role === 'client'
+      ? row.roleCounts.asClient
+      : row.roleCounts.asFactory;
+  }
+  return row._count?.purchaseOrders ?? 0;
+}
+
+export function rankCompaniesByActivity<T extends RankableCompany>(
+  companies: readonly T[],
+  role?: CompanyTradeRole,
+): T[] {
   return [...companies].sort(
     (a, b) =>
-      (b._count?.purchaseOrders ?? 0) - (a._count?.purchaseOrders ?? 0) ||
+      activityScore(b, role) - activityScore(a, role) ||
       a.name.localeCompare(b.name),
   );
 }

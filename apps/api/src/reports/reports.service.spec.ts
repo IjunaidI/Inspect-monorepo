@@ -447,8 +447,11 @@ describe('ReportsService.generate — idempotency (INS-019)', () => {
     });
     const out = await service.generate('org1', OWNER, 'insp1');
     expect(out).toMatchObject({ id: 'rep-race' });
+    // The race-winner comes back with its signer resolved (INS-089), same as
+    // every other report read — the loser's caller sees an identical shape.
     expect(reportFindFirst).toHaveBeenCalledWith({
       where: { inspectionId: 'insp1', orgId: 'org1' },
+      include: { generatedBy: { select: { id: true, name: true, email: true } } },
     });
   });
 
@@ -497,6 +500,37 @@ describe('ReportsService.generate — audit attribution (INS-019)', () => {
         actorUserId: 'u-admin',
       }),
       expect.anything(),
+    );
+  });
+
+  // INS-089: the branded report's "signed by" line names the person who
+  // generated it. That is row metadata on Report, never part of the signed
+  // envelope — a later rename of the user must not invalidate the signature.
+  it('persists the acting user as generatedByUserId, outside the signed snapshot', async () => {
+    const { service, created } = makeService();
+    await service.generate('org1', OWNER, 'insp1');
+    expect(created).toHaveBeenCalledTimes(1);
+    const arg = created.mock.calls[0][0] as {
+      data: { generatedByUserId: string; canonicalSnapshot: unknown };
+      include: unknown;
+    };
+    expect(arg.data.generatedByUserId).toBe('u-owner');
+    expect(arg.data.canonicalSnapshot).not.toHaveProperty('generatedByUserId');
+    expect(arg.data.canonicalSnapshot).not.toHaveProperty('generatedBy');
+    // The created row is read back with the signer resolved, so the response
+    // to POST /inspections/:id/report can show a name without a second call.
+    expect(arg.include).toEqual({
+      generatedBy: { select: { id: true, name: true, email: true } },
+    });
+  });
+
+  it('records the admin as generatedByUserId when generating inside an assumed org', async () => {
+    const { service, created } = makeService();
+    await service.generate('org1', ADMIN_IN_ORG, 'insp1');
+    expect(created).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ generatedByUserId: 'u-admin' }),
+      }),
     );
   });
 

@@ -313,7 +313,11 @@ export interface PhotoDto {
   cycleIndex: number;
   capturedAt?: string | null;
   clientRequestId?: string | null;
-  /** Short-lived presigned GET URL (INS-049) — present on GET /inspections/:id; null when presign fails. */
+  /**
+   * Short-lived presigned GET URL (INS-049). Decorated by the populate read
+   * (GET /inspections/:id/populate) and the report reads; the plain
+   * GET /inspections/:id does NOT carry it. Null when presign fails.
+   */
   viewUrl?: string | null;
 }
 
@@ -367,11 +371,12 @@ export interface ReportDto {
   signature?: string | null;
   pdfStorageKey?: string | null;
   generatedAt: string;
-  // NO `generatedBy`: the Report model has no generatedByUserId column, so the
-  // API has never been able to send one. It was declared here anyway, and the
-  // console's report page read `report.generatedBy?.name` into the tamper-proof
-  // block's "signed by" — which therefore rendered an em-dash on every report.
-  // Recording and showing the signer is INS-089, and needs a schema change.
+  /**
+   * INS-089: who generated the report — the "signed by" line. Backed by
+   * `Report.generatedByUserId` and resolved on every report read. `null` for
+   * reports generated before the column existed (never backfilled).
+   */
+  generatedBy?: { id: string; name: string | null; email: string } | null;
 }
 
 /** GET /reports row (INS-062) — list metadata only, never canonicalSnapshot. */

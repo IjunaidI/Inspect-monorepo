@@ -157,11 +157,17 @@ interface RoleEdgeCounts {
 }
 
 /**
- * Collapse the four role-edge counts into the two numbers the wire DTO carries.
+ * Collapse the four role-edge counts into the two numbers the wire DTO carries,
+ * and (INS-087) ALSO split the same four edges by trade role as `roleCounts`.
  *
  * Done server-side ON PURPOSE: `Company` plays both trade roles, so a client
  * that summed these itself would be re-implementing a domain rule. One place,
  * one answer, for the console and the future mobile app alike.
+ *
+ * `roleCounts.asClient` sums the `clientCompanyId` edges (POs + inspections),
+ * `asFactory` the `factoryCompanyId` ones — so
+ * `asClient + asFactory === _count.purchaseOrders + _count.inspections`. The
+ * flattened `_count` is unchanged: the directory renders it.
  */
 function flattenCounts<T extends { _count?: RoleEdgeCounts }>(row: T) {
   if (!row._count) return row;
@@ -172,6 +178,10 @@ function flattenCounts<T extends { _count?: RoleEdgeCounts }>(row: T) {
       purchaseOrders: c.poAsClient + c.poAsFactory,
       inspections: c.inspAsClient + c.inspAsFactory,
       reports: c.reports,
+    },
+    roleCounts: {
+      asClient: c.poAsClient + c.inspAsClient,
+      asFactory: c.poAsFactory + c.inspAsFactory,
     },
   };
 }
