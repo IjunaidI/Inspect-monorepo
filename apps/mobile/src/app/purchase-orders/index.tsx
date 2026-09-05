@@ -1,15 +1,18 @@
 /**
  * Purchase orders list (INS-086 Phase 4) — port of the web `/purchase-orders`
- * list. Role floor QA_MANAGER. The API's list takes no query params (no
- * search/paging exists in the stack for POs — a recorded gap, not something
- * to invent client-side); the demo-data fallback is not ported.
+ * list. Role floor QA_MANAGER. The API's list takes no query params, so
+ * search and paging are CLIENT-SIDE over the fully-loaded list (INS-092):
+ * the shared `filterOptions` (same tokenised match the pickers use) over
+ * PO number, both parties and the style number, and a "Show more" window
+ * so a long list does not render every row at once. The demo-data fallback
+ * is not ported.
  */
 import { ApiError } from '@inspect/api-client';
 import { palette } from '@inspect/design-tokens';
-import { roleAtLeast } from '@inspect/domain';
+import { filterOptions, roleAtLeast } from '@inspect/domain';
 import type { PurchaseOrderDto } from '@inspect/shared-types';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,12 +20,17 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { TextButton } from '@/components/ui';
 import { client, loadIdentity, signOut } from '@/lib/session';
+
+/** Rows shown before the first "Show more". */
+const PAGE_SIZE = 30;
 
 type Load =
   | { kind: 'rows'; rows: PurchaseOrderDto[] }
@@ -50,9 +58,20 @@ async function fetchPos(): Promise<Load> {
   }
 }
 
+/** Everything a person might type to find a PO. */
+const searchLabel = (po: PurchaseOrderDto) =>
+  [
+    po.poNumber,
+    po.clientCompany?.name ?? '',
+    po.factoryCompany?.name ?? '',
+    po.product?.styleNumber ?? '',
+  ].join(' ');
+
 export default function PurchaseOrders() {
   const router = useRouter();
   const [rows, setRows] = useState<PurchaseOrderDto[] | null>(null);
+  const [q, setQ] = useState('');
+  const [shown, setShown] = useState(PAGE_SIZE);
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,6 +107,15 @@ export default function PurchaseOrders() {
     setRefreshing(false);
   }, [apply]);
 
+  const filtered = useMemo(() => filterOptions(q, rows ?? [], searchLabel), [q, rows]);
+  const visible = filtered.slice(0, shown);
+  const hasMore = filtered.length > shown;
+
+  function search(next: string) {
+    setQ(next);
+    setShown(PAGE_SIZE);
+  }
+
   if (forbidden) {
     return (
       <SafeAreaView style={styles.screen}>
@@ -107,23 +135,37 @@ export default function PurchaseOrders() {
         <BackButton fallbackHref="/dashboard" />
         <View style={styles.headerRow}>
           <Text style={styles.title}>Purchase orders</Text>
-          <Pressable onPress={() => router.push('/purchase-orders/new')} hitSlop={8}>
+          <Pressable
+            onPress={() => router.push('/purchase-orders/new')}
+            hitSlop={8}
+            style={styles.newButton}
+            accessibilityRole="button"
+          >
             <Text style={styles.newLink}>New</Text>
           </Pressable>
         </View>
         {rows !== null ? (
           <Text style={styles.subtitle}>
-            {rows.length} purchase order{rows.length === 1 ? '' : 's'}
+            {filtered.length} purchase order{filtered.length === 1 ? '' : 's'}
+            {q.trim() ? ` matching “${q.trim()}”` : ''}
           </Text>
         ) : null}
+        <TextInput
+          style={styles.search}
+          value={q}
+          onChangeText={search}
+          placeholder="Search PO number, client, factory or style…"
+          placeholderTextColor={palette.faint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+        />
       </View>
 
       {error ? (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>{error}</Text>
-          <Pressable onPress={refresh} hitSlop={8}>
-            <Text style={styles.retry}>Retry</Text>
-          </Pressable>
+          <TextButton label="Retry" onPress={refresh} labelStyle={styles.retry} />
         </View>
       ) : null}
 
@@ -133,8 +175,9 @@ export default function PurchaseOrders() {
         </View>
       ) : (
         <FlatList
-          data={rows ?? []}
+          data={visible}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -142,12 +185,29 @@ export default function PurchaseOrders() {
               tintColor={palette.accent}
             />
           }
-          contentContainerStyle={rows?.length ? styles.list : styles.listEmpty}
+          contentContainerStyle={visible.length ? styles.list : styles.listEmpty}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             error ? null : (
-              <Text style={styles.empty}>No purchase orders yet. Add one with “New”.</Text>
+              <Text style={styles.empty}>
+                {q.trim()
+                  ? `No purchase orders match “${q.trim()}”.`
+                  : 'No purchase orders yet. Add one with “New”.'}
+              </Text>
             )
+          }
+          ListFooterComponent={
+            hasMore ? (
+              <Pressable
+                style={styles.loadMore}
+                onPress={() => setShown((n) => n + PAGE_SIZE)}
+                accessibilityRole="button"
+              >
+                <Text style={styles.loadMoreLabel}>
+                  Show more · {filtered.length - shown} remaining
+                </Text>
+              </Pressable>
+            ) : null
           }
           renderItem={({ item }) => (
             <Pressable
@@ -181,7 +241,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: palette.line,
     backgroundColor: palette.panel,
-    gap: 4,
+    gap: 8,
   },
   headerRow: {
     flexDirection: 'row',
@@ -189,8 +249,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
+  newButton: { minHeight: 44, justifyContent: 'center', paddingLeft: 12 },
   newLink: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   subtitle: { color: palette.sub, fontSize: 13 },
+  search: {
+    height: 40,
+    borderWidth: 1,
+    borderColor: palette.line,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: palette.ink,
+    backgroundColor: palette.bg,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -218,7 +289,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   noticeText: { color: palette.danger, fontSize: 13, flexShrink: 1 },
-  retry: { color: palette.accent, fontSize: 13, fontWeight: '600' },
+  retry: { fontSize: 13 },
   list: { padding: 16 },
   listEmpty: {
     flexGrow: 1,
@@ -239,4 +310,6 @@ const styles = StyleSheet.create({
   poNo: { color: palette.ink, fontSize: 16, fontWeight: '700' },
   rowSub: { color: palette.sub, fontSize: 13 },
   rowMeta: { color: palette.faint, fontSize: 12 },
+  loadMore: { alignItems: 'center', paddingVertical: 14, minHeight: 44 },
+  loadMoreLabel: { color: palette.accent, fontSize: 14, fontWeight: '600' },
 });

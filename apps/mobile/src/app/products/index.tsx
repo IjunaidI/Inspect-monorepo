@@ -25,6 +25,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { Chip, TextButton } from '@/components/ui';
 import { client, loadIdentity, signOut } from '@/lib/session';
 
 const PAGE_SIZE = 50;
@@ -58,19 +59,6 @@ async function fetchProducts(q: string, view: ViewFilter, skip: number): Promise
         e instanceof ApiError ? e.message : 'Could not reach the Inspect API. Pull to retry.',
     };
   }
-}
-
-function Chip(props: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={props.onPress}
-      style={[styles.filterChip, props.active && styles.filterChipActive]}
-    >
-      <Text style={[styles.filterChipLabel, props.active && styles.filterChipLabelActive]}>
-        {props.label}
-      </Text>
-    </Pressable>
-  );
 }
 
 export default function Products() {
@@ -154,7 +142,12 @@ export default function Products() {
         <BackButton fallbackHref="/dashboard" />
         <View style={styles.headerRow}>
           <Text style={styles.title}>Products</Text>
-          <Pressable onPress={() => router.push('/products/new')} hitSlop={8}>
+          <Pressable
+            onPress={() => router.push('/products/new')}
+            hitSlop={8}
+            style={styles.newButton}
+            accessibilityRole="button"
+          >
             <Text style={styles.newLink}>New</Text>
           </Pressable>
         </View>
@@ -175,18 +168,21 @@ export default function Products() {
           returnKeyType="search"
         />
         <View style={styles.filterRow}>
-          <Chip label="Active" active={view === 'active'} onPress={() => setView('active')} />
-          <Chip label="All" active={view === 'all'} onPress={() => setView('all')} />
-          <Chip label="Archived" active={view === 'archived'} onPress={() => setView('archived')} />
+          <Chip tone="bg" label="Active" active={view === 'active'} onPress={() => setView('active')} />
+          <Chip tone="bg" label="All" active={view === 'all'} onPress={() => setView('all')} />
+          <Chip
+            tone="bg"
+            label="Archived"
+            active={view === 'archived'}
+            onPress={() => setView('archived')}
+          />
         </View>
       </View>
 
       {error ? (
         <View style={styles.notice}>
           <Text style={styles.noticeText}>{error}</Text>
-          <Pressable onPress={refresh} hitSlop={8}>
-            <Text style={styles.retry}>Retry</Text>
-          </Pressable>
+          <TextButton label="Retry" onPress={refresh} labelStyle={styles.retry} />
         </View>
       ) : null}
 
@@ -263,6 +259,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
+  newButton: { minHeight: 44, justifyContent: 'center', paddingLeft: 12 },
   newLink: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   subtitle: { color: palette.sub, fontSize: 13 },
   search: {
@@ -276,20 +273,6 @@ const styles = StyleSheet.create({
     backgroundColor: palette.bg,
   },
   filterRow: { flexDirection: 'row', gap: 6 },
-  filterChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: palette.line,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    backgroundColor: palette.bg,
-  },
-  filterChipActive: {
-    backgroundColor: palette.accentSoft,
-    borderColor: palette.accent,
-  },
-  filterChipLabel: { color: palette.sub, fontSize: 12.5, fontWeight: '600' },
-  filterChipLabelActive: { color: palette.accent },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -317,7 +300,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   noticeText: { color: palette.danger, fontSize: 13, flexShrink: 1 },
-  retry: { color: palette.accent, fontSize: 13, fontWeight: '600' },
+  retry: { fontSize: 13 },
   list: { padding: 16 },
   listEmpty: {
     flexGrow: 1,
@@ -339,6 +322,6 @@ const styles = StyleSheet.create({
   styleNo: { color: palette.ink, fontSize: 16, fontWeight: '700' },
   rowSub: { color: palette.sub, fontSize: 13, lineHeight: 18 },
   rowMeta: { color: palette.faint, fontSize: 12 },
-  loadMore: { alignItems: 'center', paddingVertical: 14 },
+  loadMore: { alignItems: 'center', paddingVertical: 14, minHeight: 44 },
   loadMoreLabel: { color: palette.accent, fontSize: 14, fontWeight: '600' },
 });

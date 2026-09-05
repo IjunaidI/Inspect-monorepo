@@ -4,14 +4,18 @@
  *
  * INS-055: both party pickers are fed by the SAME company list — trade role
  * is a property of this PO, not of the company. Ranking comes from the shared
- * `rankCompaniesByActivity` (INS-087: per-role ranking waits on per-role
- * counts). Self-dealing (client === factory) is pre-checked here as UX and
+ * `rankCompaniesByActivity`, ranked per trade role since INS-087 (the Client
+ * picker floats recent clients, the Factory picker recent factories). Self-dealing (client === factory) is pre-checked here as UX and
  * enforced by the API's 400. Unlike the web form, a failed picker load is a
  * real error with retry — never silently empty selects.
  *
  * INS-091: every picker is searchable and ends in "+ Add new…" — a company or
  * product is created in a sheet, appended and selected; nothing typed here is
  * lost. The lists live in state so they can grow.
+ *
+ * INS-092: the two lists load independently (`fetchMissing`) — when one
+ * fails, Retry asks only for that one and the other is kept. Pull-to-refresh
+ * re-fetches both without touching the form. Create confirms with a toast.
  */
 import { ApiError } from '@inspect/api-client';
 import { palette } from '@inspect/design-tokens';
@@ -23,53 +27,66 @@ import type {
   PurchaseOrderDto,
 } from '@inspect/shared-types';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { OptionPicker } from '@/components/option-picker';
 import { BackButton } from '@/components/back-button';
 import { FormScreen } from '@/components/form-screen';
+import { OptionPicker } from '@/components/option-picker';
 import { describeCreateError } from '@/components/quick-create-sheet';
 import { QuickCreateCompanySheet } from '@/components/quick-create/company';
 import { QuickCreateProductSheet } from '@/components/quick-create/product';
+import { useToast } from '@/components/toast';
+import { Button, Field, Input, TextButton, ui } from '@/components/ui';
+import { fetchMissing, isComplete } from '@/lib/fetch-missing';
 import { client, loadIdentity } from '@/lib/session';
+
+type Lists = { companies: CompanyDto[]; products: ProductDto[] };
+const LIST_KEYS: (keyof Lists)[] = ['companies', 'products'];
+const LIST_LABEL: Record<keyof Lists, string> = { companies: 'companies', products: 'products' };
+
+const fetchers = {
+  companies: () => client.get<CompanyDto[]>('/companies'),
+  products: () => client.get<ProductDto[]>('/products'),
+};
 
 type Load =
   | { kind: 'loading' }
   | { kind: 'forbidden' }
-  | { kind: 'error'; message: string }
-  | { kind: 'ready'; companies: CompanyDto[]; products: ProductDto[] };
+  | { kind: 'error'; message: string; missing: (keyof Lists)[] }
+  | { kind: 'ready' };
 
-/** Pure fetch — setState only ever happens in .then. */
-async function fetchFormData(): Promise<Load> {
+/**
+ * Pure fetch — fetches only the lists `have` lacks and reports which are
+ * still missing; setState only ever happens in .then.
+ */
+async function fetchFormData(
+  have: Partial<Lists>,
+): Promise<{ values: Partial<Lists>; load: Load }> {
   const identity = await loadIdentity();
-  if (!roleAtLeast(identity?.role, 'QA_MANAGER')) return { kind: 'forbidden' };
-  try {
-    const [companies, products] = await Promise.all([
-      client.get<CompanyDto[]>('/companies'),
-      client.get<ProductDto[]>('/products'),
-    ]);
-    return {
-      kind: 'ready',
-      companies: rankCompaniesByActivity(companies),
-      products,
-    };
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
-    return {
-      kind: 'error',
-      message: e instanceof Error ? e.message : 'Load failed',
-    };
+  if (!roleAtLeast(identity?.role, 'QA_MANAGER')) return { values: have, load: { kind: 'forbidden' } };
+  const { values, failures } = await fetchMissing<Lists>(have, fetchers);
+  if (failures.length === 0) return { values, load: { kind: 'ready' } };
+  if (failures.some((f) => f.error instanceof ApiError && f.error.status === 403)) {
+    return { values, load: { kind: 'forbidden' } };
   }
+  return {
+    values,
+    load: {
+      kind: 'error',
+      message: describeCreateError(failures[0].error, 'Load failed'),
+      missing: failures.map((f) => f.key),
+    },
+  };
 }
 
 export default function NewPurchaseOrder() {
   const router = useRouter();
+  const toast = useToast();
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   // Seeded from the load, then grown by the quick-create sheets.
-  const [companies, setCompanies] = useState<CompanyDto[]>([]);
-  const [products, setProducts] = useState<ProductDto[]>([]);
+  const [lists, setLists] = useState<Partial<Lists>>({});
   const [creating, setCreating] = useState<'client' | 'factory' | 'product' | null>(null);
   const [poNumber, setPoNumber] = useState('');
   const [clientCo, setClientCo] = useState<CompanyDto | null>(null);
@@ -79,20 +96,39 @@ export default function NewPurchaseOrder() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAndApply = useCallback(() => {
-    fetchFormData().then((result) => {
-      setLoad(result);
-      if (result.kind === 'ready') {
-        setCompanies(result.companies);
-        setProducts(result.products);
-      }
+  const fetchAndApply = useCallback((have: Partial<Lists>) => {
+    return fetchFormData(have).then((result) => {
+      setLists(result.values);
+      setLoad(result.load);
+      return result;
     });
   }, []);
-  useEffect(fetchAndApply, [fetchAndApply]);
-  const reload = useCallback(() => {
-    setLoad({ kind: 'loading' });
-    fetchAndApply();
+  useEffect(() => {
+    void fetchAndApply({});
   }, [fetchAndApply]);
+
+  /** Retry: only what is missing. */
+  function reload() {
+    setLoad({ kind: 'loading' });
+    void fetchAndApply(lists);
+  }
+
+  /** Pull-to-refresh: everything, but never flip a working form to an error. */
+  async function refresh() {
+    const result = await fetchFormData({});
+    if (result.load.kind === 'ready') setLists(result.values);
+    else toast('Could not refresh the lists', { tone: 'danger' });
+  }
+
+  const clientCompanies = useMemo(
+    () => rankCompaniesByActivity(lists.companies ?? [], 'client'),
+    [lists.companies],
+  );
+  const factoryCompanies = useMemo(
+    () => rankCompaniesByActivity(lists.companies ?? [], 'factory'),
+    [lists.companies],
+  );
+  const products = lists.products ?? [];
 
   // Mirrors the API's 400 (spec §2.4) — saves a round trip and names the
   // problem next to the field. The server check stays the authority.
@@ -120,6 +156,7 @@ export default function NewPurchaseOrder() {
         ...(quantity !== undefined ? { totalQuantity: quantity } : {}),
       };
       const created = await client.post<PurchaseOrderDto>('/purchase-orders', body);
+      toast(`Purchase order ${created.poNumber} created`);
       router.replace(`/purchase-orders/${created.id}`);
     } catch (e) {
       setError(describeCreateError(e, 'Create failed'));
@@ -129,30 +166,35 @@ export default function NewPurchaseOrder() {
 
   if (load.kind === 'loading') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
     );
   }
 
-  if (load.kind !== 'ready') {
+  if (load.kind !== 'ready' || !isComplete(lists, LIST_KEYS)) {
+    const missing = load.kind === 'error' ? load.missing : LIST_KEYS;
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>
             {load.kind === 'forbidden'
               ? 'QA Manager access required'
-              : 'Could not load companies and products'}
+              : `Could not load ${missing.map((k) => LIST_LABEL[k]).join(' and ')}`}
           </Text>
-          {load.kind === 'error' ? <Text style={styles.mutedText}>{load.message}</Text> : null}
-          <View style={styles.centerActions}>
-            {load.kind === 'error' ? (
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            ) : null}
+          {load.kind === 'error' ? <Text style={ui.mutedText}>{load.message}</Text> : null}
+          {load.kind === 'error' && missing.length < LIST_KEYS.length ? (
+            <Text style={ui.hint}>
+              The {LIST_KEYS.filter((k) => !missing.includes(k))
+                .map((k) => LIST_LABEL[k])
+                .join(', ')}{' '}
+              loaded fine — Retry asks only for what is missing.
+            </Text>
+          ) : null}
+          <View style={ui.centerActions}>
+            {load.kind === 'error' ? <TextButton label="Retry" onPress={reload} /> : null}
             <BackButton label="Go back" />
           </View>
         </View>
@@ -161,26 +203,23 @@ export default function NewPurchaseOrder() {
   }
 
   return (
-    <FormScreen>
-      <Text style={styles.title}>New purchase order</Text>
+    <FormScreen onRefresh={refresh}>
+      <Text style={ui.title}>New purchase order</Text>
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>PO number *</Text>
-        <TextInput
-          style={styles.input}
+      <Field label="PO number *">
+        <Input
           value={poNumber}
           onChangeText={setPoNumber}
           placeholder="PO-2026-0001"
-          placeholderTextColor={palette.faint}
           autoCapitalize="characters"
           autoCorrect={false}
         />
-      </View>
+      </Field>
 
       <OptionPicker
         label="Client (receives the branded report) *"
         value={clientCo}
-        options={companies}
+        options={clientCompanies}
         display={(c) => c.name}
         placeholder="Select the client…"
         emptyText="No companies yet."
@@ -191,7 +230,7 @@ export default function NewPurchaseOrder() {
       <OptionPicker
         label="Factory (produces the goods) *"
         value={factoryCo}
-        options={companies}
+        options={factoryCompanies}
         display={(c) => c.name}
         placeholder="Select the factory…"
         emptyText="No companies yet."
@@ -200,7 +239,7 @@ export default function NewPurchaseOrder() {
         onSelect={setFactoryCo}
       />
       {selfDealing ? (
-        <Text style={styles.errorText}>
+        <Text style={ui.errorText}>
           Client and factory must differ — the same company cannot hold both roles on one PO.
         </Text>
       ) : null}
@@ -217,36 +256,34 @@ export default function NewPurchaseOrder() {
         onSelect={setProduct}
       />
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Total quantity (pcs)</Text>
-        <TextInput
-          style={[styles.input, !quantityValid && styles.inputInvalid]}
+      <Field
+        label="Total quantity (pcs)"
+        error={quantityValid ? null : 'Quantity must be a number of 1 or more.'}
+      >
+        <Input
+          invalid={!quantityValid}
           value={quantityText}
           onChangeText={setQuantityText}
           placeholder="Optional"
-          placeholderTextColor={palette.faint}
           keyboardType="number-pad"
         />
-        {!quantityValid ? (
-          <Text style={styles.errorText}>Quantity must be a number of 1 or more.</Text>
-        ) : null}
-      </View>
+      </Field>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={ui.errorText}>{error}</Text> : null}
 
-      <Pressable
-        style={[styles.button, (!ready || pending) && styles.buttonDisabled]}
+      <Button
+        label="Create purchase order"
+        loadingLabel="Creating…"
+        loading={pending}
+        disabled={!ready}
         onPress={create}
-        disabled={!ready || pending}
-      >
-        <Text style={styles.buttonLabel}>{pending ? 'Creating…' : 'Create purchase order'}</Text>
-      </Pressable>
+      />
 
       <QuickCreateCompanySheet
         visible={creating === 'client' || creating === 'factory'}
         onClose={() => setCreating(null)}
         onCreated={(c) => {
-          setCompanies((prev) => rankCompaniesByActivity([...prev, c]));
+          setLists((prev) => ({ ...prev, companies: [...(prev.companies ?? []), c] }));
           if (creating === 'client') setClientCo(c);
           if (creating === 'factory') setFactoryCo(c);
           setCreating(null);
@@ -256,7 +293,7 @@ export default function NewPurchaseOrder() {
         visible={creating === 'product'}
         onClose={() => setCreating(null)}
         onCreated={(p) => {
-          setProducts((prev) => [...prev, p]);
+          setLists((prev) => ({ ...prev, products: [...(prev.products ?? []), p] }));
           setProduct(p);
           setCreating(null);
         }}
@@ -264,48 +301,3 @@ export default function NewPurchaseOrder() {
     </FormScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
-  title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
-  field: { gap: 6 },
-  fieldLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  inputInvalid: { borderColor: palette.danger },
-  errorText: { color: palette.danger, fontSize: 13 },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
-});

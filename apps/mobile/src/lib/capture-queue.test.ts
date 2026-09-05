@@ -9,6 +9,7 @@ import {
   activeEntries,
   backoffMs,
   cachedUriForSlot,
+  classifyUploadError,
   createQueuedPhoto,
   enqueue,
   entryForSlot,
@@ -20,6 +21,7 @@ import {
   nextRetryDelay,
   parseQueue,
   queuedForSlot,
+  rearmRetryable,
   resolveConflictAsRetake,
   retryFailed,
   selectNextUpload,
@@ -282,5 +284,58 @@ describe('withTimeout', () => {
 
   it('passes a value through when it settles in time', async () => {
     await expect(withTimeout(Promise.resolve(42), 50, 'x')).resolves.toBe(42);
+  });
+});
+
+// ── Network handling: failure classes, offline pause, reconnect re-arm ──────
+
+
+describe('failure classification', () => {
+  it('server refusals (4xx) are permanent; 5xx/429/timeouts are transient', () => {
+    expect(classifyUploadError({ status: 400, message: 'bad' })).toBe('permanent');
+    expect(classifyUploadError({ status: 413, message: 'too large' })).toBe('permanent');
+    expect(classifyUploadError({ status: 500, message: 'boom' })).toBe('transient');
+    expect(classifyUploadError({ status: 429, message: 'slow down' })).toBe('transient');
+    expect(classifyUploadError({ name: 'TimeoutError', message: 'x timed out' })).toBe('transient');
+  });
+
+  it('a socket-level failure is offline when the network state is unknown or down', () => {
+    expect(classifyUploadError(new TypeError('Network request failed'))).toBe('offline');
+    expect(classifyUploadError(new TypeError('Network request failed'), false)).toBe('offline');
+    // The OS says we are online but the request still died: a hiccup, not an outage.
+    expect(classifyUploadError(new TypeError('Network request failed'), true)).toBe('transient');
+    expect(classifyUploadError(new Error('anything'), false)).toBe('offline');
+  });
+
+  it('missing bytes on disk are permanent — no retry can produce them', () => {
+    expect(classifyUploadError(new Error('The photo file is missing on this device'))).toBe(
+      'permanent',
+    );
+  });
+});
+
+describe('failed entries by kind', () => {
+  it('permanent failures never come due and are skipped by the drain', () => {
+    const p = make();
+    const q = markFailed(enqueue([], p), p.id, 'refused', 1_000, 'permanent');
+    expect(q[0].failureKind).toBe('permanent');
+    expect(uploadable(q, Number.MAX_SAFE_INTEGER - 1)).toHaveLength(0);
+    expect(nextRetryDelay(q, 1_000)).toBeNull();
+    expect(selectNextUpload(q, 10 ** 15)).toBeUndefined();
+  });
+
+  it('rearmRetryable wakes offline/transient failures but leaves permanent ones for a human', () => {
+    const off = make();
+    const tr = make({ inspectionLoopItemId: 'item-2' });
+    const perm = make({ inspectionLoopItemId: 'item-3' });
+    let q = [off, tr, perm];
+    q = markFailed(q, off.id, 'net', 0, 'offline');
+    q = markFailed(q, tr.id, '503', 0, 'transient');
+    q = markFailed(q, perm.id, '400', 0, 'permanent');
+    q = rearmRetryable(q);
+    expect(q.map((e) => e.state)).toEqual(['pending', 'pending', 'failed']);
+    // An explicit human retry re-arms everything, permanent included.
+    expect(retryFailed(q).every((e) => e.state === 'pending')).toBe(true);
+    expect(retryFailed(q).every((e) => e.failureKind === undefined)).toBe(true);
   });
 });

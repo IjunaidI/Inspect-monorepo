@@ -3,7 +3,6 @@
  * three pickers as /purchase-orders/new, each with its own "+ Add new…"
  * (one nested sheet). Lists are seeded by the host and grow locally.
  */
-import { palette } from '@inspect/design-tokens';
 import { rankCompaniesByActivity } from '@inspect/domain';
 import type {
   CompanyDto,
@@ -12,11 +11,13 @@ import type {
   PurchaseOrderDto,
 } from '@inspect/shared-types';
 import { useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text } from 'react-native';
 
 import { OptionPicker } from '@/components/option-picker';
+import { useToast } from '@/components/toast';
+import { Button, Field, Input, ui } from '@/components/ui';
 import { client } from '@/lib/session';
-import { QuickCreateSheet, describeCreateError, sheetStyles as s } from '../quick-create-sheet';
+import { QuickCreateSheet, describeCreateError } from '../quick-create-sheet';
 import { QuickCreateCompanySheet } from './company';
 import { QuickCreateProductSheet } from './product';
 
@@ -39,6 +40,7 @@ export function QuickCreatePurchaseOrderSheet({
   companies: CompanyDto[];
   products: ProductDto[];
 }) {
+  const toast = useToast();
   const [companies, setCompanies] = useState(initialCompanies);
   const [products, setProducts] = useState(initialProducts);
   const [poNumber, setPoNumber] = useState('');
@@ -50,7 +52,9 @@ export function QuickCreatePurchaseOrderSheet({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ranked = useMemo(() => rankCompaniesByActivity(companies), [companies]);
+  // INS-087: each picker ranks on its own trade role.
+  const rankedClients = useMemo(() => rankCompaniesByActivity(companies, 'client'), [companies]);
+  const rankedFactories = useMemo(() => rankCompaniesByActivity(companies, 'factory'), [companies]);
   const selfDealing = clientCo !== null && clientCo.id === factoryCo?.id;
   const quantity = quantityText.trim() === '' ? undefined : Number(quantityText);
   const quantityValid = quantity === undefined || (Number.isFinite(quantity) && quantity >= 1);
@@ -76,6 +80,7 @@ export function QuickCreatePurchaseOrderSheet({
       };
       const created = await client.post<PurchaseOrderDto>('/purchase-orders', body);
       onCreated(created);
+      toast(`Purchase order ${created.poNumber} created`);
     } catch (e) {
       setError(describeCreateError(e, 'Could not create the purchase order.'));
     } finally {
@@ -85,22 +90,19 @@ export function QuickCreatePurchaseOrderSheet({
 
   return (
     <QuickCreateSheet visible={visible} title="New purchase order" onClose={onClose}>
-      <View style={s.field}>
-        <Text style={s.fieldLabel}>PO number *</Text>
-        <TextInput
-          style={s.input}
+      <Field label="PO number *">
+        <Input
           value={poNumber}
           onChangeText={setPoNumber}
           placeholder="PO-2026-0001"
-          placeholderTextColor={palette.faint}
           autoCapitalize="characters"
           autoCorrect={false}
         />
-      </View>
+      </Field>
       <OptionPicker
         label="Client (receives the branded report) *"
         value={clientCo}
-        options={ranked}
+        options={rankedClients}
         display={companyLabel}
         placeholder="Select the client…"
         emptyText="No companies yet."
@@ -111,7 +113,7 @@ export function QuickCreatePurchaseOrderSheet({
       <OptionPicker
         label="Factory (produces the goods) *"
         value={factoryCo}
-        options={ranked}
+        options={rankedFactories}
         display={companyLabel}
         placeholder="Select the factory…"
         emptyText="No companies yet."
@@ -119,7 +121,7 @@ export function QuickCreatePurchaseOrderSheet({
         onCreate={() => setCreating('factory')}
         onSelect={setFactoryCo}
       />
-      {selfDealing ? <Text style={s.errorText}>Client and factory must differ.</Text> : null}
+      {selfDealing ? <Text style={ui.errorText}>Client and factory must differ.</Text> : null}
       <OptionPicker
         label="Product *"
         value={product}
@@ -131,28 +133,26 @@ export function QuickCreatePurchaseOrderSheet({
         onCreate={() => setCreating('product')}
         onSelect={setProduct}
       />
-      <View style={s.field}>
-        <Text style={s.fieldLabel}>Total quantity (pcs)</Text>
-        <TextInput
-          style={s.input}
+      <Field
+        label="Total quantity (pcs)"
+        error={quantityValid ? null : 'Quantity must be a number of 1 or more.'}
+      >
+        <Input
           value={quantityText}
           onChangeText={setQuantityText}
           placeholder="Optional"
-          placeholderTextColor={palette.faint}
           keyboardType="number-pad"
+          invalid={!quantityValid}
         />
-        {!quantityValid ? (
-          <Text style={s.errorText}>Quantity must be a number of 1 or more.</Text>
-        ) : null}
-      </View>
-      {error ? <Text style={s.errorText}>{error}</Text> : null}
-      <Pressable
-        style={[s.button, (!ready || pending) && s.buttonDisabled]}
+      </Field>
+      {error ? <Text style={ui.errorText}>{error}</Text> : null}
+      <Button
+        label="Create purchase order"
+        loadingLabel="Creating…"
+        loading={pending}
+        disabled={!ready}
         onPress={create}
-        disabled={!ready || pending}
-      >
-        <Text style={s.buttonLabel}>{pending ? 'Creating…' : 'Create purchase order'}</Text>
-      </Pressable>
+      />
 
       <QuickCreateCompanySheet
         visible={creating === 'client' || creating === 'factory'}

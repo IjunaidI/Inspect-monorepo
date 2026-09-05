@@ -8,26 +8,23 @@
  * told apart (the web maps both to notFound()), and delete sits behind a
  * native confirm (the web's danger button fires immediately). A PO
  * referenced by inspections comes back as the API's friendly 400.
+ *
+ * INS-092: pull-to-refresh reloads the record without discarding typed edits;
+ * saves confirm with a toast.
  */
 import { ApiError } from '@inspect/api-client';
-import { palette, severity as severityTint } from '@inspect/design-tokens';
+import { palette } from '@inspect/design-tokens';
 import { roleAtLeast } from '@inspect/domain';
 import type { PurchaseOrderDto, UpdatePurchaseOrderInput } from '@inspect/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { FormScreen } from '@/components/form-screen';
+import { useToast } from '@/components/toast';
+import { Button, Field, Input, TextButton, ui } from '@/components/ui';
 import { client, loadIdentity } from '@/lib/session';
 
 type Load =
@@ -58,6 +55,7 @@ async function fetchPo(id: string): Promise<Load> {
 
 export default function PurchaseOrderDetail() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const poId = String(id);
 
@@ -66,7 +64,6 @@ export default function PurchaseOrderDetail() {
   const [quantityText, setQuantityText] = useState('');
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [savedNote, setSavedNote] = useState(false);
 
   const apply = useCallback((result: Load) => {
     setLoad(result);
@@ -84,6 +81,13 @@ export default function PurchaseOrderDetail() {
     fetchPo(poId).then(apply);
   }, [poId, apply]);
 
+  /** Pull-to-refresh: update the record, keep whatever is being typed. */
+  async function refresh() {
+    const result = await fetchPo(poId);
+    if (result.kind === 'ready') setLoad(result);
+    else toast('Could not refresh the purchase order', { tone: 'danger' });
+  }
+
   async function save(po: PurchaseOrderDto) {
     const trimmed = (poNumber ?? '').trim();
     if (!trimmed) {
@@ -97,14 +101,13 @@ export default function PurchaseOrderDetail() {
     }
     setPending(true);
     setFormError(null);
-    setSavedNote(false);
     try {
       const body: UpdatePurchaseOrderInput = {
         poNumber: trimmed,
         ...(quantity !== undefined ? { totalQuantity: quantity } : {}),
       };
       await client.patch(`/purchase-orders/${po.id}`, body);
-      setSavedNote(true);
+      toast('Purchase order saved');
       reload();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Save failed');
@@ -128,6 +131,7 @@ export default function PurchaseOrderDetail() {
               setFormError(null);
               try {
                 await client.del(`/purchase-orders/${po.id}`);
+                toast(`${po.poNumber} deleted`, { tone: 'neutral' });
                 router.back();
               } catch (e) {
                 setFormError(e instanceof Error ? e.message : 'Delete failed');
@@ -143,8 +147,8 @@ export default function PurchaseOrderDetail() {
 
   if (load.kind === 'loading' || (load.kind === 'ready' && poNumber === null)) {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
@@ -153,22 +157,18 @@ export default function PurchaseOrderDetail() {
 
   if (load.kind !== 'ready') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>
             {load.kind === 'missing'
               ? 'Purchase order not found'
               : load.kind === 'forbidden'
                 ? 'QA Manager access required'
                 : 'Could not load the purchase order'}
           </Text>
-          {load.kind === 'error' ? <Text style={styles.mutedText}>{load.message}</Text> : null}
-          <View style={styles.centerActions}>
-            {load.kind === 'error' ? (
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            ) : null}
+          {load.kind === 'error' ? <Text style={ui.mutedText}>{load.message}</Text> : null}
+          <View style={ui.centerActions}>
+            {load.kind === 'error' ? <TextButton label="Retry" onPress={reload} /> : null}
             <BackButton label="Go back" />
           </View>
         </View>
@@ -179,8 +179,8 @@ export default function PurchaseOrderDetail() {
   const { po } = load;
 
   return (
-    <FormScreen>
-      <Text style={styles.title}>{po.poNumber}</Text>
+    <FormScreen onRefresh={refresh}>
+      <Text style={ui.title}>{po.poNumber}</Text>
 
       {/* INS-055: the two-party edge, frozen at create. */}
       <View style={styles.card}>
@@ -190,52 +190,43 @@ export default function PurchaseOrderDetail() {
         <MetaRow label="Product" value={po.product?.styleNumber ?? '—'} />
       </View>
 
-      {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
-      {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
+      {formError ? <Text style={ui.errorText}>{formError}</Text> : null}
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>PO number *</Text>
-        <TextInput
-          style={styles.input}
+      <Field label="PO number *">
+        <Input
           value={poNumber ?? ''}
           onChangeText={setPoNumber}
           autoCapitalize="characters"
           autoCorrect={false}
         />
-      </View>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Total quantity (pcs)</Text>
-        <TextInput
-          style={styles.input}
+      </Field>
+      <Field label="Total quantity (pcs)">
+        <Input
           value={quantityText}
           onChangeText={setQuantityText}
           placeholder="Optional"
-          placeholderTextColor={palette.faint}
           keyboardType="number-pad"
         />
-      </View>
+      </Field>
 
-      <Pressable
-        style={[styles.button, pending && styles.buttonDisabled]}
+      <Button
+        label="Save changes"
+        loadingLabel="Saving…"
+        loading={pending}
         onPress={() => save(po)}
-        disabled={pending}
-      >
-        <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
-      </Pressable>
+      />
 
-      <View style={styles.dangerCard}>
-        <Text style={styles.dangerTitle}>Delete purchase order</Text>
-        <Text style={styles.hint}>
+      <View style={ui.dangerCard}>
+        <Text style={ui.dangerTitle}>Delete purchase order</Text>
+        <Text style={ui.hint}>
           Permanent. Refused with a clear message when inspections reference this PO.
         </Text>
-        <Pressable
-          onPress={() => confirmDelete(po)}
+        <Button
+          variant="danger"
+          label="Delete"
           disabled={pending}
-          hitSlop={8}
-          style={styles.dangerButton}
-        >
-          <Text style={styles.dangerButtonLabel}>Delete</Text>
-        </Pressable>
+          onPress={() => confirmDelete(po)}
+        />
       </View>
     </FormScreen>
   );
@@ -253,20 +244,6 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
-  title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   card: {
     backgroundColor: palette.panel,
     borderColor: palette.line,
@@ -291,53 +268,4 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: 'right',
   },
-  errorText: { color: palette.danger, fontSize: 13 },
-  savedText: { color: palette.accent, fontSize: 13, fontWeight: '600' },
-  field: { gap: 6 },
-  fieldLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
-  dangerCard: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: severityTint.critical.bg,
-    backgroundColor: palette.panel,
-    borderRadius: 10,
-    padding: 14,
-    gap: 8,
-  },
-  dangerTitle: { color: palette.danger, fontSize: 14, fontWeight: '700' },
-  dangerButton: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: severityTint.critical.bg,
-    backgroundColor: severityTint.critical.bg,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  dangerButtonLabel: { color: palette.danger, fontSize: 13, fontWeight: '700' },
 });

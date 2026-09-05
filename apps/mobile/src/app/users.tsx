@@ -8,7 +8,9 @@
  *
  * Deliberate differences from the web screen, from the contract's gap list:
  * - Role-change / deactivate / reactivate errors render inline (the web
- *   uses alert()); mutations are non-optimistic — write, then reload.
+ *   uses alert()). INS-092: a role change is OPTIMISTIC — the row shows the
+ *   new role at once and rolls back (with the error inline) if the API
+ *   refuses; deactivate/reactivate stay write-then-reload.
  * - Avatar colours key on hashIndex(user.id), not the row index that made
  *   web colours change when filtering reordered rows.
  * - The invite link is composed from EXPO_PUBLIC_INSPECT_WEB_URL (no
@@ -29,18 +31,18 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { OptionPicker } from '@/components/option-picker';
 import { BackButton } from '@/components/back-button';
+import { OptionPicker } from '@/components/option-picker';
+import { useToast } from '@/components/toast';
+import { Button, Chip, Input, TextButton, ui } from '@/components/ui';
 import { WEB_URL } from '@/lib/config';
 import { client, loadIdentity, signOut, type Identity } from '@/lib/session';
 
@@ -100,6 +102,7 @@ type InviteSuccess = { token: string; email: string; emailSent: boolean };
 
 export default function Users() {
   const router = useRouter();
+  const toast = useToast();
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [filter, setFilter] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -139,16 +142,30 @@ export default function Users() {
     setRefreshing(false);
   }, [apply]);
 
+  /** Patch one roster row in place (optimistic update + its rollback). */
+  function patchUser(id: string, patch: Partial<UserDto>) {
+    setLoad((l) =>
+      l.kind === 'ready'
+        ? { ...l, users: l.users.map((u) => (u.id === id ? { ...u, ...patch } : u)) }
+        : l,
+    );
+  }
+
   async function changeRole(user: UserDto, role: UserRole) {
     if (role === user.role) return;
+    const previous = user.role;
+    // Optimistic: the row shows the new role immediately.
+    patchUser(user.id, { role });
     setRowPending(user.id);
     setActionError(null);
     try {
       await client.patch(`/users/${user.id}/role`, { role });
+      toast(`${user.name || user.email} is now ${ROLE_BADGE[role]?.label ?? role}`);
       reload();
     } catch (e) {
       // The API's ceiling, INS-058 last-owner guard and self-check all land
-      // here — surfaced inline, never an alert(), never optimistic.
+      // here — roll the row back and surface the reason inline, never alert().
+      patchUser(user.id, { role: previous });
       setActionError(e instanceof Error ? e.message : 'Role change failed');
     } finally {
       setRowPending(null);
@@ -174,6 +191,9 @@ export default function Users() {
               try {
                 if (deactivating) await client.del(`/users/${user.id}`);
                 else await client.patch(`/users/${user.id}/reactivate`, {});
+                toast(`${user.email} ${deactivating ? 'deactivated' : 'reactivated'}`, {
+                  tone: 'neutral',
+                });
                 reload();
               } catch (e) {
                 setActionError(e instanceof Error ? e.message : 'Update failed');
@@ -204,6 +224,7 @@ export default function Users() {
         emailSent: res.emailSent ?? false,
       });
       setInviteEmail('');
+      toast(res.emailSent ? `Invitation emailed to ${email}` : `${email} invited — share the link`);
       reload();
     } catch (e) {
       setInviteError(e instanceof Error ? e.message : 'Invite failed');
@@ -214,8 +235,8 @@ export default function Users() {
 
   if (load.kind === 'loading') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
@@ -224,24 +245,20 @@ export default function Users() {
 
   if (load.kind !== 'ready') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>
             {load.kind === 'forbidden' ? 'Org Owner access required' : 'Could not load users'}
           </Text>
-          <Text style={styles.mutedText}>
+          <Text style={ui.mutedText}>
             {load.kind === 'forbidden'
               ? 'User management is visible to Org Owners.'
               : load.kind === 'error'
                 ? load.message
                 : ''}
           </Text>
-          <View style={styles.centerActions}>
-            {load.kind === 'error' ? (
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            ) : null}
+          <View style={ui.centerActions}>
+            {load.kind === 'error' ? <TextButton label="Retry" onPress={reload} /> : null}
             <BackButton label="Go back" />
           </View>
         </View>
@@ -257,7 +274,7 @@ export default function Users() {
   const inviteLink = invited && WEB_URL ? `${WEB_URL}/invite?token=${invited.token}` : null;
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={ui.screen}>
       {/* INS-091: keyboard-safe like FormScreen; kept inline for the RefreshControl. */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -275,50 +292,40 @@ export default function Users() {
           }
         >
           <BackButton fallbackHref="/dashboard" />
-          <Text style={styles.title}>Team</Text>
+          <Text style={ui.title}>Team</Text>
           <Text style={styles.subtitle}>
             {users.length} member{users.length === 1 ? '' : 's'}
           </Text>
 
           {/* Invite */}
-          <View style={styles.card}>
+          <View style={ui.card}>
             <Text style={styles.sectionLabel}>Invite a team member</Text>
-            <TextInput
-              style={styles.input}
+            <Input
               value={inviteEmail}
               onChangeText={setInviteEmail}
               placeholder="teammate@org.example"
-              placeholderTextColor={palette.faint}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
             />
-            <View style={styles.chipRow}>
+            <View style={ui.chipRow}>
               {INVITABLE.map(({ role, label }) => (
-                <Pressable
+                <Chip
                   key={role}
+                  tone="bg"
+                  label={label}
+                  active={inviteRole === role}
                   onPress={() => setInviteRole(role)}
-                  style={[styles.roleChip, inviteRole === role && styles.roleChipActive]}
-                >
-                  <Text
-                    style={[
-                      styles.roleChipLabel,
-                      inviteRole === role && styles.roleChipLabelActive,
-                    ]}
-                  >
-                    {label}
-                  </Text>
-                </Pressable>
+                />
               ))}
             </View>
-            {inviteError ? <Text style={styles.errorText}>{inviteError}</Text> : null}
-            <Pressable
-              style={[styles.button, invitePending && styles.buttonDisabled]}
+            {inviteError ? <Text style={ui.errorText}>{inviteError}</Text> : null}
+            <Button
+              label="Invite"
+              loadingLabel="Sending…"
+              loading={invitePending}
               onPress={invite}
-              disabled={invitePending}
-            >
-              <Text style={styles.buttonLabel}>{invitePending ? 'Sending…' : 'Invite'}</Text>
-            </Pressable>
+            />
 
             {invited ? (
               <View style={styles.successBox}>
@@ -332,39 +339,34 @@ export default function Users() {
                     {inviteLink}
                   </Text>
                 ) : (
-                  <Text style={styles.hint}>
+                  <Text style={ui.hint}>
                     No console origin configured (EXPO_PUBLIC_INSPECT_WEB_URL) — copy the token and
                     append it to {'<console origin>/invite?token=…'}
                   </Text>
                 )}
-                <Pressable
+                <TextButton
+                  label={copied ? 'Copied ✓' : inviteLink ? 'Copy link' : 'Copy token'}
+                  labelStyle={styles.copyLink}
                   onPress={() => {
                     void Clipboard.setStringAsync(inviteLink ?? invited.token).then(() => {
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     });
                   }}
-                  hitSlop={8}
-                >
-                  <Text style={styles.copyLink}>
-                    {copied ? 'Copied ✓' : inviteLink ? 'Copy link' : 'Copy token'}
-                  </Text>
-                </Pressable>
+                />
               </View>
             ) : null}
           </View>
 
           {/* Roster */}
-          <TextInput
-            style={styles.input}
+          <Input
             value={filter}
             onChangeText={setFilter}
             placeholder="Filter by name or email…"
-            placeholderTextColor={palette.faint}
             autoCapitalize="none"
             autoCorrect={false}
           />
-          {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
+          {actionError ? <Text style={ui.errorText}>{actionError}</Text> : null}
           {visible.length === 0 ? (
             <Text style={styles.empty}>{q ? 'No users match your search.' : 'No users yet.'}</Text>
           ) : (
@@ -395,7 +397,7 @@ export default function Users() {
                     {/* Self-protection mirrors the API: no role change, no
                       deactivate on your own row. */}
                     {!you ? (
-                      <View style={styles.rowActions}>
+                      <View style={[styles.rowActions, pendingHere && styles.rowBusy]}>
                         <View style={{ flex: 1 }}>
                           <OptionPicker
                             label=""
@@ -406,25 +408,16 @@ export default function Users() {
                             onSelect={(r) => void changeRole(u, r.role)}
                           />
                         </View>
-                        <Pressable
-                          onPress={() => confirmToggleActive(u)}
+                        {/* INS-092: a 44pt-tall target, centred on the 44pt picker. */}
+                        <TextButton
+                          label={
+                            pendingHere ? '…' : u.status === 'DEACTIVATED' ? 'Reactivate' : 'Deactivate'
+                          }
+                          tone={u.status === 'DEACTIVATED' ? 'accent' : 'danger'}
+                          labelStyle={styles.rowActionLabel}
                           disabled={pendingHere}
-                          hitSlop={8}
-                        >
-                          <Text
-                            style={
-                              u.status === 'DEACTIVATED'
-                                ? styles.reactivateLink
-                                : styles.deactivateLink
-                            }
-                          >
-                            {pendingHere
-                              ? '…'
-                              : u.status === 'DEACTIVATED'
-                                ? 'Reactivate'
-                                : 'Deactivate'}
-                          </Text>
-                        </Pressable>
+                          onPress={() => confirmToggleActive(u)}
+                        />
                       </View>
                     ) : (
                       <View style={styles.selfBadgeRow}>
@@ -447,34 +440,8 @@ export default function Users() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: {
-    color: palette.sub,
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
-  title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   subtitle: { color: palette.sub, fontSize: 13 },
-  card: {
-    backgroundColor: palette.panel,
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 14,
-    gap: 10,
-  },
   sectionLabel: {
     color: palette.sub,
     fontSize: 11,
@@ -482,40 +449,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  chipRow: { flexDirection: 'row', gap: 8 },
-  roleChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: palette.line,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: palette.bg,
-  },
-  roleChipActive: {
-    backgroundColor: palette.accentSoft,
-    borderColor: palette.accent,
-  },
-  roleChipLabel: { color: palette.sub, fontSize: 12.5, fontWeight: '600' },
-  roleChipLabelActive: { color: palette.accent },
-  errorText: { color: palette.danger, fontSize: 13 },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 11,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
   successBox: {
     borderWidth: 1,
     borderColor: PASS_GREEN,
@@ -525,8 +458,7 @@ const styles = StyleSheet.create({
   },
   successText: { color: palette.ink, fontSize: 13, lineHeight: 18 },
   linkValue: { color: palette.sub, fontSize: 12 },
-  copyLink: { color: palette.accent, fontSize: 13, fontWeight: '600' },
-  hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
+  copyLink: { fontSize: 13 },
   empty: {
     color: palette.faint,
     fontSize: 14,
@@ -559,18 +491,8 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 6,
   },
-  deactivateLink: {
-    color: palette.danger,
-    fontSize: 13,
-    fontWeight: '600',
-    paddingBottom: 12,
-  },
-  reactivateLink: {
-    color: palette.accent,
-    fontSize: 13,
-    fontWeight: '600',
-    paddingBottom: 12,
-  },
+  rowBusy: { opacity: 0.6 },
+  rowActionLabel: { fontSize: 13 },
   selfBadgeRow: { flexDirection: 'row', marginTop: 6 },
   roleBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   roleBadgeLabel: { fontSize: 11.5, fontWeight: '600' },

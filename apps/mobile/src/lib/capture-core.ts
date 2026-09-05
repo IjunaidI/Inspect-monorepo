@@ -38,6 +38,17 @@ export type QueuedPhotoState = 'pending' | 'uploading' | 'conflict' | 'failed' |
  */
 export type CaptureIntent = 'fill' | 'replace';
 
+/**
+ * Why an upload failed, which decides what happens next.
+ *  - `offline`: no network at all — wait for the connection, no backoff needed.
+ *  - `transient`: the network or server hiccupped (timeout, 5xx, 429, DNS) —
+ *    retry on the backoff ladder.
+ *  - `permanent`: the server refused the request itself (4xx other than the
+ *    slot conflict) — retrying the same bytes cannot succeed; a human retakes
+ *    or discards.
+ */
+export type FailureKind = 'offline' | 'transient' | 'permanent';
+
 export interface QueuedPhoto {
   /** Local identity of the queue entry. */
   id: string;
@@ -65,6 +76,8 @@ export interface QueuedPhoto {
   uploadedAt?: string;
   /** Epoch ms before which a failed entry must not be retried (backoff). */
   nextAttemptAt?: number;
+  /** Set with `state: 'failed'`. */
+  failureKind?: FailureKind;
 }
 
 export interface CreateQueuedPhotoInput {
@@ -284,6 +297,7 @@ export function markFailed(
   id: string,
   error: string,
   now: number = Date.now(),
+  kind: FailureKind = 'transient',
 ): QueuedPhoto[] {
   return transition(queue, id, (q) => {
     const attempts = q.attempts + 1;
@@ -292,9 +306,59 @@ export function markFailed(
       state: 'failed',
       attempts,
       error,
-      nextAttemptAt: now + backoffMs(attempts),
+      failureKind: kind,
+      // Offline: nothing to back off from — the reconnect re-arms it. Permanent:
+      // never auto-retried. Transient: the ladder.
+      nextAttemptAt:
+        kind === 'permanent'
+          ? Number.MAX_SAFE_INTEGER
+          : kind === 'offline'
+            ? now + 5_000
+            : now + backoffMs(attempts),
     };
   });
+}
+
+/** Minimal error shape the classifier reads — an `Error`, an `ApiError`, or a string. */
+export interface ErrorLike {
+  name?: string;
+  message?: string;
+  status?: number;
+}
+
+/**
+ * Sort an upload error into what to do next. Offline/transient are retried
+ * automatically; permanent failures wait for a human.
+ */
+export function classifyUploadError(e: unknown, online: boolean | null = null): FailureKind {
+  const err: ErrorLike =
+    typeof e === 'string' ? { message: e } : ((e as ErrorLike | null) ?? {});
+  const status = typeof err.status === 'number' ? err.status : undefined;
+  if (status !== undefined) {
+    if (status === 408 || status === 425 || status === 429 || status >= 500) return 'transient';
+    if (status >= 400) return 'permanent';
+    return 'transient';
+  }
+  if (online === false) return 'offline';
+  const msg = `${err.name ?? ''} ${err.message ?? ''}`.toLowerCase();
+  if (/network request failed|failed to connect|unable to resolve host|enotfound|econnrefused|econnreset|network is unreachable|no address associated|software caused connection abort|socket/i.test(msg)) {
+    return online === null ? 'offline' : 'transient';
+  }
+  if (/missing on this device/i.test(msg)) return 'permanent';
+  return 'transient';
+}
+
+/**
+ * The network is back (or the app returned to the foreground): every
+ * offline/transient failure may be tried right now. Permanent ones are NOT
+ * touched — the same request would fail the same way.
+ */
+export function rearmRetryable(queue: readonly QueuedPhoto[]): QueuedPhoto[] {
+  return queue.map((q) =>
+    q.state === 'failed' && q.failureKind !== 'permanent'
+      ? { ...q, state: 'pending', nextAttemptAt: undefined, failureKind: undefined }
+      : q,
+  );
 }
 
 /**
@@ -304,7 +368,7 @@ export function markFailed(
 export function retryFailed(queue: readonly QueuedPhoto[], inspectionId?: string): QueuedPhoto[] {
   return queue.map((q) =>
     q.state === 'failed' && (!inspectionId || q.inspectionId === inspectionId)
-      ? { ...q, state: 'pending', nextAttemptAt: undefined }
+      ? { ...q, state: 'pending', nextAttemptAt: undefined, failureKind: undefined }
       : q,
   );
 }
@@ -351,10 +415,16 @@ export function selectNextUpload(
   })[0];
 }
 
-/** Milliseconds until the earliest backed-off failure is due; null when none. */
+/**
+ * Milliseconds until the earliest backed-off failure is due; null when none.
+ * Permanent failures never come due.
+ */
 export function nextRetryDelay(queue: readonly QueuedPhoto[], now: number = Date.now()): number | null {
   const due = queue
-    .filter((q) => q.state === 'failed' && q.nextAttemptAt !== undefined)
+    .filter(
+      (q) =>
+        q.state === 'failed' && q.nextAttemptAt !== undefined && q.failureKind !== 'permanent',
+    )
     .map((q) => Math.max(0, (q.nextAttemptAt as number) - now));
   return due.length ? Math.min(...due) : null;
 }

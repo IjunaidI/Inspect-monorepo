@@ -9,6 +9,9 @@
  *   with no undo affordance).
  * The INS-074 description contract is honoured: this form always supplies
  * the field, sending trimmed text or an explicit null — never undefined.
+ *
+ * INS-092: pull-to-refresh reloads the record without discarding typed edits;
+ * saves confirm with a toast.
  */
 import { ApiError } from '@inspect/api-client';
 import { palette, severity as severityTint } from '@inspect/design-tokens';
@@ -16,19 +19,13 @@ import { roleAtLeast } from '@inspect/domain';
 import type { ProductDto, UpdateProductInput } from '@inspect/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { FormScreen } from '@/components/form-screen';
+import { useToast } from '@/components/toast';
+import { Button, Field, Input, TextButton, ui } from '@/components/ui';
 import { client, loadIdentity } from '@/lib/session';
 
 type Load =
@@ -59,6 +56,7 @@ async function fetchProduct(id: string): Promise<Load> {
 
 export default function ProductDetail() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const productId = String(id);
 
@@ -67,7 +65,6 @@ export default function ProductDetail() {
   const [description, setDescription] = useState('');
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [savedNote, setSavedNote] = useState(false);
 
   const apply = useCallback((result: Load) => {
     setLoad(result);
@@ -85,6 +82,13 @@ export default function ProductDetail() {
     fetchProduct(productId).then(apply);
   }, [productId, apply]);
 
+  /** Pull-to-refresh: update the record, keep whatever is being typed. */
+  async function refresh() {
+    const result = await fetchProduct(productId);
+    if (result.kind === 'ready') setLoad(result);
+    else toast('Could not refresh the product', { tone: 'danger' });
+  }
+
   async function save(product: ProductDto) {
     const trimmed = (styleNumber ?? '').trim();
     if (!trimmed) {
@@ -93,7 +97,6 @@ export default function ProductDetail() {
     }
     setPending(true);
     setFormError(null);
-    setSavedNote(false);
     try {
       // INS-074: the description field is always present on this form, so it
       // is always supplied — trimmed text, or explicit null to clear.
@@ -102,7 +105,7 @@ export default function ProductDetail() {
         description: description.trim() || null,
       };
       await client.patch(`/products/${product.id}`, body);
-      setSavedNote(true);
+      toast('Product saved');
       reload();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Save failed');
@@ -126,6 +129,7 @@ export default function ProductDetail() {
               setFormError(null);
               try {
                 await client.del(`/products/${product.id}`);
+                toast(`${product.styleNumber} archived`, { tone: 'neutral' });
                 router.back();
               } catch (e) {
                 setFormError(e instanceof Error ? e.message : 'Archive failed');
@@ -144,6 +148,7 @@ export default function ProductDetail() {
     setFormError(null);
     try {
       await client.post(`/products/${product.id}/restore`, {});
+      toast('Product restored');
       reload();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Restore failed');
@@ -154,8 +159,8 @@ export default function ProductDetail() {
 
   if (load.kind === 'loading' || (load.kind === 'ready' && styleNumber === null)) {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
@@ -164,22 +169,18 @@ export default function ProductDetail() {
 
   if (load.kind !== 'ready') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>
             {load.kind === 'missing'
               ? 'Product not found'
               : load.kind === 'forbidden'
                 ? 'QA Manager access required'
                 : 'Could not load the product'}
           </Text>
-          {load.kind === 'error' ? <Text style={styles.mutedText}>{load.message}</Text> : null}
-          <View style={styles.centerActions}>
-            {load.kind === 'error' ? (
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            ) : null}
+          {load.kind === 'error' ? <Text style={ui.mutedText}>{load.message}</Text> : null}
+          <View style={ui.centerActions}>
+            {load.kind === 'error' ? <TextButton label="Retry" onPress={reload} /> : null}
             <BackButton label="Go back" />
           </View>
         </View>
@@ -190,8 +191,8 @@ export default function ProductDetail() {
   const { product } = load;
 
   return (
-    <FormScreen>
-      <Text style={styles.title}>{product.styleNumber}</Text>
+    <FormScreen onRefresh={refresh}>
+      <Text style={ui.title}>{product.styleNumber}</Text>
       {product._count ? (
         <Text style={styles.subtitle}>
           {product._count.purchaseOrders ?? 0} POs · {product._count.inspections ?? 0} inspections
@@ -203,59 +204,53 @@ export default function ProductDetail() {
           <Text style={styles.archivedText}>
             This product is archived and hidden from the active list.
           </Text>
-          <Pressable onPress={() => restore(product)} disabled={pending} hitSlop={8}>
-            <Text style={styles.link}>{pending ? 'Restoring…' : 'Restore'}</Text>
-          </Pressable>
+          <TextButton
+            label={pending ? 'Restoring…' : 'Restore'}
+            onPress={() => restore(product)}
+            disabled={pending}
+          />
         </View>
       ) : null}
 
-      {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
-      {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
+      {formError ? <Text style={ui.errorText}>{formError}</Text> : null}
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Style number *</Text>
-        <TextInput
-          style={styles.input}
+      <Field label="Style number *">
+        <Input
           value={styleNumber ?? ''}
           onChangeText={setStyleNumber}
           autoCapitalize="characters"
           autoCorrect={false}
         />
-      </View>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Description</Text>
-        <TextInput
-          style={[styles.input, styles.multiline]}
+      </Field>
+      <Field label="Description">
+        <Input
+          style={{ minHeight: 110 }}
           value={description}
           onChangeText={setDescription}
           placeholder="Fabric, construction, colourway…"
-          placeholderTextColor={palette.faint}
           multiline
         />
-      </View>
+      </Field>
 
-      <Pressable
-        style={[styles.button, pending && styles.buttonDisabled]}
+      <Button
+        label="Save changes"
+        loadingLabel="Saving…"
+        loading={pending}
         onPress={() => save(product)}
-        disabled={pending}
-      >
-        <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
-      </Pressable>
+      />
 
       {!product.archivedAt ? (
-        <View style={styles.dangerCard}>
-          <Text style={styles.dangerTitle}>Archive product</Text>
-          <Text style={styles.hint}>
+        <View style={ui.dangerCard}>
+          <Text style={ui.dangerTitle}>Archive product</Text>
+          <Text style={ui.hint}>
             Removes it from the active list. Historical POs and inspections are preserved.
           </Text>
-          <Pressable
-            onPress={() => confirmArchive(product)}
+          <Button
+            variant="danger"
+            label="Archive"
             disabled={pending}
-            hitSlop={8}
-            style={styles.dangerButton}
-          >
-            <Text style={styles.dangerButtonLabel}>Archive</Text>
-          </Pressable>
+            onPress={() => confirmArchive(product)}
+          />
         </View>
       ) : null}
     </FormScreen>
@@ -263,20 +258,6 @@ export default function ProductDetail() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
-  title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   subtitle: { color: palette.sub, fontSize: 13 },
   archivedBanner: {
     borderWidth: 1,
@@ -287,54 +268,4 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   archivedText: { color: severityTint.major.fg, fontSize: 13, lineHeight: 18 },
-  errorText: { color: palette.danger, fontSize: 13 },
-  savedText: { color: palette.accent, fontSize: 13, fontWeight: '600' },
-  field: { gap: 6 },
-  fieldLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  multiline: { minHeight: 110, textAlignVertical: 'top' },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
-  dangerCard: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: severityTint.critical.bg,
-    backgroundColor: palette.panel,
-    borderRadius: 10,
-    padding: 14,
-    gap: 8,
-  },
-  dangerTitle: { color: palette.danger, fontSize: 14, fontWeight: '700' },
-  dangerButton: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: severityTint.critical.bg,
-    backgroundColor: severityTint.critical.bg,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  dangerButtonLabel: { color: palette.danger, fontSize: 13, fontWeight: '700' },
 });

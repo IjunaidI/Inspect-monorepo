@@ -2,6 +2,10 @@
  * INS-091 — the bottom sheet that hosts a quick-create form. Same chrome as
  * the capture unit sheet (handle row, title, Cancel), plus keyboard avoidance
  * and persistent taps so the form is usable with the keyboard up.
+ *
+ * INS-092: the field/button styles moved to `components/ui.tsx`; the sheet
+ * mounts its own `ToastViewport` so a nested create ("+ Add new company…"
+ * from inside the PO sheet) still shows its success toast above the Modal.
  */
 import { ApiError } from '@inspect/api-client';
 import { palette } from '@inspect/design-tokens';
@@ -16,6 +20,8 @@ import {
   Text,
   View,
 } from 'react-native';
+
+import { ToastViewport } from './toast';
 
 export function QuickCreateSheet({
   visible,
@@ -38,7 +44,12 @@ export function QuickCreateSheet({
         <View style={styles.body}>
           <View style={styles.handleRow}>
             <Text style={styles.title}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={8}>
+            <Pressable
+              onPress={onClose}
+              hitSlop={8}
+              style={styles.cancel}
+              accessibilityRole="button"
+            >
               <Text style={styles.link}>Cancel</Text>
             </Pressable>
           </View>
@@ -47,6 +58,7 @@ export function QuickCreateSheet({
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+      <ToastViewport />
     </Modal>
   );
 }
@@ -57,54 +69,6 @@ export function describeCreateError(e: unknown, fallback: string): string {
   if (e instanceof TypeError) return 'No connection. Check the network and try again.';
   return e instanceof Error ? e.message : fallback;
 }
-
-/** Shared field styles for the three sheet forms. */
-export const sheetStyles = StyleSheet.create({
-  field: { gap: 6 },
-  fieldLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-    minHeight: 44,
-  },
-  chipRow: { flexDirection: 'row', gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    minHeight: 36,
-    justifyContent: 'center',
-    backgroundColor: palette.panel,
-  },
-  chipActive: { borderColor: palette.accent, backgroundColor: palette.accentSoft },
-  chipText: { color: palette.sub, fontSize: 13, fontWeight: '600' },
-  chipTextActive: { color: palette.accent },
-  hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
-  errorText: { color: palette.danger, fontSize: 13 },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
-});
 
 const styles = StyleSheet.create({
   backdrop: {
@@ -128,6 +92,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   title: { color: palette.ink, fontSize: 16, fontWeight: '700' },
+  cancel: { minHeight: 44, justifyContent: 'center', paddingLeft: 12 },
   link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   content: { paddingHorizontal: 16, paddingBottom: 32, gap: 12 },
 });

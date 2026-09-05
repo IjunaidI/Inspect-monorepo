@@ -19,18 +19,11 @@ import { palette } from '@inspect/design-tokens';
 import type { AcceptInvitationInput, InvitationLookupDto } from '@inspect/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FormScreen } from '@/components/form-screen';
+import { Button, Field, Input, TextButton, ui } from '@/components/ui';
 import { client, signIn } from '@/lib/session';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -131,8 +124,8 @@ export default function Invite() {
 
   if (load.kind === 'loading') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
@@ -141,7 +134,7 @@ export default function Invite() {
 
   if (load.kind !== 'ready') {
     return (
-      <SafeAreaView style={styles.screen}>
+      <SafeAreaView style={ui.screen}>
         <ScrollView contentContainerStyle={styles.centeredScroll}>
           <Text style={styles.title}>
             {load.kind === 'no-token'
@@ -152,7 +145,7 @@ export default function Invite() {
                   ? 'Invitation no longer valid'
                   : 'Could not verify the invitation'}
           </Text>
-          <Text style={styles.mutedText}>
+          <Text style={ui.mutedText}>
             {load.kind === 'no-token'
               ? 'Paste the invitation token from your email.'
               : load.kind === 'invalid'
@@ -165,27 +158,25 @@ export default function Invite() {
           </Text>
           {load.kind === 'no-token' || load.kind === 'error' ? (
             <View style={styles.tokenBox}>
-              <TextInput
-                style={styles.input}
+              <Input
                 value={pastedToken}
                 onChangeText={setPastedToken}
                 placeholder="Invitation token"
-                placeholderTextColor={palette.faint}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              <Pressable
-                style={[styles.button, !pastedToken.trim() && styles.buttonDisabled]}
-                onPress={lookupPasted}
+              <Button
+                label="Look up invitation"
                 disabled={!pastedToken.trim()}
-              >
-                <Text style={styles.buttonLabel}>Look up invitation</Text>
-              </Pressable>
+                onPress={lookupPasted}
+              />
             </View>
           ) : null}
-          <Pressable onPress={() => router.replace('/login')} hitSlop={8}>
-            <Text style={styles.link}>Go to sign in</Text>
-          </Pressable>
+          <TextButton
+            label="Go to sign in"
+            onPress={() => router.replace('/login')}
+            style={{ alignSelf: 'center', marginTop: 8 }}
+          />
         </ScrollView>
       </SafeAreaView>
     );
@@ -197,59 +188,38 @@ export default function Invite() {
   return (
     <FormScreen>
       <Text style={styles.title}>Join {invite.orgName ?? 'an Inspect workspace'}</Text>
-      <Text style={styles.mutedText}>
+      <Text style={ui.mutedText}>
         {invite.email} · {roleLabel}
         {invite.expiresAt ? ` · invite expires ${DATE_FMT.format(new Date(invite.expiresAt))}` : ''}
       </Text>
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Your name (optional)</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="Full name"
-          placeholderTextColor={palette.faint}
-        />
-      </View>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Choose a password (min 8 characters)</Text>
-        <TextInput
-          style={styles.input}
+      <Field label="Your name (optional)">
+        <Input value={name} onChangeText={setName} placeholder="Full name" />
+      </Field>
+      <Field label="Choose a password (min 8 characters)">
+        <Input
           value={password}
           onChangeText={setPassword}
           placeholder="••••••••"
-          placeholderTextColor={palette.faint}
           secureTextEntry
           autoCapitalize="none"
         />
-      </View>
+      </Field>
 
-      {acceptError ? <Text style={styles.errorText}>{acceptError}</Text> : null}
+      {acceptError ? <Text style={ui.errorText}>{acceptError}</Text> : null}
 
-      <Pressable
-        style={[styles.button, (pending || password.length < 8) && styles.buttonDisabled]}
+      <Button
+        label="Activate account"
+        loadingLabel="Activating account…"
+        loading={pending}
+        disabled={password.length < 8}
         onPress={() => accept(invite, token)}
-        disabled={pending || password.length < 8}
-      >
-        <Text style={styles.buttonLabel}>
-          {pending ? 'Activating account…' : 'Activate account'}
-        </Text>
-      </Pressable>
+      />
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  body: { padding: 20, gap: 14, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
   centeredScroll: {
     flexGrow: 1,
     alignItems: 'center',
@@ -263,44 +233,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  mutedText: {
-    color: palette.sub,
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  link: {
-    color: palette.accent,
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 8,
-  },
   tokenBox: { alignSelf: 'stretch', gap: 10, marginTop: 8 },
-  field: { gap: 6 },
-  fieldLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  errorText: { color: palette.danger, fontSize: 13 },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });

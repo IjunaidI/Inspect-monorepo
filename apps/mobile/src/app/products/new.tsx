@@ -2,21 +2,29 @@
  * Create product (INS-086 Phase 4) — port of the web `/products/new`. Role
  * floor QA_MANAGER. A duplicate style number now reads as the API's 409
  * ("already exists") rather than the raw 500 it leaked before this sweep.
+ *
+ * INS-092: the form is held behind a spinner until the role probe resolves
+ * (it used to flash for a frame before the forbidden card replaced it), and a
+ * successful create confirms with a toast.
  */
 import { palette } from '@inspect/design-tokens';
 import { roleAtLeast } from '@inspect/domain';
 import type { CreateProductInput, ProductDto } from '@inspect/shared-types';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { FormScreen } from '@/components/form-screen';
+import { useToast } from '@/components/toast';
+import { Button, Field, Input, ui } from '@/components/ui';
+import { describeCreateError } from '@/components/quick-create-sheet';
 import { client, loadIdentity } from '@/lib/session';
 
 export default function NewProduct() {
   const router = useRouter();
+  const toast = useToast();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [styleNumber, setStyleNumber] = useState('');
   const [description, setDescription] = useState('');
@@ -41,19 +49,32 @@ export default function NewProduct() {
         description: description.trim() || null,
       };
       const created = await client.post<ProductDto>('/products', body);
+      toast(`Product ${created.styleNumber} created`);
       router.replace(`/products/${created.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Create failed');
+      setError(describeCreateError(e, 'Create failed'));
       setPending(false);
     }
   }
 
-  if (allowed === false) {
+  // Hold the form until the probe answers — no flash of a form the API would refuse.
+  if (allowed === null) {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.forbiddenTitle}>QA Manager access required</Text>
-          <Text style={styles.mutedText}>Creating products needs QA Manager or above.</Text>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <ActivityIndicator color={palette.accent} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!allowed) {
+    return (
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>QA Manager access required</Text>
+          <Text style={ui.mutedText}>Creating products needs QA Manager or above.</Text>
+          <BackButton label="Go back" fallbackHref="/products" />
         </View>
       </SafeAreaView>
     );
@@ -62,84 +83,35 @@ export default function NewProduct() {
   return (
     <FormScreen>
       <BackButton label="Cancel" fallbackHref="/products" />
-      <Text style={styles.title}>New product</Text>
+      <Text style={ui.title}>New product</Text>
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Style number *</Text>
-        <TextInput
-          style={styles.input}
+      <Field label="Style number *">
+        <Input
           value={styleNumber}
           onChangeText={setStyleNumber}
           placeholder="ST-2026-001"
-          placeholderTextColor={palette.faint}
           autoCapitalize="characters"
           autoCorrect={false}
         />
-      </View>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Description</Text>
-        <TextInput
-          style={[styles.input, styles.multiline]}
+      </Field>
+      <Field label="Description">
+        <Input
+          style={{ minHeight: 110 }}
           value={description}
           onChangeText={setDescription}
           placeholder="Fabric, construction, colourway…"
-          placeholderTextColor={palette.faint}
           multiline
         />
-      </View>
+      </Field>
 
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={ui.errorText}>{error}</Text> : null}
 
-      <Pressable
-        style={[styles.button, pending && styles.buttonDisabled]}
+      <Button
+        label="Create product"
+        loadingLabel="Creating…"
+        loading={pending}
         onPress={create}
-        disabled={pending}
-      >
-        <Text style={styles.buttonLabel}>{pending ? 'Creating…' : 'Create product'}</Text>
-      </Pressable>
+      />
     </FormScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  forbiddenTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
-  title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
-  field: { gap: 6 },
-  fieldLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  multiline: { minHeight: 110, textAlignVertical: 'top' },
-  errorText: { color: palette.danger, fontSize: 13 },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
-});

@@ -179,6 +179,7 @@ export default function Capture() {
   const slotHasEvidence = Boolean(serverPhoto || slotEntry);
 
   const counts = summarize(queue, inspectionId);
+  const offline = snap.online === false;
   const myActive = useMemo(() => activeEntries(queue, inspectionId), [queue, inspectionId]);
   const inflight = myActive.find((q) => q.state === 'uploading');
 
@@ -373,7 +374,7 @@ export default function Capture() {
   const target = inspection!.computedSampling?.sampleSize;
   const showCamera = !locked && (atFrontier || retakeMode);
   const stageBadge = slotEntry
-    ? stateLabel(slotEntry.state, snap.progress[slotEntry.id])
+    ? stateLabel(slotEntry.state, snap.progress[slotEntry.id], slotEntry.failureKind, snap.online)
     : serverPhoto
       ? stateLabel('server')
       : null;
@@ -414,25 +415,48 @@ export default function Capture() {
         {locked ? (
           <Text style={styles.lockedBadge}>Read-only</Text>
         ) : (
-          <Pressable onPress={endLoop} disabled={busy} hitSlop={8} accessibilityRole="button">
+          <Pressable
+            onPress={endLoop}
+            disabled={busy}
+            hitSlop={8}
+            accessibilityRole="button"
+            style={styles.endBtn}
+          >
             <Text style={[ui.link, busy && ui.dim]}>End loop</Text>
+            {counts.active > 0 ? (
+              <View style={styles.endBadge}>
+                <Text style={styles.endBadgeText}>{counts.active}</Text>
+              </View>
+            ) : null}
           </Pressable>
         )}
       </View>
 
       {/* Upload strip — tap for the full sheet */}
       {counts.active > 0 ? (
-        <Pressable style={styles.strip} onPress={() => setSheet('uploads')}>
+        <Pressable
+          style={[styles.strip, offline && styles.stripOffline]}
+          onPress={() => setSheet('uploads')}
+        >
           <View style={styles.stripRow}>
-            {counts.uploading > 0 ? <ActivityIndicator size="small" color={palette.accent} /> : null}
+            {counts.uploading > 0 && !offline ? (
+              <ActivityIndicator size="small" color={palette.accent} />
+            ) : null}
             <Text style={styles.stripText} numberOfLines={1}>
-              {counts.uploading > 0 ? `${counts.uploading} uploading` : null}
-              {counts.uploading > 0 && (counts.failed > 0 || counts.conflicts > 0) ? ' · ' : null}
-              {counts.failed > 0 ? `${counts.failed} failed, retrying` : null}
-              {counts.failed > 0 && counts.conflicts > 0 ? ' · ' : null}
-              {counts.conflicts > 0
-                ? `${counts.conflicts} need${counts.conflicts === 1 ? 's' : ''} your decision`
-                : null}
+              {offline
+                ? `Offline · ${counts.active} photo${counts.active === 1 ? '' : 's'} saved on this device, uploads when back online`
+                : [
+                    counts.uploading > 0 ? `${counts.uploading} uploading` : null,
+                    counts.retrying > 0 ? `${counts.retrying} retrying` : null,
+                    counts.rejected > 0
+                      ? `${counts.rejected} rejected — retake or discard`
+                      : null,
+                    counts.conflicts > 0
+                      ? `${counts.conflicts} need${counts.conflicts === 1 ? 's' : ''} your decision`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
             </Text>
             <Text style={ui.link}>Details</Text>
           </View>
@@ -678,7 +702,7 @@ export default function Capture() {
           ? `${state.completedCycles} unit${state.completedCycles === 1 ? '' : 's'} complete`
           : ''}
         {target ? ` / ${target} target — end on any complete unit` : ''}
-        {counts.active > 0 ? `  ·  ${counts.active} uploading` : ''}
+        {counts.active > 0 ? `  ·  ${counts.active} ${offline ? 'waiting for network' : 'uploading'}` : ''}
       </Text>
 
       {/* Unit sheet: defects + measurements */}
@@ -761,14 +785,25 @@ export default function Capture() {
         subtitle={
           finishing
             ? `${counts.active} photo${counts.active === 1 ? '' : 's'} still to land — the loop ends as soon as they do.`
-            : 'Photos on their way to the server. Failures retry on their own.'
+            : offline
+              ? 'Offline. Everything here is saved on this device and uploads automatically later.'
+              : 'Photos on their way to the server. Failures retry on their own.'
         }
         entries={myActive}
         progress={snap.progress}
         items={items}
         busy={busy}
+        online={snap.online}
         onRetryAll={() => photoQueue().retryNow(inspectionId)}
         onKeepMine={(e: QueuedPhoto) => photoQueue().resolveConflictKeepMine(e.id)}
+        onRetake={(e: QueuedPhoto) => {
+          const itemIndex = items.findIndex((i) => i.id === e.inspectionLoopItemId);
+          if (itemIndex < 0) return;
+          setFinishing(false);
+          setSheet('none');
+          setRawCursor({ cycleIndex: e.cycleIndex, itemIndex });
+          setRetakeMode(true);
+        }}
         onDiscard={(e: QueuedPhoto) =>
           Alert.alert(
             'Discard this photo?',
@@ -791,9 +826,13 @@ export default function Capture() {
           setSheet('none');
         }}
         footer={
-          finishing && counts.conflicts > 0 ? (
+          finishing ? (
             <Text style={ui.hint}>
-              Resolve the decision{counts.conflicts === 1 ? '' : 's'} above to continue.
+              {offline
+                ? 'The loop ends on its own once the connection returns and every photo has landed.'
+                : counts.rejected > 0 || counts.conflicts > 0
+                  ? `Submit stays locked until the ${counts.rejected > 0 ? 'rejected photo' : ''}${counts.rejected > 0 && counts.conflicts > 0 ? ' and ' : ''}${counts.conflicts > 0 ? 'decision' : ''}${counts.rejected + counts.conflicts === 1 ? '' : 's'} above ${counts.rejected + counts.conflicts === 1 ? 'is' : 'are'} resolved.`
+                  : 'Submit is locked until every photo is on the server. This closes on its own.'}
             </Text>
           ) : null
         }
@@ -840,7 +879,19 @@ const styles = StyleSheet.create({
     backgroundColor: palette.panel,
     gap: 8,
   },
+  stripOffline: { borderColor: 'rgba(245,158,11,0.6)', backgroundColor: 'rgba(245,158,11,0.10)' },
   stripRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  endBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44 },
+  endBadge: {
+    backgroundColor: palette.accent,
+    borderRadius: 999,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  endBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   stripText: { color: palette.sub, fontSize: 12.5, flex: 1 },
   notice: {
     marginHorizontal: 16,

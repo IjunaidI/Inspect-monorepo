@@ -4,13 +4,14 @@
  * /companies/[id]. Same pending/error/append/auto-select pattern as the preset
  * builder's custom-defect row.
  */
-import { palette } from '@inspect/design-tokens';
 import type { CompanyDto, CompanyKind, CreateCompanyInput } from '@inspect/shared-types';
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { useToast } from '@/components/toast';
+import { Button, Chip, Field, Input, ui } from '@/components/ui';
 import { client } from '@/lib/session';
-import { QuickCreateSheet, describeCreateError, sheetStyles as s } from '../quick-create-sheet';
+import { QuickCreateSheet, describeCreateError } from '../quick-create-sheet';
 
 export function QuickCreateCompanySheet({
   visible,
@@ -21,6 +22,7 @@ export function QuickCreateCompanySheet({
   onClose: () => void;
   onCreated: (company: CompanyDto) => void;
 }) {
+  const toast = useToast();
   const [name, setName] = useState('');
   const [kind, setKind] = useState<CompanyKind>('THIRD_PARTY');
   const [pending, setPending] = useState(false);
@@ -39,6 +41,7 @@ export function QuickCreateCompanySheet({
       const created = await client.post<CompanyDto>('/companies', body);
       setName('');
       onCreated(created);
+      toast(`Company “${created.name}” created`);
     } catch (e) {
       setError(describeCreateError(e, 'Could not create the company.'));
     } finally {
@@ -48,45 +51,38 @@ export function QuickCreateCompanySheet({
 
   return (
     <QuickCreateSheet visible={visible} title="New company" onClose={onClose}>
-      <View style={s.field}>
-        <Text style={s.fieldLabel}>Name *</Text>
-        <TextInput
-          style={s.input}
+      <Field label="Name *">
+        <Input
           value={name}
           onChangeText={setName}
           placeholder="e.g. Northwind Apparel"
-          placeholderTextColor={palette.faint}
           autoFocus
           autoCorrect={false}
           returnKeyType="done"
           onSubmitEditing={create}
         />
-      </View>
-      <View style={s.field}>
-        <Text style={s.fieldLabel}>Kind</Text>
-        <View style={s.chipRow}>
+      </Field>
+      <Field label="Kind">
+        <View style={ui.chipRow}>
           {(['THIRD_PARTY', 'INTERNAL'] as const).map((k) => (
-            <Pressable
+            <Chip
               key={k}
-              style={[s.chip, kind === k && s.chipActive]}
+              label={k === 'THIRD_PARTY' ? 'Third-party' : 'Internal'}
+              active={kind === k}
               onPress={() => setKind(k)}
-            >
-              <Text style={[s.chipText, kind === k && s.chipTextActive]}>
-                {k === 'THIRD_PARTY' ? 'Third-party' : 'Internal'}
-              </Text>
-            </Pressable>
+            />
           ))}
         </View>
-      </View>
-      <Text style={s.hint}>Branding and location can be added later from the company screen.</Text>
-      {error ? <Text style={s.errorText}>{error}</Text> : null}
-      <Pressable
-        style={[s.button, (pending || !name.trim()) && s.buttonDisabled]}
+      </Field>
+      <Text style={ui.hint}>Branding and location can be added later from the company screen.</Text>
+      {error ? <Text style={ui.errorText}>{error}</Text> : null}
+      <Button
+        label="Create company"
+        loadingLabel="Creating…"
+        loading={pending}
+        disabled={!name.trim()}
         onPress={create}
-        disabled={pending || !name.trim()}
-      >
-        <Text style={s.buttonLabel}>{pending ? 'Creating…' : 'Create company'}</Text>
-      </Pressable>
+      />
     </QuickCreateSheet>
   );
 }

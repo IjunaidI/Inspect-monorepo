@@ -17,6 +17,9 @@
  * token instead of composing a wrong link. The token is readable ONLY in the
  * invite response (write-once by design); re-inviting the same email rotates
  * it rather than erroring.
+ *
+ * INS-092: the guest-list Retry re-fetches only the guests; pull-to-refresh
+ * on the whole screen; a sent invite confirms with a toast.
  */
 import { ApiError } from '@inspect/api-client';
 import { palette } from '@inspect/design-tokens';
@@ -30,19 +33,13 @@ import type {
 import * as Clipboard from 'expo-clipboard';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { FormScreen } from '@/components/form-screen';
+import { useToast } from '@/components/toast';
+import { Button, Chip, Input, TextButton, ui } from '@/components/ui';
 import { WEB_URL } from '@/lib/config';
 import { client, loadIdentity } from '@/lib/session';
 
@@ -72,6 +69,9 @@ type Load =
 
 type InviteSuccess = { token: string; emailSent: boolean; email: string };
 
+const fetchGuestList = (companyId: string) =>
+  client.get<CompanyGuestDto[]>(`/companies/${companyId}/guests`);
+
 /** Pure fetch — setState only ever happens in .then. */
 async function fetchGuests(companyId: string): Promise<Load> {
   const identity = await loadIdentity();
@@ -81,7 +81,7 @@ async function fetchGuests(companyId: string): Promise<Load> {
       client.get<CompanyDto>(`/companies/${companyId}`),
       // A guest-list failure must not masquerade as "no guests yet" — null
       // renders as an inline error with its own retry.
-      client.get<CompanyGuestDto[]>(`/companies/${companyId}/guests`).catch(() => null),
+      fetchGuestList(companyId).catch(() => null),
     ]);
     return { kind: 'ready', company, guests };
   } catch (e) {
@@ -97,21 +97,21 @@ async function fetchGuests(companyId: string): Promise<Load> {
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <Pressable
+    <TextButton
+      label={copied ? 'Copied ✓' : label}
+      labelStyle={styles.copyLink}
       onPress={() => {
         void Clipboard.setStringAsync(value).then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
         });
       }}
-      hitSlop={8}
-    >
-      <Text style={styles.copyLink}>{copied ? 'Copied ✓' : label}</Text>
-    </Pressable>
+    />
   );
 }
 
 export default function CompanyGuests() {
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const companyId = String(id);
 
@@ -119,6 +119,7 @@ export default function CompanyGuests() {
   const [email, setEmail] = useState('');
   const [ttl, setTtl] = useState<number>(30);
   const [pending, setPending] = useState(false);
+  const [guestsPending, setGuestsPending] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [invited, setInvited] = useState<InviteSuccess | null>(null);
   const [revokeError, setRevokeError] = useState<string | null>(null);
@@ -127,6 +128,26 @@ export default function CompanyGuests() {
     fetchGuests(companyId).then(setLoad);
   }, [companyId]);
   useEffect(reload, [reload]);
+
+  /** Pull-to-refresh: swap in fresh data, never flip a loaded screen to error. */
+  async function refresh() {
+    const result = await fetchGuests(companyId);
+    if (result.kind === 'ready') setLoad(result);
+    else toast('Could not refresh guests', { tone: 'danger' });
+  }
+
+  /** INS-092: re-fetch ONLY the guest list. */
+  async function reloadGuests() {
+    setGuestsPending(true);
+    try {
+      const guests = await fetchGuestList(companyId);
+      setLoad((l) => (l.kind === 'ready' ? { ...l, guests } : l));
+    } catch {
+      toast('Guest list still unavailable', { tone: 'danger' });
+    } finally {
+      setGuestsPending(false);
+    }
+  }
 
   async function invite() {
     const trimmed = email.trim();
@@ -145,7 +166,8 @@ export default function CompanyGuests() {
         email: trimmed,
       });
       setEmail('');
-      reload();
+      toast(res.emailSent ? `Invitation emailed to ${trimmed}` : `${trimmed} invited — share the link`);
+      void reloadGuests();
     } catch (e) {
       setInviteError(e instanceof Error ? e.message : 'Invite failed');
     } finally {
@@ -167,7 +189,8 @@ export default function CompanyGuests() {
               setRevokeError(null);
               try {
                 await client.del(`/company-guests/${guest.id}`);
-                reload();
+                toast(`${guest.email} revoked`, { tone: 'neutral' });
+                void reloadGuests();
               } catch (e) {
                 setRevokeError(e instanceof Error ? e.message : 'Revoke failed');
               }
@@ -180,8 +203,8 @@ export default function CompanyGuests() {
 
   if (load.kind === 'loading') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
@@ -190,27 +213,21 @@ export default function CompanyGuests() {
 
   if (load.kind !== 'ready') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>
             {load.kind === 'missing'
               ? 'Company not found'
               : load.kind === 'forbidden'
                 ? 'QA Manager access required'
                 : 'Could not load guests'}
           </Text>
-          {load.kind === 'error' ? <Text style={styles.mutedText}>{load.message}</Text> : null}
+          {load.kind === 'error' ? <Text style={ui.mutedText}>{load.message}</Text> : null}
           {load.kind === 'forbidden' ? (
-            <Text style={styles.mutedText}>
-              Guest management is visible to QA Managers and above.
-            </Text>
+            <Text style={ui.mutedText}>Guest management is visible to QA Managers and above.</Text>
           ) : null}
-          <View style={styles.centerActions}>
-            {load.kind === 'error' ? (
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            ) : null}
+          <View style={ui.centerActions}>
+            {load.kind === 'error' ? <TextButton label="Retry" onPress={reload} /> : null}
             <BackButton label="Go back" />
           </View>
         </View>
@@ -222,48 +239,39 @@ export default function CompanyGuests() {
   const magicLink = invited && WEB_URL ? `${WEB_URL}/portal?token=${invited.token}` : null;
 
   return (
-    <FormScreen>
-      <Text style={styles.title}>Guests</Text>
+    <FormScreen onRefresh={refresh}>
+      <Text style={ui.title}>Guests</Text>
       <Text style={styles.subtitle}>{company.name}</Text>
-      <Text style={styles.hint}>
+      <Text style={ui.hint}>
         Guests see signed reports where this company is the CLIENT. Reports naming it as the factory
         are never shown.
       </Text>
 
       {/* Invite */}
-      <View style={styles.card}>
+      <View style={ui.card}>
         <Text style={styles.sectionLabel}>Invite a guest</Text>
-        <TextInput
-          style={styles.input}
+        <Input
+          style={styles.inputOnPanel}
           value={email}
           onChangeText={setEmail}
           placeholder="guest@client.example"
-          placeholderTextColor={palette.faint}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
         />
-        <View style={styles.chipRow}>
+        <View style={ui.chipRow}>
           {TTL_OPTIONS.map((d) => (
-            <Pressable
+            <Chip
               key={d}
+              tone="bg"
+              label={`${d} days`}
+              active={ttl === d}
               onPress={() => setTtl(d)}
-              style={[styles.ttlChip, ttl === d && styles.ttlChipActive]}
-            >
-              <Text style={[styles.ttlChipLabel, ttl === d && styles.ttlChipLabelActive]}>
-                {d} days
-              </Text>
-            </Pressable>
+            />
           ))}
         </View>
-        {inviteError ? <Text style={styles.errorText}>{inviteError}</Text> : null}
-        <Pressable
-          style={[styles.button, pending && styles.buttonDisabled]}
-          onPress={invite}
-          disabled={pending}
-        >
-          <Text style={styles.buttonLabel}>{pending ? 'Sending…' : 'Invite'}</Text>
-        </Pressable>
+        {inviteError ? <Text style={ui.errorText}>{inviteError}</Text> : null}
+        <Button label="Invite" loadingLabel="Sending…" loading={pending} onPress={invite} />
 
         {invited ? (
           <View style={styles.successBox}>
@@ -281,7 +289,7 @@ export default function CompanyGuests() {
               </>
             ) : (
               <>
-                <Text style={styles.hint}>
+                <Text style={ui.hint}>
                   No console origin configured (EXPO_PUBLIC_INSPECT_WEB_URL), so the full portal
                   link cannot be composed here. Copy the token and append it to
                   {' <console origin>/portal?token=…'}
@@ -294,20 +302,22 @@ export default function CompanyGuests() {
       </View>
 
       {/* Guest list */}
-      <View style={styles.card}>
+      <View style={ui.card}>
         <Text style={styles.sectionLabel}>
           {guests ? `${guests.length} guest${guests.length === 1 ? '' : 's'}` : 'Guests'}
         </Text>
-        {revokeError ? <Text style={styles.errorText}>{revokeError}</Text> : null}
+        {revokeError ? <Text style={ui.errorText}>{revokeError}</Text> : null}
         {guests === null ? (
           <View style={styles.inlineError}>
-            <Text style={styles.errorText}>The guest list could not be loaded.</Text>
-            <Pressable onPress={reload} hitSlop={8}>
-              <Text style={styles.link}>Retry</Text>
-            </Pressable>
+            <Text style={ui.errorText}>The guest list could not be loaded.</Text>
+            <TextButton
+              label={guestsPending ? 'Retrying…' : 'Retry'}
+              onPress={reloadGuests}
+              disabled={guestsPending}
+            />
           </View>
         ) : guests.length === 0 ? (
-          <Text style={styles.hint}>No guests yet. Invite someone above.</Text>
+          <Text style={ui.hint}>No guests yet. Invite someone above.</Text>
         ) : (
           guests.map((g) => {
             const ss = STATUS_STYLE[g.status] ?? {
@@ -336,9 +346,7 @@ export default function CompanyGuests() {
                   </Text>
                 </View>
                 {g.status === 'ACTIVE' ? (
-                  <Pressable onPress={() => confirmRevoke(g)} hitSlop={8}>
-                    <Text style={styles.revokeLink}>Revoke</Text>
-                  </Pressable>
+                  <TextButton label="Revoke" tone="danger" onPress={() => confirmRevoke(g)} />
                 ) : null}
               </View>
             );
@@ -350,35 +358,7 @@ export default function CompanyGuests() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: {
-    color: palette.sub,
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
-  title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
   subtitle: { color: palette.sub, fontSize: 14 },
-  hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
-  card: {
-    backgroundColor: palette.panel,
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 14,
-    gap: 10,
-  },
   sectionLabel: {
     color: palette.sub,
     fontSize: 11,
@@ -386,40 +366,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.bg,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  chipRow: { flexDirection: 'row', gap: 8 },
-  ttlChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: palette.line,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: palette.bg,
-  },
-  ttlChipActive: {
-    backgroundColor: palette.accentSoft,
-    borderColor: palette.accent,
-  },
-  ttlChipLabel: { color: palette.sub, fontSize: 12.5, fontWeight: '600' },
-  ttlChipLabelActive: { color: palette.accent },
-  errorText: { color: palette.danger, fontSize: 13 },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 11,
-  },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  /** Inputs inside a panel card sit on the canvas colour for contrast. */
+  inputOnPanel: { backgroundColor: palette.bg },
   successBox: {
     borderWidth: 1,
     borderColor: PASS_GREEN,
@@ -429,7 +377,7 @@ const styles = StyleSheet.create({
   },
   successText: { color: palette.ink, fontSize: 13, lineHeight: 18 },
   linkValue: { color: palette.sub, fontSize: 12 },
-  copyLink: { color: palette.accent, fontSize: 13, fontWeight: '600' },
+  copyLink: { fontSize: 13 },
   inlineError: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -446,5 +394,4 @@ const styles = StyleSheet.create({
   },
   guestEmail: { color: palette.ink, fontSize: 14, fontWeight: '600' },
   guestMeta: { color: palette.faint, fontSize: 12 },
-  revokeLink: { color: palette.danger, fontSize: 13, fontWeight: '600' },
 });

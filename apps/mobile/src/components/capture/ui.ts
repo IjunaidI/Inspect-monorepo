@@ -7,7 +7,7 @@ import { palette, severity as severityTint } from '@inspect/design-tokens';
 import type { DefectSeverity } from '@inspect/shared-types';
 import { StyleSheet } from 'react-native';
 
-import type { QueuedPhotoState } from '@/lib/capture-core';
+import type { FailureKind, QueuedPhotoState } from '@/lib/capture-core';
 
 export const SEVERITIES: DefectSeverity[] = ['CRITICAL', 'MAJOR', 'MINOR'];
 export const TINT: Record<DefectSeverity, { fg: string; bg: string }> = {
@@ -20,10 +20,14 @@ export const TINT: Record<DefectSeverity, { fg: string; bg: string }> = {
 export function stateLabel(
   state: QueuedPhotoState | 'server',
   progress?: number,
+  failureKind?: FailureKind,
+  online: boolean | null = null,
 ): { text: string; color: string; bg: string } {
   switch (state) {
     case 'pending':
-      return { text: 'Waiting to upload', color: '#fff', bg: 'rgba(0,0,0,0.6)' };
+      return online === false
+        ? { text: 'Waiting for network', color: '#1f1300', bg: severityTint.major.bg }
+        : { text: 'Waiting to upload', color: '#fff', bg: 'rgba(0,0,0,0.6)' };
     case 'uploading':
       return {
         text: progress !== undefined ? `Uploading ${Math.round(progress * 100)}%` : 'Uploading…',
@@ -31,6 +35,12 @@ export function stateLabel(
         bg: 'rgba(3,123,244,0.85)',
       };
     case 'failed':
+      if (failureKind === 'offline' || online === false) {
+        return { text: 'Waiting for network', color: '#1f1300', bg: severityTint.major.bg };
+      }
+      if (failureKind === 'permanent') {
+        return { text: 'Rejected — retake or discard', color: '#fff', bg: 'rgba(220,38,38,0.9)' };
+      }
       return { text: 'Upload failed — retrying', color: '#fff', bg: 'rgba(220,38,38,0.9)' };
     case 'conflict':
       return { text: 'Needs your decision', color: '#1f1300', bg: severityTint.major.bg };

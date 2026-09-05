@@ -19,6 +19,9 @@
  * - Reference-image UPLOAD is deferred (needs expo-image-picker, same as
  *   the company logo); duplicate-seeded items keep their existing keys, so
  *   duplicating preserves images. Recorded in the ledger.
+ *
+ * INS-092: 44pt reorder/remove controls; pull-to-refresh re-fetches the
+ * defect catalog without touching the draft; save confirms with a toast.
  */
 import { ApiError } from '@inspect/api-client';
 import { palette, severity as severityTint, type SeverityKey } from '@inspect/design-tokens';
@@ -33,11 +36,13 @@ import type {
 } from '@inspect/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
 import { FormScreen } from '@/components/form-screen';
+import { useToast } from '@/components/toast';
+import { Button, Field, Input, MIN_TARGET, TextButton, ui } from '@/components/ui';
 import { client, loadIdentity } from '@/lib/session';
 
 const SEVERITIES: DefectSeverity[] = ['CRITICAL', 'MAJOR', 'MINOR'];
@@ -76,13 +81,15 @@ type Load =
       seedFailed: boolean;
     };
 
+const fetchCatalog = () => client.get<DefectCatalogDto[]>('/defect-catalog');
+
 /** Pure fetch — setState only ever happens in .then. */
 async function fetchBuilderData(fromId: string | null): Promise<Load> {
   const identity = await loadIdentity();
   if (!roleAtLeast(identity?.role, 'QA_MANAGER')) return { kind: 'forbidden' };
   let catalog: DefectCatalogDto[];
   try {
-    catalog = await client.get<DefectCatalogDto[]>('/defect-catalog');
+    catalog = await fetchCatalog();
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) return { kind: 'forbidden' };
     return {
@@ -101,8 +108,42 @@ async function fetchBuilderData(fromId: string | null): Promise<Load> {
   }
 }
 
+/** A 44pt square control for a one-glyph action (↑ ↓ ✕). */
+function Glyph({
+  glyph,
+  onPress,
+  disabled = false,
+  danger = false,
+  accessibilityLabel,
+}: {
+  glyph: string;
+  onPress: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+  accessibilityLabel: string;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
+      style={({ pressed }) => [styles.glyph, pressed && !disabled && styles.glyphPressed]}
+    >
+      <Text
+        style={[styles.glyphText, danger && styles.glyphDanger, disabled && styles.glyphDisabled]}
+      >
+        {glyph}
+      </Text>
+    </Pressable>
+  );
+}
+
 export default function PresetBuilder() {
   const router = useRouter();
+  const toast = useToast();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromId = from ? String(from) : null;
 
@@ -157,6 +198,16 @@ export default function PresetBuilder() {
     fetchBuilderData(fromId).then(apply);
   }, [fromId, apply]);
 
+  /** Pull-to-refresh: a fresher catalog, the draft untouched. */
+  async function refresh() {
+    try {
+      const catalog = await fetchCatalog();
+      setLoad((l) => (l.kind === 'ready' ? { ...l, catalog } : l));
+    } catch {
+      toast('Could not refresh the defect catalog', { tone: 'danger' });
+    }
+  }
+
   function updateItem(key: string, patch: Partial<DraftItem>) {
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...patch } : it)));
   }
@@ -199,6 +250,7 @@ export default function PresetBuilder() {
       setExtraDefects((prev) => [...prev, created]);
       setSelected((prev) => new Set(prev).add(created.id));
       setCustomName('');
+      toast(`Defect “${created.name}” added`);
     } catch (e) {
       setCustomError(e instanceof Error ? e.message : 'Could not add the defect');
     } finally {
@@ -206,7 +258,7 @@ export default function PresetBuilder() {
     }
   }
 
-  async function save(seed: LoopPresetDetailDto | null) {
+  async function save() {
     const trimmedName = name.trim();
     if (!trimmedName) {
       setSaveError('Preset name is required.');
@@ -242,18 +294,18 @@ export default function PresetBuilder() {
         ...(selected.size ? { allowedDefectCatalogIds: [...selected] } : {}),
       };
       const created = await client.post<LoopPresetDto>('/loop-presets', body);
+      toast(`Preset “${created.name}” saved as v${created.version}`);
       router.replace(`/presets/${created.id}`);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Save failed');
       setPending(false);
     }
-    void seed;
   }
 
   if (load.kind === 'loading') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
@@ -262,20 +314,16 @@ export default function PresetBuilder() {
 
   if (load.kind !== 'ready') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>
             {load.kind === 'forbidden'
               ? 'QA Manager access required'
               : 'Could not load the defect catalog'}
           </Text>
-          {load.kind === 'error' ? <Text style={styles.mutedText}>{load.message}</Text> : null}
-          <View style={styles.centerActions}>
-            {load.kind === 'error' ? (
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            ) : null}
+          {load.kind === 'error' ? <Text style={ui.mutedText}>{load.message}</Text> : null}
+          <View style={ui.centerActions}>
+            {load.kind === 'error' ? <TextButton label="Retry" onPress={reload} /> : null}
             <BackButton label="Go back" />
           </View>
         </View>
@@ -292,9 +340,9 @@ export default function PresetBuilder() {
       : 'Reusing an existing preset name adds its next version; a new name starts at v1.';
 
   return (
-    <FormScreen>
-      <Text style={styles.title}>{seed ? `Duplicate “${seed.name}”` : 'New preset'}</Text>
-      <Text style={styles.hint}>{versionHint} AQL General Level II (the MVP engine).</Text>
+    <FormScreen onRefresh={refresh}>
+      <Text style={ui.title}>{seed ? `Duplicate “${seed.name}”` : 'New preset'}</Text>
+      <Text style={ui.hint}>{versionHint} AQL General Level II (the MVP engine).</Text>
       {seedFailed ? (
         <View style={styles.warnBanner}>
           <Text style={styles.warnText}>
@@ -302,32 +350,23 @@ export default function PresetBuilder() {
           </Text>
         </View>
       ) : null}
-      {saveError ? <Text style={styles.errorText}>{saveError}</Text> : null}
+      {saveError ? <Text style={ui.errorText}>{saveError}</Text> : null}
 
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Preset name *</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Knitwear pre-shipment"
-          placeholderTextColor={palette.faint}
-        />
-      </View>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Description</Text>
-        <TextInput
-          style={[styles.input, styles.multiline]}
+      <Field label="Preset name *">
+        <Input value={name} onChangeText={setName} placeholder="e.g. Knitwear pre-shipment" />
+      </Field>
+      <Field label="Description">
+        <Input
+          style={{ minHeight: 70 }}
           value={description}
           onChangeText={setDescription}
           placeholder="What this loop covers…"
-          placeholderTextColor={palette.faint}
           multiline
         />
-      </View>
+      </Field>
 
       {/* The loop: ordered single-image items (INS-081). */}
-      <View style={styles.card}>
+      <View style={ui.card}>
         <Text style={styles.sectionLabel}>Loop items · one image each · {items.length}</Text>
         {items.map((it, i) => (
           <View key={it.key} style={styles.itemBlock}>
@@ -336,51 +375,53 @@ export default function PresetBuilder() {
                 <Text style={styles.itemIndexLabel}>{i + 1}</Text>
               </View>
               <View style={styles.itemControls}>
-                <Pressable onPress={() => moveItem(it.key, -1)} hitSlop={6} disabled={i === 0}>
-                  <Text style={[styles.ctl, i === 0 && styles.ctlDisabled]}>↑</Text>
-                </Pressable>
-                <Pressable
+                <Glyph
+                  glyph="↑"
+                  onPress={() => moveItem(it.key, -1)}
+                  disabled={i === 0}
+                  accessibilityLabel={`Move item ${i + 1} up`}
+                />
+                <Glyph
+                  glyph="↓"
                   onPress={() => moveItem(it.key, 1)}
-                  hitSlop={6}
                   disabled={i === items.length - 1}
-                >
-                  <Text style={[styles.ctl, i === items.length - 1 && styles.ctlDisabled]}>↓</Text>
-                </Pressable>
+                  accessibilityLabel={`Move item ${i + 1} down`}
+                />
                 {items.length > 1 ? (
-                  <Pressable onPress={() => removeItem(it.key)} hitSlop={6}>
-                    <Text style={styles.ctlDanger}>Remove</Text>
-                  </Pressable>
+                  <TextButton
+                    label="Remove"
+                    tone="danger"
+                    onPress={() => removeItem(it.key)}
+                    labelStyle={styles.ctlDanger}
+                  />
                 ) : null}
               </View>
             </View>
-            <TextInput
-              style={styles.input}
+            <Input
               value={it.itemName}
               onChangeText={(v) => updateItem(it.key, { itemName: v })}
               placeholder="Item name (e.g. Front view) *"
-              placeholderTextColor={palette.faint}
             />
-            <TextInput
-              style={styles.input}
+            <Input
               value={it.description}
               onChangeText={(v) => updateItem(it.key, { description: v })}
               placeholder="Guidance for the inspector (optional)"
-              placeholderTextColor={palette.faint}
             />
             {it.referenceImageUrl ? (
-              <Text style={styles.hint}>Reference image kept from the duplicated preset.</Text>
+              <Text style={ui.hint}>Reference image kept from the duplicated preset.</Text>
             ) : (
-              <Text style={styles.hint}>Reference-image upload is web-only for now.</Text>
+              <Text style={ui.hint}>Reference-image upload is web-only for now.</Text>
             )}
           </View>
         ))}
-        <Pressable onPress={() => setItems((prev) => [...prev, blankItem()])} hitSlop={6}>
-          <Text style={styles.addLink}>+ Add loop item</Text>
-        </Pressable>
+        <TextButton
+          label="+ Add loop item"
+          onPress={() => setItems((prev) => [...prev, blankItem()])}
+        />
       </View>
 
       {/* Loop-global defect tags. */}
-      <View style={styles.card}>
+      <View style={ui.card}>
         <Text style={styles.sectionLabel}>
           Defect tags (loop-global) · {selected.size} selected
         </Text>
@@ -398,6 +439,9 @@ export default function PresetBuilder() {
                     <Pressable
                       key={d.id}
                       onPress={() => toggleDefect(d.id)}
+                      hitSlop={{ top: 6, bottom: 6 }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on }}
                       style={[
                         styles.chip,
                         { backgroundColor: on ? tint.bg : palette.lineSoft },
@@ -414,15 +458,11 @@ export default function PresetBuilder() {
             </View>
           );
         })}
-        <View style={styles.customRow}>
-          <TextInput
-            style={[styles.input, { flex: 1 }]}
-            value={customName}
-            onChangeText={setCustomName}
-            placeholder="Add a custom defect…"
-            placeholderTextColor={palette.faint}
-          />
-        </View>
+        <Input
+          value={customName}
+          onChangeText={setCustomName}
+          placeholder="Add a custom defect…"
+        />
         <View style={styles.chipWrap}>
           {SEVERITIES.map((sev) => {
             const tint = severityTint[SEV_KEY[sev]];
@@ -431,6 +471,9 @@ export default function PresetBuilder() {
               <Pressable
                 key={sev}
                 onPress={() => setCustomSeverity(sev)}
+                hitSlop={{ top: 6, bottom: 6 }}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
                 style={[styles.chip, { backgroundColor: on ? tint.bg : palette.lineSoft }]}
               >
                 <Text style={[styles.chipLabel, { color: on ? tint.fg : palette.sub }]}>
@@ -439,79 +482,56 @@ export default function PresetBuilder() {
               </Pressable>
             );
           })}
-          <Pressable onPress={addCustomDefect} disabled={customPending} hitSlop={6}>
-            <Text style={styles.addLink}>{customPending ? 'Adding…' : 'Add'}</Text>
-          </Pressable>
+          <TextButton
+            label={customPending ? 'Adding…' : 'Add'}
+            onPress={addCustomDefect}
+            disabled={customPending}
+          />
         </View>
-        {customError ? <Text style={styles.errorText}>{customError}</Text> : null}
+        {customError ? <Text style={ui.errorText}>{customError}</Text> : null}
       </View>
 
       {/* Loop-global measurement sheet. */}
-      <View style={styles.card}>
+      <View style={ui.card}>
         <Text style={styles.sectionLabel}>Measurement sheet (per unit)</Text>
         {fields.map((f) => (
           <View key={f.key} style={styles.fieldRow}>
-            <TextInput
-              style={[styles.input, { flex: 2 }]}
+            <Input
+              style={{ flex: 2 }}
               value={f.label}
               onChangeText={(v) =>
                 setFields((prev) => prev.map((x) => (x.key === f.key ? { ...x, label: v } : x)))
               }
               placeholder="Label (e.g. Chest width)"
-              placeholderTextColor={palette.faint}
             />
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
+            <Input
+              style={{ flex: 1 }}
               value={f.unit}
               onChangeText={(v) =>
                 setFields((prev) => prev.map((x) => (x.key === f.key ? { ...x, unit: v } : x)))
               }
               placeholder="Unit"
-              placeholderTextColor={palette.faint}
             />
-            <Pressable
+            <Glyph
+              glyph="✕"
+              danger
               onPress={() => setFields((prev) => prev.filter((x) => x.key !== f.key))}
-              hitSlop={6}
-            >
-              <Text style={styles.ctlDanger}>✕</Text>
-            </Pressable>
+              accessibilityLabel={`Remove measurement field ${f.label || ''}`.trim()}
+            />
           </View>
         ))}
-        <Pressable
+        <TextButton
+          label="+ Add measurement field"
           onPress={() => setFields((prev) => [...prev, { key: newKey(), label: '', unit: '' }])}
-          hitSlop={6}
-        >
-          <Text style={styles.addLink}>+ Add measurement field</Text>
-        </Pressable>
+        />
       </View>
 
-      <Pressable
-        style={[styles.button, pending && styles.buttonDisabled]}
-        onPress={() => save(seed)}
-        disabled={pending}
-      >
-        <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save preset'}</Text>
-      </Pressable>
+      <Button label="Save preset" loadingLabel="Saving…" loading={pending} onPress={save} />
     </FormScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
-  title: { color: palette.ink, fontSize: 20, fontWeight: '700' },
-  hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
   warnBanner: {
     borderWidth: 1,
     borderColor: severityTint.major.fg,
@@ -520,34 +540,6 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   warnText: { color: severityTint.major.fg, fontSize: 13, lineHeight: 18 },
-  errorText: { color: palette.danger, fontSize: 13 },
-  field: { gap: 6 },
-  fieldLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  multiline: { minHeight: 70, textAlignVertical: 'top' },
-  card: {
-    backgroundColor: palette.panel,
-    borderColor: palette.line,
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 14,
-    gap: 10,
-  },
   sectionLabel: {
     color: palette.sub,
     fontSize: 11,
@@ -575,11 +567,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   itemIndexLabel: { color: palette.accent, fontSize: 12.5, fontWeight: '700' },
-  itemControls: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  ctl: { color: palette.accent, fontSize: 18, fontWeight: '700' },
-  ctlDisabled: { color: palette.faint },
-  ctlDanger: { color: palette.danger, fontSize: 13, fontWeight: '600' },
-  addLink: { color: palette.accent, fontSize: 14, fontWeight: '600' },
+  itemControls: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  glyph: {
+    minWidth: MIN_TARGET,
+    minHeight: MIN_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+  },
+  glyphPressed: { backgroundColor: palette.lineSoft },
+  glyphText: { color: palette.accent, fontSize: 18, fontWeight: '700' },
+  glyphDisabled: { color: palette.faint },
+  glyphDanger: { color: palette.danger, fontSize: 15 },
+  ctlDanger: { fontSize: 13 },
   sevLabel: {
     fontSize: 11.5,
     fontWeight: '700',
@@ -592,16 +592,12 @@ const styles = StyleSheet.create({
     gap: 6,
     alignItems: 'center',
   },
-  chip: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  chipLabel: { fontSize: 12.5, fontWeight: '600' },
-  customRow: { flexDirection: 'row', gap: 8 },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  button: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
-    alignItems: 'center',
-    paddingVertical: 12,
+  chip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    minHeight: 32,
+    justifyContent: 'center',
   },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  chipLabel: { fontSize: 12.5, fontWeight: '600' },
+  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

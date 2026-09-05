@@ -14,6 +14,10 @@
  *   expo-image-picker and is deferred (recorded in the ledger). The tri-state
  *   logoUrl write semantics are honoured: untouched → field omitted,
  *   removed → explicit null.
+ *
+ * INS-092: pull-to-refresh reloads the record without discarding typed edits;
+ * a failed preset list has its own Retry (only the presets are re-fetched);
+ * saves confirm with a toast.
  */
 import { ApiError } from '@inspect/api-client';
 import { brandFallbacks, palette, severity as severityTint } from '@inspect/design-tokens';
@@ -26,21 +30,14 @@ import type {
 } from '@inspect/shared-types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Alert, Image, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { OptionPicker } from '@/components/option-picker';
 import { BackButton } from '@/components/back-button';
 import { FormScreen } from '@/components/form-screen';
+import { OptionPicker } from '@/components/option-picker';
+import { useToast } from '@/components/toast';
+import { Button, Chip, Field, Input, TextButton, ui } from '@/components/ui';
 import { client, loadIdentity } from '@/lib/session';
 
 /** The one shape the API accepts for primaryColor (INS-077) — a live hint only. */
@@ -55,6 +52,8 @@ type Load =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; company: CompanyDto; presets: LoopPresetDto[] | null };
 
+const fetchPresets = () => client.get<LoopPresetDto[]>('/loop-presets');
+
 /** Pure fetch — setState only ever happens in .then. */
 async function fetchCompany(id: string): Promise<Load> {
   const identity = await loadIdentity();
@@ -63,8 +62,8 @@ async function fetchCompany(id: string): Promise<Load> {
     const [company, presets] = await Promise.all([
       client.get<CompanyDto>(`/companies/${id}`),
       // Presets failing must not sink the whole screen — null means "the
-      // default-preset select is unavailable", shown as such, never silently.
-      client.get<LoopPresetDto[]>('/loop-presets').catch(() => null),
+      // default-preset select is unavailable", shown as such with its own Retry.
+      fetchPresets().catch(() => null),
     ]);
     return { kind: 'ready', company, presets };
   } catch (e) {
@@ -79,6 +78,7 @@ async function fetchCompany(id: string): Promise<Load> {
 
 export default function CompanyDetail() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const companyId = String(id);
 
@@ -93,8 +93,8 @@ export default function CompanyDetail() {
   const [presetId, setPresetId] = useState<string | null>(null);
   const [logoRemoved, setLogoRemoved] = useState(false);
   const [pending, setPending] = useState(false);
+  const [presetsPending, setPresetsPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [savedNote, setSavedNote] = useState(false);
 
   const seed = useCallback((c: CompanyDto) => {
     setName(c.name);
@@ -119,9 +119,30 @@ export default function CompanyDetail() {
     fetchCompany(companyId).then(apply);
   }, [companyId, apply]);
 
+  /** Full reload: re-fetch and re-seed the form (after a save or restore). */
   const reload = useCallback(() => {
     fetchCompany(companyId).then(apply);
   }, [companyId, apply]);
+
+  /** Pull-to-refresh: update the record, keep whatever is being typed. */
+  async function refresh() {
+    const result = await fetchCompany(companyId);
+    if (result.kind === 'ready') setLoad(result);
+    else toast('Could not refresh the company', { tone: 'danger' });
+  }
+
+  /** INS-092: retry ONLY the preset list, never the whole screen. */
+  async function retryPresets() {
+    setPresetsPending(true);
+    try {
+      const presets = await fetchPresets();
+      setLoad((l) => (l.kind === 'ready' ? { ...l, presets } : l));
+    } catch {
+      toast('Presets still unavailable', { tone: 'danger' });
+    } finally {
+      setPresetsPending(false);
+    }
+  }
 
   async function save(company: CompanyDto) {
     const trimmed = (name ?? '').trim();
@@ -149,10 +170,9 @@ export default function CompanyDetail() {
     };
     setPending(true);
     setFormError(null);
-    setSavedNote(false);
     try {
       await client.patch(`/companies/${company.id}`, body);
-      setSavedNote(true);
+      toast('Company saved');
       reload();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Save failed');
@@ -176,6 +196,7 @@ export default function CompanyDetail() {
               setFormError(null);
               try {
                 await client.del(`/companies/${company.id}`);
+                toast(`${company.name} archived`, { tone: 'neutral' });
                 router.back();
               } catch (e) {
                 setFormError(e instanceof Error ? e.message : 'Archive failed');
@@ -194,6 +215,7 @@ export default function CompanyDetail() {
     setFormError(null);
     try {
       await client.post(`/companies/${company.id}/restore`, {});
+      toast('Company restored');
       reload();
     } catch (e) {
       setFormError(e instanceof Error ? e.message : 'Restore failed');
@@ -204,8 +226,8 @@ export default function CompanyDetail() {
 
   if (load.kind === 'loading' || (load.kind === 'ready' && name === null)) {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
@@ -214,22 +236,18 @@ export default function CompanyDetail() {
 
   if (load.kind !== 'ready') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>
             {load.kind === 'missing'
               ? 'Company not found'
               : load.kind === 'forbidden'
                 ? 'QA Manager access required'
                 : 'Could not load the company'}
           </Text>
-          {load.kind === 'error' ? <Text style={styles.mutedText}>{load.message}</Text> : null}
-          <View style={styles.centerActions}>
-            {load.kind === 'error' ? (
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            ) : null}
+          {load.kind === 'error' ? <Text style={ui.mutedText}>{load.message}</Text> : null}
+          <View style={ui.centerActions}>
+            {load.kind === 'error' ? <TextButton label="Retry" onPress={reload} /> : null}
             <BackButton label="Go back" />
           </View>
         </View>
@@ -252,7 +270,7 @@ export default function CompanyDetail() {
     (presetId ? { id: presetId, label: 'Current preset (not in list)' } : presetOptions[0]);
 
   return (
-    <FormScreen>
+    <FormScreen onRefresh={refresh}>
       {/* Identity */}
       <View style={styles.headRow}>
         {!logoRemoved && company.logoViewUrl ? (
@@ -277,47 +295,39 @@ export default function CompanyDetail() {
           <Text style={styles.archivedText}>
             This company is archived. It is hidden from the active directory; history is preserved.
           </Text>
-          <Pressable onPress={() => restore(company)} disabled={pending} hitSlop={8}>
-            <Text style={styles.link}>{pending ? 'Restoring…' : 'Restore'}</Text>
-          </Pressable>
+          <TextButton
+            label={pending ? 'Restoring…' : 'Restore'}
+            onPress={() => restore(company)}
+            disabled={pending}
+          />
         </View>
       ) : null}
 
-      {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
-      {savedNote ? <Text style={styles.savedText}>Saved.</Text> : null}
+      {formError ? <Text style={ui.errorText}>{formError}</Text> : null}
 
       {/* Identity fields */}
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Name *</Text>
-        <TextInput
-          style={styles.input}
-          value={name ?? ''}
-          onChangeText={setName}
-          placeholder="Company name"
-          placeholderTextColor={palette.faint}
-        />
-      </View>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Kind</Text>
-        <View style={styles.chipRow}>
+      <Field label="Name *">
+        <Input value={name ?? ''} onChangeText={setName} placeholder="Company name" />
+      </Field>
+      <Field label="Kind">
+        <View style={ui.chipRow}>
           {(['THIRD_PARTY', 'INTERNAL'] as const).map((k) => (
-            <Pressable
+            <Chip
               key={k}
+              label={k === 'INTERNAL' ? 'Internal' : 'Third-party'}
+              active={kindV === k}
               onPress={() => setKindV(k)}
-              style={[styles.kindChip, kindV === k && styles.kindChipActive]}
-            >
-              <Text style={[styles.kindChipLabel, kindV === k && styles.kindChipLabelActive]}>
-                {k === 'INTERNAL' ? 'Internal' : 'Third-party'}
-              </Text>
-            </Pressable>
+            />
           ))}
         </View>
-      </View>
+      </Field>
 
       {/* Branding — used when this company is the CLIENT on an inspection. */}
       <Text style={styles.sectionLabel}>Branding (client role)</Text>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Brand colour (hex)</Text>
+      <Field
+        label="Brand colour (hex)"
+        error={colorValid ? null : 'Use #RRGGBB — the API rejects other shapes.'}
+      >
         <View style={styles.colorRow}>
           <View
             style={[
@@ -327,39 +337,33 @@ export default function CompanyDetail() {
               },
             ]}
           />
-          <TextInput
-            style={[styles.input, { flex: 1 }, !colorValid && styles.inputInvalid]}
+          <Input
+            style={{ flex: 1 }}
+            invalid={!colorValid}
             value={color}
             onChangeText={setColor}
             placeholder="#1457A3"
-            placeholderTextColor={palette.faint}
             autoCapitalize="none"
             autoCorrect={false}
           />
         </View>
-        {!colorValid ? (
-          <Text style={styles.hintDanger}>Use #RRGGBB — the API rejects other shapes.</Text>
-        ) : null}
-      </View>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Logo</Text>
+      </Field>
+      <Field label="Logo">
         {!logoRemoved && company.logoUrl ? (
           <View style={styles.logoRow}>
             <Text style={styles.hint} numberOfLines={1}>
               {company.logoUrl.split('/').pop()}
             </Text>
-            <Pressable onPress={() => setLogoRemoved(true)} hitSlop={8}>
-              <Text style={styles.removeLink}>Remove</Text>
-            </Pressable>
+            <TextButton label="Remove" tone="danger" onPress={() => setLogoRemoved(true)} />
           </View>
         ) : (
-          <Text style={styles.hint}>
+          <Text style={ui.hint}>
             {logoRemoved
               ? 'Logo will be removed on save.'
               : 'No logo. Uploading a new one is web-only for now.'}
           </Text>
         )}
-      </View>
+      </Field>
       <OptionPicker
         label="Default preset"
         value={selectedPreset}
@@ -369,75 +373,68 @@ export default function CompanyDetail() {
         onSelect={(o) => setPresetId(o.id)}
       />
       {presets === null ? (
-        <Text style={styles.hintDanger}>
-          Presets could not be loaded — the default-preset list may be incomplete.
-        </Text>
+        <View style={styles.inlineError}>
+          <Text style={[ui.errorText, { flexShrink: 1 }]}>
+            Presets could not be loaded — the default-preset list may be incomplete.
+          </Text>
+          <TextButton
+            label={presetsPending ? 'Retrying…' : 'Retry'}
+            onPress={retryPresets}
+            disabled={presetsPending}
+          />
+        </View>
       ) : null}
 
       {/* Location — used when this company is the FACTORY on an inspection. */}
       <Text style={styles.sectionLabel}>Location (factory role)</Text>
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Address</Text>
-        <TextInput
-          style={styles.input}
-          value={address}
-          onChangeText={setAddress}
-          placeholder="Street, city, country"
-          placeholderTextColor={palette.faint}
-        />
-      </View>
+      <Field label="Address">
+        <Input value={address} onChangeText={setAddress} placeholder="Street, city, country" />
+      </Field>
       <View style={styles.gpsRow}>
-        <View style={[styles.field, { flex: 1 }]}>
-          <Text style={styles.fieldLabel}>Latitude</Text>
-          <TextInput
-            style={styles.input}
+        <Field label="Latitude" style={{ flex: 1 }}>
+          <Input
             value={lat}
             onChangeText={setLat}
             placeholder="23.81"
-            placeholderTextColor={palette.faint}
             keyboardType="numbers-and-punctuation"
           />
-        </View>
-        <View style={[styles.field, { flex: 1 }]}>
-          <Text style={styles.fieldLabel}>Longitude</Text>
-          <TextInput
-            style={styles.input}
+        </Field>
+        <Field label="Longitude" style={{ flex: 1 }}>
+          <Input
             value={lng}
             onChangeText={setLng}
             placeholder="90.41"
-            placeholderTextColor={palette.faint}
             keyboardType="numbers-and-punctuation"
           />
-        </View>
+        </Field>
       </View>
 
-      <Pressable
-        style={[styles.button, pending && styles.buttonDisabled]}
+      <Button
+        label="Save changes"
+        loadingLabel="Saving…"
+        loading={pending}
         onPress={() => save(company)}
-        disabled={pending}
-      >
-        <Text style={styles.buttonLabel}>{pending ? 'Saving…' : 'Save changes'}</Text>
-      </Pressable>
+        style={{ marginTop: 4 }}
+      />
 
-      <Pressable onPress={() => router.push(`/companies/${company.id}/guests`)} hitSlop={4}>
-        <Text style={styles.link}>Manage guests →</Text>
-      </Pressable>
+      <TextButton
+        label="Manage guests →"
+        onPress={() => router.push(`/companies/${company.id}/guests`)}
+      />
 
       {!company.archivedAt ? (
-        <View style={styles.dangerCard}>
-          <Text style={styles.dangerTitle}>Archive company</Text>
-          <Text style={styles.hint}>
+        <View style={ui.dangerCard}>
+          <Text style={ui.dangerTitle}>Archive company</Text>
+          <Text style={ui.hint}>
             Removes this company from the active list. Historical purchase orders, inspections and
             reports are preserved.
           </Text>
-          <Pressable
-            onPress={() => confirmArchive(company)}
+          <Button
+            variant="danger"
+            label="Archive"
             disabled={pending}
-            hitSlop={8}
-            style={styles.dangerButton}
-          >
-            <Text style={styles.dangerButtonLabel}>Archive</Text>
-          </Pressable>
+            onPress={() => confirmArchive(company)}
+          />
         </View>
       ) : null}
     </FormScreen>
@@ -445,19 +442,6 @@ export default function CompanyDetail() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   avatar: {
     width: 44,
@@ -479,42 +463,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   archivedText: { color: severityTint.major.fg, fontSize: 13, lineHeight: 18 },
-  errorText: { color: palette.danger, fontSize: 13 },
-  savedText: { color: palette.accent, fontSize: 13, fontWeight: '600' },
-  field: { gap: 6 },
-  fieldLabel: {
-    color: palette.faint,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: palette.ink,
-    fontSize: 14,
-  },
-  inputInvalid: { borderColor: palette.danger },
-  chipRow: { flexDirection: 'row', gap: 8 },
-  kindChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: palette.line,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: palette.panel,
-  },
-  kindChipActive: {
-    backgroundColor: palette.accentSoft,
-    borderColor: palette.accent,
-  },
-  kindChipLabel: { color: palette.sub, fontSize: 13, fontWeight: '600' },
-  kindChipLabelActive: { color: palette.accent },
   sectionLabel: {
     color: palette.faint,
     fontSize: 11,
@@ -532,42 +480,17 @@ const styles = StyleSheet.create({
     borderColor: palette.line,
   },
   hint: { color: palette.faint, fontSize: 12, lineHeight: 17, flexShrink: 1 },
-  hintDanger: { color: palette.danger, fontSize: 12 },
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
-  removeLink: { color: palette.danger, fontSize: 13, fontWeight: '600' },
-  gpsRow: { flexDirection: 'row', gap: 10 },
-  button: {
-    marginTop: 4,
-    backgroundColor: palette.accent,
-    borderRadius: 8,
+  inlineError: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  buttonDisabled: { opacity: 0.5 },
-  buttonLabel: { color: '#fff', fontSize: 15, fontWeight: '700' },
-  dangerCard: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: severityTint.critical.bg,
-    backgroundColor: palette.panel,
-    borderRadius: 10,
-    padding: 14,
-    gap: 8,
-  },
-  dangerTitle: { color: palette.danger, fontSize: 14, fontWeight: '700' },
-  dangerButton: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: severityTint.critical.bg,
-    backgroundColor: severityTint.critical.bg,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  dangerButtonLabel: { color: palette.danger, fontSize: 13, fontWeight: '700' },
+  gpsRow: { flexDirection: 'row', gap: 10 },
 });

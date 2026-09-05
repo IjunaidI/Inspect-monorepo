@@ -25,9 +25,13 @@ type Props = {
   progress: Record<string, number>;
   items: InspectionLoopItemDto[];
   busy?: boolean;
+  /** Last known connectivity; null = unknown. */
+  online?: boolean | null;
   onRetryAll: () => void;
   onKeepMine: (entry: QueuedPhoto) => void;
   onDiscard: (entry: QueuedPhoto) => void;
+  /** Jump to the entry's slot with the camera open — for rejected uploads. */
+  onRetake: (entry: QueuedPhoto) => void;
   onClose: () => void;
   /** Rendered under the list — the parent decides what "done" means. */
   footer?: ReactNode;
@@ -36,8 +40,10 @@ type Props = {
 export function UploadSheet(props: Props) {
   const { entries, progress, items } = props;
   const failed = entries.filter((e) => e.state === 'failed');
+  const rejected = failed.filter((e) => e.failureKind === 'permanent');
   const conflicts = entries.filter((e) => e.state === 'conflict');
   const moving = entries.filter((e) => e.state === 'pending' || e.state === 'uploading');
+  const offline = props.online === false;
 
   return (
     <Modal visible={props.visible} animationType="slide" transparent onRequestClose={props.onClose}>
@@ -54,12 +60,21 @@ export function UploadSheet(props: Props) {
           </View>
 
           <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 8 }}>
+            {offline && entries.length > 0 ? (
+              <View style={styles.offline}>
+                <Text style={styles.offlineText}>
+                  You are offline. Photos are safe on this device and upload on their own the
+                  moment the connection returns.
+                </Text>
+              </View>
+            ) : null}
             {entries.length === 0 ? (
               <Text style={ui.muted}>Every photo is on the server.</Text>
             ) : null}
             {entries.map((e) => {
               const item = items.find((i) => i.id === e.inspectionLoopItemId);
-              const badge = stateLabel(e.state, progress[e.id]);
+              const badge = stateLabel(e.state, progress[e.id], e.failureKind, props.online);
+              const isRejected = e.state === 'failed' && e.failureKind === 'permanent';
               const pct = e.state === 'uploading' ? (progress[e.id] ?? 0) : 0;
               return (
                 <View key={e.id} style={styles.row}>
@@ -88,8 +103,17 @@ export function UploadSheet(props: Props) {
                       </View>
                     ) : null}
                     {e.state === 'failed' && e.error ? (
-                      <Text style={styles.error} numberOfLines={2}>
+                      <Text
+                        style={[styles.error, e.failureKind === 'offline' && ui.hint]}
+                        numberOfLines={2}
+                      >
                         {e.error}
+                      </Text>
+                    ) : null}
+                    {isRejected ? (
+                      <Text style={ui.hint}>
+                        The server refused this photo, so retrying the same bytes cannot help.
+                        Retake the shot, or discard it to reopen the slot.
                       </Text>
                     ) : null}
                     {e.state === 'conflict' ? (
@@ -107,6 +131,15 @@ export function UploadSheet(props: Props) {
                             onPress={() => props.onKeepMine(e)}
                           >
                             <Text style={[styles.smallBtnLabel, { color: '#fff' }]}>Keep mine</Text>
+                          </Pressable>
+                        ) : null}
+                        {isRejected ? (
+                          <Pressable
+                            style={[styles.smallBtn, { backgroundColor: palette.accent }]}
+                            disabled={props.busy}
+                            onPress={() => props.onRetake(e)}
+                          >
+                            <Text style={[styles.smallBtnLabel, { color: '#fff' }]}>Retake</Text>
                           </Pressable>
                         ) : null}
                         <Pressable
@@ -128,10 +161,15 @@ export function UploadSheet(props: Props) {
 
           <View style={styles.footer}>
             <Text style={ui.hint}>
-              {moving.length} uploading · {failed.length} failed · {conflicts.length} need
-              {conflicts.length === 1 ? 's' : ''} a decision
+              {offline
+                ? `Offline · ${entries.length} waiting`
+                : `${moving.length} uploading · ${failed.length - rejected.length} retrying`}
+              {rejected.length ? ` · ${rejected.length} rejected` : ''}
+              {conflicts.length
+                ? ` · ${conflicts.length} need${conflicts.length === 1 ? 's' : ''} a decision`
+                : ''}
             </Text>
-            {failed.length > 0 ? (
+            {failed.length > 0 && !offline ? (
               <Pressable style={ui.btnGhost} onPress={props.onRetryAll} disabled={props.busy}>
                 <Text style={ui.btnGhostLabel}>Retry failed now</Text>
               </Pressable>
@@ -168,4 +206,12 @@ const styles = StyleSheet.create({
   smallBtnGhost: { borderWidth: 1, borderColor: palette.line },
   smallBtnLabel: { fontSize: 12.5, fontWeight: '600' },
   footer: { gap: 10, paddingTop: 12, borderTopWidth: 1, borderTopColor: palette.lineSoft },
+  offline: {
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(245,158,11,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.5)',
+  },
+  offlineText: { color: '#7c4a03', fontSize: 12.5 },
 });

@@ -21,7 +21,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -30,6 +30,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BackButton } from '@/components/back-button';
+import { useToast } from '@/components/toast';
+import { Button, TextButton, ui } from '@/components/ui';
 import { client, loadIdentity } from '@/lib/session';
 
 const SEV_KEY: Record<string, SeverityKey> = {
@@ -66,10 +68,12 @@ async function fetchPreset(id: string): Promise<Load> {
 
 export default function PresetDetail() {
   const router = useRouter();
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const presetId = String(id);
 
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  const [refreshing, setRefreshing] = useState(false);
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -77,6 +81,14 @@ export default function PresetDetail() {
     fetchPreset(presetId).then(setLoad);
   }, [presetId]);
   useEffect(reload, [reload]);
+
+  async function refresh() {
+    setRefreshing(true);
+    const result = await fetchPreset(presetId);
+    if (result.kind === 'ready') setLoad(result);
+    else toast('Could not refresh the preset', { tone: 'danger' });
+    setRefreshing(false);
+  }
 
   function confirmArchive(preset: LoopPresetDetailDto) {
     Alert.alert(
@@ -93,6 +105,7 @@ export default function PresetDetail() {
               setActionError(null);
               try {
                 await client.del(`/loop-presets/${preset.id}`);
+                toast(`Preset “${preset.name}” archived`, { tone: 'neutral' });
                 router.back();
               } catch (e) {
                 setActionError(e instanceof Error ? e.message : 'Archive failed');
@@ -108,8 +121,8 @@ export default function PresetDetail() {
 
   if (load.kind === 'loading') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
           <ActivityIndicator color={palette.accent} />
         </View>
       </SafeAreaView>
@@ -118,22 +131,18 @@ export default function PresetDetail() {
 
   if (load.kind !== 'ready') {
     return (
-      <SafeAreaView style={styles.screen}>
-        <View style={styles.centered}>
-          <Text style={styles.errorTitle}>
+      <SafeAreaView style={ui.screen}>
+        <View style={ui.centered}>
+          <Text style={ui.errorTitle}>
             {load.kind === 'missing'
               ? 'Preset not found'
               : load.kind === 'forbidden'
                 ? 'QA Manager access required'
                 : 'Could not load the preset'}
           </Text>
-          {load.kind === 'error' ? <Text style={styles.mutedText}>{load.message}</Text> : null}
-          <View style={styles.centerActions}>
-            {load.kind === 'error' ? (
-              <Pressable onPress={reload} hitSlop={8}>
-                <Text style={styles.link}>Retry</Text>
-              </Pressable>
-            ) : null}
+          {load.kind === 'error' ? <Text style={ui.mutedText}>{load.message}</Text> : null}
+          <View style={ui.centerActions}>
+            {load.kind === 'error' ? <TextButton label="Retry" onPress={reload} /> : null}
             <BackButton label="Go back" />
           </View>
         </View>
@@ -147,8 +156,13 @@ export default function PresetDetail() {
   const items = [...preset.items].sort((a, b) => a.position - b.position);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.body}>
+    <SafeAreaView style={ui.screen}>
+      <ScrollView
+        contentContainerStyle={styles.body}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={palette.accent} />
+        }
+      >
         <View style={styles.headRow}>
           <Text style={styles.title} numberOfLines={2}>
             {preset.name}
@@ -156,14 +170,14 @@ export default function PresetDetail() {
           <Text style={styles.version}>v{preset.version}</Text>
         </View>
         {preset.description ? <Text style={styles.description}>{preset.description}</Text> : null}
-        {preset.aqlLevel ? <Text style={styles.hint}>AQL level {preset.aqlLevel}</Text> : null}
-        {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
+        {preset.aqlLevel ? <Text style={ui.hint}>AQL level {preset.aqlLevel}</Text> : null}
+        {actionError ? <Text style={ui.errorText}>{actionError}</Text> : null}
 
         {/* Loop-global defect tags (INS-081 — never per item). */}
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>Defect tags (loop-global)</Text>
           {preset.allowedDefects.length === 0 ? (
-            <Text style={styles.hint}>No defect tags configured.</Text>
+            <Text style={ui.hint}>No defect tags configured.</Text>
           ) : (
             <View style={styles.chipWrap}>
               {preset.allowedDefects.map((ad) => {
@@ -187,7 +201,7 @@ export default function PresetDetail() {
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>Measurement sheet (per unit)</Text>
           {preset.measurementFields.length === 0 ? (
-            <Text style={styles.hint}>No measurement fields configured.</Text>
+            <Text style={ui.hint}>No measurement fields configured.</Text>
           ) : (
             preset.measurementFields.map((f) => (
               <View key={f.id} style={styles.measureRow}>
@@ -230,24 +244,24 @@ export default function PresetDetail() {
         </View>
 
         {/* INS-076: presets are immutable — Duplicate is the only edit path. */}
-        <Pressable onPress={() => router.push(`/presets/new?from=${preset.id}`)} hitSlop={4}>
-          <Text style={styles.link}>Duplicate into a new version →</Text>
-        </Pressable>
+        <TextButton
+          label="Duplicate into a new version →"
+          onPress={() => router.push(`/presets/new?from=${preset.id}`)}
+        />
 
-        <View style={styles.dangerCard}>
-          <Text style={styles.dangerTitle}>Archive preset</Text>
-          <Text style={styles.hint}>
+        <View style={ui.dangerCard}>
+          <Text style={ui.dangerTitle}>Archive preset</Text>
+          <Text style={ui.hint}>
             Removes it from the presets list. Inspections keep their frozen snapshot; there is no
             restore.
           </Text>
-          <Pressable
+          <Button
+            variant="danger"
+            label="Archive"
+            loadingLabel="Archiving…"
+            loading={pending}
             onPress={() => confirmArchive(preset)}
-            disabled={pending}
-            hitSlop={8}
-            style={styles.dangerButton}
-          >
-            <Text style={styles.dangerButtonLabel}>{pending ? 'Archiving…' : 'Archive'}</Text>
-          </Pressable>
+          />
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -255,25 +269,11 @@ export default function PresetDetail() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 8,
-  },
-  centerActions: { flexDirection: 'row', gap: 24, marginTop: 8 },
-  errorTitle: { color: palette.ink, fontSize: 17, fontWeight: '700' },
-  mutedText: { color: palette.sub, fontSize: 14, textAlign: 'center' },
-  link: { color: palette.accent, fontSize: 14, fontWeight: '600' },
   headRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   title: { color: palette.ink, fontSize: 20, fontWeight: '700', flexShrink: 1 },
   version: { color: palette.faint, fontSize: 13, fontWeight: '600' },
   description: { color: palette.sub, fontSize: 14, lineHeight: 20 },
-  hint: { color: palette.faint, fontSize: 12, lineHeight: 17 },
-  errorText: { color: palette.danger, fontSize: 13 },
   card: {
     backgroundColor: palette.panel,
     borderColor: palette.line,
@@ -331,24 +331,4 @@ const styles = StyleSheet.create({
   },
   thumbFallback: { alignItems: 'center', justifyContent: 'center' },
   thumbFallbackText: { color: palette.faint, fontSize: 9 },
-  dangerCard: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: severityTint.critical.bg,
-    backgroundColor: palette.panel,
-    borderRadius: 10,
-    padding: 14,
-    gap: 8,
-  },
-  dangerTitle: { color: palette.danger, fontSize: 14, fontWeight: '700' },
-  dangerButton: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: severityTint.critical.bg,
-    backgroundColor: severityTint.critical.bg,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  dangerButtonLabel: { color: palette.danger, fontSize: 13, fontWeight: '700' },
 });

@@ -26,6 +26,7 @@ import {
 } from '@inspect/domain';
 import type {
   InspectionDto,
+  InspectionLoopItemDto,
   MeasurementDto,
   ReportDto,
   ReportPdfDownloadDto,
@@ -138,6 +139,33 @@ function groupMeasurements(measurements: MeasurementDto[] | undefined) {
     }));
 }
 
+/**
+ * Photo evidence in CAPTURE order (INS-092): one group per inspected unit
+ * (cycle, 0-based in storage, rendered 1-based), and inside a unit the loop
+ * items by `position` — the order the inspector walked them.
+ */
+function groupPhotosByUnit(items: InspectionLoopItemDto[] | undefined) {
+  const ordered = [...(items ?? [])].sort((a, b) => a.position - b.position);
+  const cycles = new Set<number>();
+  for (const item of ordered) for (const p of item.photos ?? []) cycles.add(p.cycleIndex);
+  return [...cycles]
+    .sort((a, b) => a - b)
+    .map((cycleIndex) => ({
+      cycleIndex,
+      slots: ordered.flatMap((item) => {
+        const photo = item.photos?.find((p) => p.cycleIndex === cycleIndex);
+        return photo ? [{ item, photo }] : [];
+      }),
+      flagged: ordered.reduce(
+        (n, item) =>
+          n +
+          (item.defects ?? []).filter((d) => d.cycleIndex === cycleIndex && d.severity === 'MAJOR')
+            .length,
+        0,
+      ),
+    }));
+}
+
 export default function Report() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const inspectionId = String(id);
@@ -214,7 +242,7 @@ export default function Report() {
           ? severityTint.major.fg
           : palette.sub;
   const gps = formatGps(insp.factoryCompany?.gps);
-  const photoGroups = (insp.items ?? []).filter((i) => (i.photos?.length ?? 0) > 0);
+  const photoUnits = groupPhotosByUnit(insp.items);
   const measurementGroups = groupMeasurements(insp.measurements);
 
   return (
@@ -309,39 +337,40 @@ export default function Report() {
           </View>
         ) : null}
 
-        {/* Photo evidence — grouped by loop ITEM (INS-081). */}
-        {photoGroups.length > 0 ? (
+        {/* Photo evidence — grouped by UNIT in capture order, items by position (INS-081/092). */}
+        {photoUnits.length > 0 ? (
           <View style={styles.card}>
             <Text style={styles.sectionLabel}>Photo evidence</Text>
-            {photoGroups.map((item) => {
-              const flagged = (item.defects ?? []).filter((d) => d.severity === 'MAJOR').length;
-              return (
-                <View key={item.id} style={styles.photoGroup}>
-                  <Text style={styles.photoGroupTitle}>
-                    {item.itemName}
-                    <Text style={styles.hint}>
-                      {'  '}
-                      {item.photos?.length ?? 0} shot
-                      {(item.photos?.length ?? 0) === 1 ? '' : 's'}
-                      {flagged ? ` · ${flagged} flagged` : ''}
-                    </Text>
+            {photoUnits.map((unit) => (
+              <View key={unit.cycleIndex} style={styles.photoGroup}>
+                <Text style={styles.photoGroupTitle}>
+                  Unit {unit.cycleIndex + 1}
+                  <Text style={styles.hint}>
+                    {'  '}
+                    {unit.slots.length} shot{unit.slots.length === 1 ? '' : 's'}
+                    {unit.flagged ? ` · ${unit.flagged} flagged` : ''}
                   </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.photoStrip}>
-                      {(item.photos ?? []).map((p) =>
-                        p.viewUrl ? (
-                          <Image key={p.id} source={{ uri: p.viewUrl }} style={styles.thumb} />
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.photoStrip}>
+                    {unit.slots.map(({ item, photo }) => (
+                      <View key={photo.id} style={styles.photoSlot}>
+                        {photo.viewUrl ? (
+                          <Image source={{ uri: photo.viewUrl }} style={styles.thumb} />
                         ) : (
-                          <View key={p.id} style={[styles.thumb, styles.thumbFallback]}>
-                            <Text style={styles.thumbFallbackText}>U{p.cycleIndex + 1}</Text>
+                          <View style={[styles.thumb, styles.thumbFallback]}>
+                            <Text style={styles.thumbFallbackText}>{item.position}</Text>
                           </View>
-                        ),
-                      )}
-                    </View>
-                  </ScrollView>
-                </View>
-              );
-            })}
+                        )}
+                        <Text style={styles.thumbLabel} numberOfLines={1}>
+                          {item.itemName}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -373,8 +402,11 @@ export default function Report() {
           <View style={styles.card}>
             <Text style={styles.sectionLabel}>Tamper-proof</Text>
             <MetaRow label="Signed at" value={report.generatedAt.slice(0, 10)} />
-            {/* Recording the signer is INS-089 — the model has no column yet. */}
-            <MetaRow label="Signed by" value="—" />
+            {/* INS-089: the signer, when the API records one (name, else email). */}
+            <MetaRow
+              label="Signed by"
+              value={report.generatedBy?.name ?? report.generatedBy?.email ?? '—'}
+            />
             {report.contentHash ? (
               <View style={styles.hashBlock}>
                 <Text style={styles.hint}>Content hash (sha256)</Text>
@@ -483,6 +515,8 @@ const styles = StyleSheet.create({
   photoGroup: { gap: 6 },
   photoGroupTitle: { color: palette.ink, fontSize: 14, fontWeight: '600' },
   photoStrip: { flexDirection: 'row', gap: 8 },
+  photoSlot: { width: 72, gap: 3 },
+  thumbLabel: { color: palette.sub, fontSize: 10.5, fontWeight: '600' },
   thumb: {
     width: 72,
     height: 72,

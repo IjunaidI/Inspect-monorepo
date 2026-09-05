@@ -21,11 +21,13 @@ import type {
 import * as Crypto from 'expo-crypto';
 import * as Device from 'expo-device';
 import { Directory, File, Paths, UploadType } from 'expo-file-system';
+import * as Network from 'expo-network';
 import { AppState } from 'react-native';
 
 import {
   activeEntries,
   cachedEntries,
+  classifyUploadError,
   discardQueued,
   enqueue,
   markConflict,
@@ -34,6 +36,7 @@ import {
   markUploading,
   nextRetryDelay,
   parseQueue,
+  rearmRetryable,
   resolveConflictAsRetake,
   retryFailed,
   selectNextUpload,
@@ -187,6 +190,8 @@ export interface QueueSnapshot {
   queue: QueuedPhoto[];
   /** Upload progress 0..1 for the entry currently in flight, by entry id. */
   progress: Record<string, number>;
+  /** Last known connectivity; null until the OS has answered once. */
+  online: boolean | null;
 }
 
 type Listener = (snapshot: QueueSnapshot) => void;
@@ -207,6 +212,14 @@ export class PhotoQueueManager {
   private running = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private inflight: { id: string; abort: AbortController } | null = null;
+  /** OS-reported connectivity (authoritative); null until it has answered. */
+  private osOnline: boolean | null = null;
+  /** Inferred from a socket-level failure when the OS has not answered. */
+  private inferredOnline: boolean | null = null;
+
+  private get online(): boolean | null {
+    return this.osOnline ?? this.inferredOnline;
+  }
 
   constructor(private readonly io: QueueIo) {
     this.queue = this.reconcile(loadQueue());
@@ -214,8 +227,38 @@ export class PhotoQueueManager {
     // Coming back to the foreground is the best moment to retry: the network
     // has most likely changed since we backed off.
     AppState.addEventListener('change', (state) => {
-      if (state === 'active') this.kick(true);
+      if (state === 'active') this.wake('foreground');
     });
+    // Connectivity: pause the drain while offline, resume the instant the
+    // network returns — no waiting out a backoff timer.
+    try {
+      Network.addNetworkStateListener((st) => this.onNetwork(st));
+      void Network.getNetworkStateAsync().then(
+        (st) => this.onNetwork(st),
+        () => undefined,
+      );
+    } catch {
+      // No native module (web / tests): stay in "unknown" and rely on timers.
+    }
+  }
+
+  private onNetwork(st: { isConnected?: boolean; isInternetReachable?: boolean }): void {
+    const online =
+      st.isConnected === undefined
+        ? null
+        : st.isConnected && st.isInternetReachable !== false;
+    const was = this.online;
+    this.osOnline = online;
+    if (online && was !== true) this.wake('network');
+    else this.emit();
+  }
+
+  /** Re-arm every retryable failure and drain now (reconnect / foreground). */
+  private wake(reason: 'foreground' | 'network'): void {
+    const next = rearmRetryable(this.queue);
+    if (next !== this.queue) this.commit(next);
+    void reason;
+    this.kick(true);
   }
 
   /**
@@ -230,9 +273,7 @@ export class PhotoQueueManager {
       queue =
         q.state === 'uploaded'
           ? discardQueued(queue, q.id)
-          : markFailed(queue, q.id, 'The photo file is missing on this device', 0).map((e) =>
-              e.id === q.id ? { ...e, nextAttemptAt: Number.MAX_SAFE_INTEGER } : e,
-            );
+          : markFailed(queue, q.id, 'The photo file is missing on this device', 0, 'permanent');
     }
     for (const stale of staleCache(queue)) {
       deleteLocal(stale.localUri);
@@ -250,7 +291,7 @@ export class PhotoQueueManager {
   }
 
   snapshot(): QueueSnapshot {
-    return { queue: this.queue, progress: this.progress };
+    return { queue: this.queue, progress: this.progress, online: this.online };
   }
 
   subscribe(fn: Listener): () => void {
@@ -363,12 +404,16 @@ export class PhotoQueueManager {
     // Re-reads the LIVE queue on every iteration, so a capture that lands
     // mid-drain is picked up by this loop instead of waiting for the next kick.
     for (;;) {
+      // The OS says offline: do not burn attempts — its listener wakes us. An
+      // INFERRED outage keeps the timer path so a missing listener cannot
+      // strand the queue.
+      if (this.osOnline === false) break;
       const next = selectNextUpload(this.queue);
       if (!next) break;
       await this.upload(next);
     }
     const delay = nextRetryDelay(this.queue);
-    if (delay !== null && delay < Number.MAX_SAFE_INTEGER / 2 && !this.timer) {
+    if (this.osOnline !== false && delay !== null && delay < Number.MAX_SAFE_INTEGER / 2 && !this.timer) {
       this.timer = setTimeout(() => {
         this.timer = null;
         this.kick();
@@ -425,14 +470,22 @@ export class PhotoQueueManager {
       }
       const { queue, evicted } = markUploaded(this.queue, entry.id, photo.id);
       evicted.forEach((q) => deleteLocal(q.localUri));
+      this.inferredOnline = true;
       this.commit(queue);
     } catch (e) {
       if (!this.queue.some((q) => q.id === entry.id)) return; // discarded meanwhile
       if (abort.signal.aborted && !(e instanceof Error && e.name === 'TimeoutError')) {
         return; // superseded/discarded by a human — nothing to record
       }
-      const message = e instanceof Error ? e.message : 'Upload failed';
-      this.commit(markFailed(this.queue, entry.id, message));
+      const kind = classifyUploadError(e, this.online);
+      const message =
+        kind === 'offline'
+          ? 'No network — will upload when the connection returns'
+          : e instanceof Error
+            ? e.message
+            : 'Upload failed';
+      if (kind === 'offline' && this.osOnline === null) this.inferredOnline = false;
+      this.commit(markFailed(this.queue, entry.id, message, Date.now(), kind));
     } finally {
       this.clearProgress(entry.id);
       if (this.inflight?.id === entry.id) this.inflight = null;
@@ -517,6 +570,8 @@ export function summarize(queue: readonly QueuedPhoto[], inspectionId: string) {
     active: active.length,
     uploading: active.filter((q) => q.state === 'uploading' || q.state === 'pending').length,
     failed: active.filter((q) => q.state === 'failed').length,
+    retrying: active.filter((q) => q.state === 'failed' && q.failureKind !== 'permanent').length,
+    rejected: active.filter((q) => q.state === 'failed' && q.failureKind === 'permanent').length,
     conflicts: active.filter((q) => q.state === 'conflict').length,
     cached: cachedEntries(queue, inspectionId).length,
   };
