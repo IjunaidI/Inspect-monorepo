@@ -1,6 +1,6 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-05.** This is the source-of-truth dashboard: current state only.
+> **Last verified: 2026-09-06.** This is the source-of-truth dashboard: current state only.
 > The long per-session history that used to stack here was trimmed 2026-09-02 — it lives in git
 > history (`git log -- docs/STATUS.md`) and in the backlog archive
 > ([done/2026-09-02-backlog-archive.md](done/2026-09-02-backlog-archive.md)). Open work:
@@ -20,6 +20,15 @@ review and report screens of both platforms. [INS-093](future/BACKLOG.md) grew c
 upload queue pauses offline and resumes on reconnect, classifies failures (server rejections stop retrying
 and offer Retake/Discard), and the loop cannot end — from the capture screen OR the review screen — while
 any photo is still on the device. Open backlog is down to the two items only the account owner can move.
+
+**Repository state (2026-09-06):** six commits on local `main` are **not yet pushed** (`b29f72c` camera
+loop → `6c7b84b` lockfile). Pushing auto-deploys the API to Railway, and that deploy's pre-deploy
+`prisma migrate deploy` applies the new `20260904220908_report_generated_by` migration there (already
+applied to the shared dev database, so it is a no-op for the data and forward-only). **One thing is
+verified only by tests, not on a device:** the 2026-09-05 mobile work (offline pause/resume, rejected-upload
+handling, the review-screen submit gate, the INS-092 papercuts). The 2026-09-04 camera flow was run on the
+emulator; the offline behaviour needs a phone pass (airplane mode mid-loop, then back online) — fold it
+into the INS-086 device pass.
 
 **Before that: [INS-093](future/BACKLOG.md) (2026-09-04) — the mobile camera loop hardened.** The
 first hands-on look at the capture screen found it "weird and nonsensical": a free "Next" button left
@@ -139,5 +148,14 @@ api 691/43 · web 60/9 · domain 39/7 · api-client 29/2 · mobile 46/4 · integ
 ## Open backlog (2 items)
 
 [INS-002](future/BACKLOG.md) credential rotation (user-side) · [INS-086](future/BACKLOG.md) epic
-(the on-device acceptance pass on a physical phone). Every low/medium item was closed 2026-09-05
+(the on-device acceptance pass on a physical phone — now also covering the 2026-09-05 offline/rejected
+upload behaviour and the review-screen submit gate). Every low/medium item was closed 2026-09-05
 (INS-034, INS-085, INS-087, INS-089, INS-092).
+
+## Next steps, in order
+
+1. `git push` — deploys the API (with the report-signer migration) to Railway; check `/health` after.
+2. `eas build --profile preview --platform android` and walk the ledger on a phone, including: shoot a
+   unit, go offline, shoot more, retake, come back online, watch the strip drain, End loop → review.
+3. INS-002 credential rotation (user-side).
+4. The parked product decisions listed under "Recorded observations, not fixed" above.

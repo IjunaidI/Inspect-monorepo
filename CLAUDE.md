@@ -207,6 +207,11 @@ is the backlog (`INS-NNN` ids); [docs/README.md](docs/README.md) explains the la
 2. Update [docs/STATUS.md](docs/STATUS.md)'s **"Last verified"** date and any pillar row you changed.
 3. On merge, move the spec + plan from `docs/in-progress/` → `docs/done/` (keep the dated filename).
 4. Review doc-affecting changes before committing (links resolve; STATUS + BACKLOG agree with the code).
+5. **Always update [docs/STATUS.md](docs/STATUS.md) BEFORE writing the end-of-session summary to the
+   user, every time, without being asked.** The summary and the dashboard must say the same thing:
+   what landed, what is verified and how, what is unverified, what is committed vs pushed, and the
+   open items in order. A summary that the next session cannot reconstruct from STATUS.md is a
+   summary that was lost.
 
 New specs/plans start in `docs/in-progress/specs|plans/` (paired `YYYY-MM-DD-<topic>` stem, `-design` on the
 spec) — **not** the retired `docs/superpowers/` path. Use `superpowers:writing-plans` to expand a backlog item
