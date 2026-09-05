@@ -6,20 +6,18 @@ import { Btn } from '@/components/inspect/shell';
 import { ui } from '@/components/inspect/tokens';
 import { EntityPicker } from '@/components/inspect/entity-picker';
 import { ErrorBanner } from '@/components/inspect/error-banner';
+import { Field, Input } from '@/components/inspect/field';
 import { QuickCreateCompany } from '@/components/inspect/quick-create/quick-create-company';
 import { QuickCreateProduct } from '@/components/inspect/quick-create/quick-create-product';
 import type { ApiCompany, ApiProduct } from '@/lib/api';
 import { createPurchaseOrder } from '../actions';
-
-const label = { display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 };
-const input = { width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const };
 
 type Creating = 'client' | 'factory' | 'product' | null;
 
 /**
  * INS-055 — both party pickers are fed by the SAME company list, because trade
  * role is a property of this PO, not of the company. Ranking is a hint
- * (`rankCompaniesByActivity`, shared with mobile; per-role ranking is INS-087).
+ * (`rankCompaniesByActivity`, shared with mobile; per-role ranking since INS-087).
  *
  * INS-091 — every picker is searchable and ends in "+ Add new…": the company
  * or product is created in a dialog, appended to the list and selected, and
@@ -34,8 +32,15 @@ export function CreatePurchaseOrderForm({ companies: initialCompanies, products:
   const [productId, setProductId] = useState('');
   const [creating, setCreating] = useState<Creating>(null);
 
-  const companyOptions = useMemo(
-    () => rankCompaniesByActivity(companies).map((c) => ({ id: c.id, label: c.name })),
+  // INS-087: each picker ranks on ITS trade role — the companies this org has
+  // recently used as a client float up in the Client picker, factories in the
+  // Factory picker. Same list, two orders.
+  const clientOptions = useMemo(
+    () => rankCompaniesByActivity(companies, 'client').map((c) => ({ id: c.id, label: c.name })),
+    [companies],
+  );
+  const factoryOptions = useMemo(
+    () => rankCompaniesByActivity(companies, 'factory').map((c) => ({ id: c.id, label: c.name })),
     [companies],
   );
   const productOptions = useMemo(
@@ -63,15 +68,14 @@ export function CreatePurchaseOrderForm({ companies: initialCompanies, products:
     <div style={{ marginTop: 24, maxWidth: 560, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, padding: '24px 28px' }}>
       <form action={action}>
         {state.error && <ErrorBanner style={{ marginBottom: 14 }}>{state.error}</ErrorBanner>}
-        <div style={{ marginBottom: 16 }}>
-          <label style={label}>PO Number *</label>
-          <input name="poNumber" style={input} placeholder="e.g. PO-2026-NV-0042" required />
-        </div>
+        <Field label="PO Number *" htmlFor="po-number" style={{ marginBottom: 16 }}>
+          <Input id="po-number" name="poNumber" placeholder="e.g. PO-2026-NV-0042" required />
+        </Field>
         <div style={{ marginBottom: 16 }}>
           <EntityPicker
             name="clientCompanyId"
             label="Client *"
-            options={companyOptions}
+            options={clientOptions}
             value={clientId}
             onChange={setClientId}
             placeholder="Select the client…"
@@ -85,7 +89,7 @@ export function CreatePurchaseOrderForm({ companies: initialCompanies, products:
           <EntityPicker
             name="factoryCompanyId"
             label="Factory *"
-            options={companyOptions}
+            options={factoryOptions}
             value={factoryId}
             onChange={setFactoryId}
             placeholder="Select the factory…"
@@ -109,10 +113,9 @@ export function CreatePurchaseOrderForm({ companies: initialCompanies, products:
             onCreate={() => setCreating('product')}
           />
         </div>
-        <div style={{ marginBottom: 20 }}>
-          <label style={label}>Total Quantity</label>
-          <input name="totalQuantity" type="number" min={1} style={input} placeholder="e.g. 1200" />
-        </div>
+        <Field label="Total Quantity" htmlFor="po-qty" style={{ marginBottom: 20 }}>
+          <Input id="po-qty" name="totalQuantity" type="number" min={1} placeholder="e.g. 1200" />
+        </Field>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <Btn kind="ghost" href="/purchase-orders">Cancel</Btn>
           <Btn kind="primary" type="submit" loading={pending} disabled={selfDealing || incomplete}>

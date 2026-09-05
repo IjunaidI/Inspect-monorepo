@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { Btn, Mono, RoleBadge, SeverityTag } from '@/components/inspect/shell';
+import { Breadcrumb } from '@/components/inspect/breadcrumb';
 import { severity, ui, type SeverityKey } from '@/components/inspect/tokens';
 import type {
   ApiInspection,
@@ -301,14 +302,14 @@ export function PopulateWorkspace({
       />
 
       <header style={{ height: 56, borderBottom: `1px solid ${ui.line}`, background: '#fff', display: 'flex', alignItems: 'center', padding: '0 24px', gap: 16, flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ui.sub, fontSize: 13 }}>
-          <ClipboardList size={15} color={ui.sub} />
-          <span>Inspections</span>
-          <ChevronRight size={14} color={ui.faint} />
-          <Mono style={{ color: ui.ink, fontWeight: 600 }}>{poLabel}</Mono>
-          <ChevronRight size={14} color={ui.faint} />
-          <span style={{ color: ui.ink, fontWeight: 550 }}>Populate</span>
-        </div>
+        <Breadcrumb
+          icon={<ClipboardList size={15} color={ui.sub} />}
+          items={[
+            { label: 'Inspections', href: '/inspections' },
+            { label: poLabel, href: `/inspections/${inspection.id}/review`, mono: true },
+            { label: 'Populate' },
+          ]}
+        />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 24, padding: '0 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 600, background: ui.accentSoft, color: ui.accent }}>
           <span style={{ width: 6, height: 6, borderRadius: 999, background: ui.accent }} /> {inspection.status}
         </span>

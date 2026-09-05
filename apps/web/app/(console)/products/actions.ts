@@ -24,15 +24,14 @@ export async function createProduct(_prev: unknown, formData: FormData): Promise
   const styleNumber = String(formData.get('styleNumber') ?? '').trim();
   if (!styleNumber) return { error: 'Style number is required' };
   const description = descriptionField(formData);
-  let id: string;
   try {
-    const res = await apiPost<{ id: string }>('/products', { styleNumber, description });
-    id = res.id;
+    await apiPost('/products', { styleNumber, description });
   } catch (e) {
     return { error: msg(e, 'Failed to create product') };
   }
+  // INS-092: back to the list the user came from, not the new row's edit page.
   revalidatePath('/products');
-  redirect(`/products/${id}`);
+  redirect('/products');
 }
 
 export async function updateProduct(_prev: unknown, formData: FormData): Promise<{ error?: string }> {

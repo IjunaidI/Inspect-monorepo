@@ -1,6 +1,6 @@
 import { conclusionFrom, formatGps, formatInspectionType, reportNumber } from '@inspect/domain';
 import { apiGet, apiPost, type ApiInspection, type ApiReport } from '@/lib/api';
-import { BrandedReport, type BrandedReportData } from '@/components/inspect/branded-report';
+import { BrandedReport, type BrandedReportData, type ReportPhoto } from '@/components/inspect/branded-report';
 
 function initials(name: string): string {
   return name
@@ -23,13 +23,31 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
     re: r?.perClass?.[sev]?.re ?? 0,
   }));
 
-  // INS-081: evidence groups by loop ITEM (each holding one shot per unit).
-  const photos: BrandedReportData['photos'] = (inspection.items ?? [])
-    .filter((i) => (i.photos?.length ?? 0) > 0)
-    .map((i) => ({
-      loop: i.itemName,
-      shots: i.photos ?? [],
-      flaggedCount: (i.defects ?? []).filter((d) => d.severity === 'MAJOR').length,
+  // INS-081: evidence in CAPTURE order — one row per inspected UNIT (cycleIndex
+  // ascending), holding that unit's shots in loop-item position order, each
+  // labelled with its item. This mirrors the sequence the signed photoHashes
+  // were frozen in (reports.service.generate), so the page reads like the loop
+  // was walked. cycleIndex is 0-based in storage and may have gaps after a
+  // discard; it is rendered 1-based from the stored value, never re-numbered.
+  const itemsByPosition = [...(inspection.items ?? [])].sort((a, b) => a.position - b.position);
+  const shotsByUnit = new Map<number, ReportPhoto[]>();
+  const majorByUnit = new Map<number, number>();
+  for (const item of itemsByPosition) {
+    for (const p of item.photos ?? []) {
+      shotsByUnit.set(p.cycleIndex, [...(shotsByUnit.get(p.cycleIndex) ?? []), { ...p, label: item.itemName }]);
+    }
+    for (const d of item.defects ?? []) {
+      if (d.severity === 'MAJOR' && d.cycleIndex != null) {
+        majorByUnit.set(d.cycleIndex, (majorByUnit.get(d.cycleIndex) ?? 0) + 1);
+      }
+    }
+  }
+  const photos: BrandedReportData['photos'] = [...shotsByUnit.keys()]
+    .sort((a, b) => a - b)
+    .map((cycleIndex) => ({
+      loop: `Unit ${cycleIndex + 1}`,
+      shots: shotsByUnit.get(cycleIndex) ?? [],
+      flaggedCount: majorByUnit.get(cycleIndex) ?? 0,
     }));
 
   // INS-081: the measurement sheet is loop-global and recorded per UNIT, so it
@@ -81,11 +99,10 @@ function mapToReportData(inspection: ApiInspection, report: ApiReport | null): B
     tamperProof: report
       ? {
           contentHash: report.contentHash,
-          // INS-089: nothing records WHO generated a report — Report has no
-          // generatedByUserId column. This read was `report.generatedBy?.name`,
-          // a field the API never sent, so the block has always shown '—'.
-          // Left explicit rather than silently undefined.
-          signedBy: null,
+          // INS-089: the person who generated the report (Report.generatedByUserId,
+          // resolved by the API). Null — and an honest em-dash — for reports
+          // generated before the column existed; they are never backfilled.
+          signedBy: report.generatedBy?.name ?? report.generatedBy?.email ?? null,
           signedAt: report.generatedAt,
         }
       : null,

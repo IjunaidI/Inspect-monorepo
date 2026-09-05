@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { ui, mono, severity } from '@/components/inspect/tokens';
@@ -9,6 +9,7 @@ import { EntityPicker } from '@/components/inspect/entity-picker';
 import { ErrorBanner } from '@/components/inspect/error-banner';
 import { QuickCreatePurchaseOrder } from '@/components/inspect/quick-create/quick-create-purchase-order';
 import type { ApiPurchaseOrder, ApiLoopPreset, ApiUser, AqlPreview, ApiCompany, ApiProduct } from '@/lib/api';
+import { latestPresetPerName } from '@/lib/presets';
 import { createInspection, previewAql } from '../actions';
 
 const field: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6 };
@@ -39,7 +40,12 @@ export function CreateInspectionForm({ pos: initialPos, presets, inspectors, com
   const [state, action, pending] = useActionState(createInspection, {} as { error?: string });
   const [pos, setPos] = useState(initialPos);
   const [poId, setPoId] = useState(initialPos[0]?.id ?? '');
-  const [presetId, setPresetId] = useState(presets[0]?.id ?? '');
+  // INS-092 (INS-076 residue): the dropdown offers the LATEST version of each
+  // preset name, not every version ever saved. The one exception is whatever is
+  // selected — a client's `defaultLoopPresetId` may pin an older version, and
+  // that pin must still show and submit, so it is kept in the list by id.
+  const [presetId, setPresetId] = useState(latestPresetPerName(presets)[0]?.id ?? '');
+  const presetOptions = useMemo(() => latestPresetPerName(presets, [presetId]), [presets, presetId]);
   const [presetTouched, setPresetTouched] = useState(false);
   const [creatingPo, setCreatingPo] = useState(false);
   const [lotSize, setLotSize] = useState(1000);
@@ -120,7 +126,7 @@ export function CreateInspectionForm({ pos: initialPos, presets, inspectors, com
                 onChange={(e) => { setPresetId(e.target.value); setPresetTouched(true); }}
                 style={{ ...input, cursor: 'pointer' }}
               >
-                {presets.map((p) => <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>)}
+                {presetOptions.map((p) => <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>)}
               </select>
             )}
           </div>

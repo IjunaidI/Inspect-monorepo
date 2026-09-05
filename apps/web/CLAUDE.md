@@ -8,9 +8,10 @@ domain invariants in the repo-root `CLAUDE.md` are binding here — this file co
 `pnpm web dev` · `build` · `type-check`. Talks to the API at `INSPECT_API_URL`;
 falls back to demo data when the API is unreachable.
 
-> **Vitest since [INS-082](../../docs/future/BACKLOG.md)** — `pnpm web test` (38 tests across
-> `lib/api.test.ts`, `lib/roles.test.ts` and `components/inspect/tokens.test.ts`), picked up by root
-> `pnpm test`. It exists because `tsc` cannot catch a behaviour change in `lib/api.ts`. **Its first 32 tests
+> **Vitest since [INS-082](../../docs/future/BACKLOG.md)** — `pnpm web test` (60 tests across 9 files:
+> `lib/api.test.ts`, `lib/roles.test.ts`, `lib/presets.test.ts`, `lib/photo-evidence.test.ts`,
+> `components/inspect/tokens.test.ts` and the jsdom component tests `modal`, `entity-picker`, `field`,
+> `breadcrumb`), picked up by root `pnpm test`. It exists because `tsc` cannot catch a behaviour change in `lib/api.ts`. **Its first 32 tests
 > were the acceptance instrument for the Phase 1 extraction and passed through it unchanged**; if one goes
 > red during a refactor it has found a real regression in the role gate or `loadOrFallback`'s branch table —
 > it is not a test to update.

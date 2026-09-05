@@ -16,6 +16,7 @@ import { hashIndex, initialsFrom } from '@inspect/domain';
 import { Btn, Mono } from '@/components/inspect/shell';
 import { ConfirmDialog } from '@/components/inspect/confirm-dialog';
 import { ErrorBanner } from '@/components/inspect/error-banner';
+import { Field, Input, Select, Textarea } from '@/components/inspect/field';
 import { mono as monoStyle, ui } from '@/components/inspect/tokens';
 import type { ApiCompany, ApiCompanyKind, ApiLoopPreset } from '@/lib/api';
 import { archiveCompany, createCompany, presignCompanyLogo, restoreCompany } from './actions';
@@ -116,18 +117,8 @@ function Pager({ page, hasPrev, hasNext, onPage }: { page: number; hasPrev: bool
 // Palette + initials live in the shared packages (INS-086 §4.4); the colour
 // is keyed on the company id so it cannot change when the visible slice does.
 
-function InputRow({ label, name, placeholder, type = 'text', defaultValue }: { label: string; name: string; placeholder?: string; type?: string; defaultValue?: string }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</label>
-      <input name={name} type={type} defaultValue={defaultValue} placeholder={placeholder}
-        style={{ width: '100%', height: 34, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} />
-    </div>
-  );
-}
-
-const fieldLabel = { display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 };
-const boxInput = { width: '100%', height: 34, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const };
+// Form primitives live in components/inspect/field.tsx (INS-092).
+const row = { marginBottom: 12 };
 
 /** Exactly what the API accepts for primaryColor (INS-077) — mirrored for a live hint only. */
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -195,8 +186,7 @@ function LogoUploadField() {
   }
 
   return (
-    <div style={{ marginBottom: 12 }}>
-      <label style={fieldLabel}>Logo</label>
+    <Field label="Logo" error={error} style={row}>
       {/* The durable key — never the presigned preview URL. */}
       <input type="hidden" name="logoUrl" value={logoKey} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -237,8 +227,7 @@ function LogoUploadField() {
           </button>
         )}
       </div>
-      {error && <div style={{ marginTop: 6, fontSize: 11.5, color: ui.danger, lineHeight: 1.4 }}>{error}</div>}
-    </div>
+    </Field>
   );
 }
 
@@ -252,17 +241,16 @@ function HexColorField({ defaultValue }: { defaultValue: string }) {
   const [swatch, setSwatch] = useState(HEX_RE.test(defaultValue) ? defaultValue.toLowerCase() : ui.accent);
   const invalid = hex.trim() !== '' && !HEX_RE.test(hex.trim());
   return (
-    <div>
-      <label style={fieldLabel}>Brand Color</label>
+    <Field label="Brand Color" error={invalid ? 'Expected #RRGGBB.' : undefined}>
       <div style={{ display: 'flex', gap: 8 }}>
         <input
           type="color"
           aria-label="Pick brand color"
           value={swatch}
           onChange={(e) => { setHex(e.target.value); setSwatch(e.target.value); }}
-          style={{ width: 44, height: 34, padding: '2px 4px', border: `1px solid ${ui.line}`, borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
+          style={{ width: 44, height: 36, padding: '2px 4px', border: `1px solid ${ui.line}`, borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
         />
-        <input
+        <Input
           name="primaryColor"
           aria-label="Brand color hex value"
           value={hex}
@@ -272,11 +260,11 @@ function HexColorField({ defaultValue }: { defaultValue: string }) {
           }}
           placeholder="#1457A3"
           spellCheck={false}
-          style={{ ...boxInput, ...monoStyle, border: `1px solid ${invalid ? ui.danger : ui.line}` }}
+          invalid={invalid}
+          style={monoStyle}
         />
       </div>
-      {invalid && <div style={{ marginTop: 4, fontSize: 11, color: ui.danger }}>Expected #RRGGBB.</div>}
-    </div>
+    </Field>
   );
 }
 
@@ -287,16 +275,14 @@ function HexColorField({ defaultValue }: { defaultValue: string }) {
  */
 function GpsFields({ lat, lng }: { lat?: number; lng?: number }) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      <label style={fieldLabel}>GPS coordinates</label>
+    <Field label="GPS coordinates" hint="Decimal degrees — leave both blank for no pin." style={row}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <input name="lat" type="number" step="any" min={-90} max={90} inputMode="decimal" aria-label="Latitude"
-          defaultValue={lat === undefined ? '' : String(lat)} placeholder="Latitude (−90…90)" style={{ ...boxInput, ...monoStyle }} />
-        <input name="lng" type="number" step="any" min={-180} max={180} inputMode="decimal" aria-label="Longitude"
-          defaultValue={lng === undefined ? '' : String(lng)} placeholder="Longitude (−180…180)" style={{ ...boxInput, ...monoStyle }} />
+        <Input name="lat" type="number" step="any" min={-90} max={90} inputMode="decimal" aria-label="Latitude"
+          defaultValue={lat === undefined ? '' : String(lat)} placeholder="Latitude (−90…90)" style={monoStyle} />
+        <Input name="lng" type="number" step="any" min={-180} max={180} inputMode="decimal" aria-label="Longitude"
+          defaultValue={lng === undefined ? '' : String(lng)} placeholder="Longitude (−180…180)" style={monoStyle} />
       </div>
-      <div style={{ fontSize: 11, color: ui.faint, marginTop: 5 }}>Decimal degrees — leave both blank for no pin.</div>
-    </div>
+    </Field>
   );
 }
 
@@ -415,6 +401,15 @@ export function DirectoryClient({
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
 
   const [formState, formAction, formPending] = useActionState(createCompany, {});
+  // INS-092: the action returns the row instead of redirecting away from the
+  // list. Close the form and say what happened; the list itself is already
+  // refreshed by the action's revalidatePath('/dashboard').
+  const [createdName, setCreatedName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!formState.data) return;
+    setCreatedName(formState.data.name);
+    setShowAdd(false);
+  }, [formState.data]);
 
   function pushListParams(next: {
     q?: string;
@@ -480,24 +475,28 @@ export function DirectoryClient({
           <button style={chip(view === 'archived')} onClick={() => pushListParams({ view: 'archived' })}>Archived</button>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {createdName && !showAdd && (
+            <span role="status" style={{ fontSize: 12, color: '#1F6B43' }}>Created {createdName}.</span>
+          )}
           <span style={{ fontSize: 11.5, color: ui.faint }}>{live ? 'Live · from API' : 'Demo data · API offline'}</span>
-          <Btn kind="primary" icon={<Plus size={15} />} onClick={() => setShowAdd(true)}>Add Company</Btn>
+          <Btn kind="primary" icon={<Plus size={15} />} onClick={() => { setCreatedName(null); setShowAdd(true); }}>Add Company</Btn>
         </div>
       </div>
 
       {showAdd && (
         <InlineForm title="Add Company" onClose={() => setShowAdd(false)}>
           <form action={formAction}>
-            {formState.error && <div style={{ marginBottom: 10, fontSize: 12.5, color: ui.danger }}>{formState.error}</div>}
+            {formState.error && <ErrorBanner style={{ marginBottom: 12 }}>{formState.error}</ErrorBanner>}
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
-              <InputRow label="Name *" name="name" placeholder="Company name" />
-              <div style={{ marginBottom: 12 }}>
-                <label style={fieldLabel}>Ownership</label>
-                <select name="kind" defaultValue="THIRD_PARTY" style={{ ...boxInput, padding: '0 8px' }}>
+              <Field label="Name *" htmlFor="company-name" style={row}>
+                <Input id="company-name" name="name" placeholder="Company name" required />
+              </Field>
+              <Field label="Ownership" htmlFor="company-kind" style={row}>
+                <Select id="company-kind" name="kind" defaultValue="THIRD_PARTY">
                   <option value="THIRD_PARTY">Third-party</option>
                   <option value="INTERNAL">Internal (our own site)</option>
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
             <div style={{ fontSize: 11.5, color: ui.faint, margin: '-4px 0 14px', lineHeight: 1.5 }}>
               Whether this company is the client or the factory is decided per purchase order — fill in
@@ -506,23 +505,21 @@ export function DirectoryClient({
             <LogoUploadField />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <HexColorField defaultValue={ui.accent} />
-              <div>
-                <label style={fieldLabel}>Default Preset</label>
-                <select name="defaultLoopPresetId" style={{ ...boxInput, padding: '0 8px' }}>
+              <Field label="Default Preset" htmlFor="company-preset">
+                <Select id="company-preset" name="defaultLoopPresetId">
                   <option value="">None</option>
                   {presets.map((p) => <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>)}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={fieldLabel}>Address</label>
-              <textarea name="address" rows={2} placeholder="City, Country"
-                style={{ width: '100%', padding: '6px 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', resize: 'none', boxSizing: 'border-box' as const }} />
-            </div>
+            <Field label="Address" htmlFor="company-address" style={row}>
+              <Textarea id="company-address" name="address" rows={2} placeholder="City, Country" style={{ resize: 'none' }} />
+            </Field>
             <GpsFields />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
               <Btn kind="ghost" onClick={() => setShowAdd(false)}>Cancel</Btn>
-              <Btn kind="primary" type="submit" style={{ opacity: formPending ? 0.65 : 1 }}>
+              {/* INS-092: `loading` is the double-submit guard every other form already has. */}
+              <Btn kind="primary" type="submit" loading={formPending}>
                 {formPending ? 'Creating…' : 'Create Company'}
               </Btn>
             </div>
@@ -554,7 +551,7 @@ export function DirectoryClient({
               // is NOT fetchable — using it directly would show a broken image.
               const logoSrc = logoSrcOf(c);
               return (
-                <tr key={c.id} style={{ cursor: 'pointer', opacity: c.archivedAt ? 0.6 : 1 }} onClick={() => { if (!menuOpen) window.location.href = `/companies/${c.id}`; }}>
+                <tr key={c.id} style={{ cursor: 'pointer', opacity: c.archivedAt ? 0.6 : 1 }} onClick={() => { if (!menuOpen) router.push(`/companies/${c.id}`); }}>
                   <td style={td}>
                     {logoSrc ? (
                       // eslint-disable-next-line @next/next/no-img-element

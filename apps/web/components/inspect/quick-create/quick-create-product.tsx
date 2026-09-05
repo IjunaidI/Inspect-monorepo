@@ -5,10 +5,9 @@ import type { FormEvent } from 'react';
 import { Modal } from '@/components/inspect/modal';
 import { ErrorBanner } from '@/components/inspect/error-banner';
 import { Btn } from '@/components/inspect/shell';
-import { ui } from '@/components/inspect/tokens';
+import { Field, Input, Textarea } from '@/components/inspect/field';
 import type { ApiProduct } from '@/lib/api';
 import { quickCreateProduct } from '@/app/(console)/products/actions';
-import { qcInput, qcLabel } from './quick-create-company';
 
 /** INS-091 — create a product from the picker that needs it. */
 export function QuickCreateProduct({
@@ -46,14 +45,12 @@ export function QuickCreateProduct({
     <Modal title="New product" onClose={onClose}>
       <form onSubmit={submit} style={{ marginTop: 14 }}>
         {error && <ErrorBanner style={{ marginBottom: 12 }}>{error}</ErrorBanner>}
-        <div style={{ marginBottom: 14 }}>
-          <label style={qcLabel} htmlFor="qc-style">Style number *</label>
-          <input id="qc-style" value={styleNumber} onChange={(e) => setStyleNumber(e.target.value)} style={qcInput} placeholder="e.g. NV-2026-POLO-M" required />
-        </div>
-        <div style={{ marginBottom: 16 }}>
-          <label style={qcLabel} htmlFor="qc-desc">Description</label>
-          <textarea id="qc-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} style={{ ...qcInput, height: 'auto', padding: '8px 10px', resize: 'vertical', lineHeight: 1.5, color: ui.ink }} placeholder="Optional" />
-        </div>
+        <Field label="Style number *" htmlFor="qc-style" style={{ marginBottom: 14 }}>
+          <Input id="qc-style" value={styleNumber} onChange={(e) => setStyleNumber(e.target.value)} placeholder="e.g. NV-2026-POLO-M" required />
+        </Field>
+        <Field label="Description" htmlFor="qc-desc" style={{ marginBottom: 16 }}>
+          <Textarea id="qc-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} style={{ padding: '8px 10px' }} placeholder="Optional" />
+        </Field>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
           <Btn kind="primary" type="submit" loading={pending} disabled={!styleNumber.trim()}>

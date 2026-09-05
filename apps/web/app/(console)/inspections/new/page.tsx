@@ -1,9 +1,10 @@
-import { ChevronRight, ClipboardList } from 'lucide-react';
+import { ClipboardList } from 'lucide-react';
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
 import { apiRoleAtLeast } from '@/lib/roles';
 import { apiGet, type ApiPurchaseOrder, type ApiLoopPreset, type ApiUser, type ApiCompany, type ApiProduct } from '@/lib/api';
 import { PageHead } from '@/components/inspect/shell';
+import { Breadcrumb } from '@/components/inspect/breadcrumb';
 import { ui } from '@/components/inspect/tokens';
 import { CreateInspectionForm } from './create-form';
 
@@ -25,12 +26,11 @@ export default async function CreateInspectionPage() {
 
   return (
     <div style={{ padding: '24px 32px 40px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ui.sub, fontSize: 13, marginBottom: 14 }}>
-        <ClipboardList size={15} color={ui.sub} />
-        <span>Inspections</span>
-        <ChevronRight size={14} color={ui.faint} />
-        <span style={{ color: ui.ink, fontWeight: 550 }}>New inspection</span>
-      </div>
+      <Breadcrumb
+        icon={<ClipboardList size={15} color={ui.sub} />}
+        items={[{ label: 'Inspections', href: '/inspections' }, { label: 'New inspection' }]}
+        style={{ marginBottom: 14 }}
+      />
       <PageHead title="Create inspection" sub="Set the per-class AQL; the Level II sampling plan is computed from it and the lot size, then frozen onto the inspection." />
       <div style={{ marginTop: 24 }}>
         <CreateInspectionForm pos={pos} presets={presets} inspectors={inspectors} companies={companies} products={products} />

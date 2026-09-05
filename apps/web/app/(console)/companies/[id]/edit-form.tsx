@@ -3,6 +3,8 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from 'react';
 import { Image as ImageIcon, Upload } from 'lucide-react';
 import { Btn } from '@/components/inspect/shell';
+import { ErrorBanner } from '@/components/inspect/error-banner';
+import { Field, Input, Select, Textarea } from '@/components/inspect/field';
 import { mono, ui } from '@/components/inspect/tokens';
 import type { ApiCompany, ApiLoopPreset } from '@/lib/api';
 import { archiveCompany, presignCompanyLogo, updateCompany } from '../../dashboard/actions';
@@ -17,8 +19,7 @@ import { archiveCompany, presignCompanyLogo, updateCompany } from '../../dashboa
  * different POs, so both groups are always editable.
  */
 
-const label = { display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 };
-const input = { width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const };
+// Form primitives live in components/inspect/field.tsx (INS-092).
 const row = { marginBottom: 16 };
 const sectionHead = { fontSize: 11, fontWeight: 700, color: ui.faint, textTransform: 'uppercase' as const, letterSpacing: 0.6, margin: '4px 0 12px' };
 
@@ -124,29 +125,22 @@ export function EditCompanyForm({ company, presets }: { company: ApiCompany; pre
           <input type="hidden" name="id" value={company.id} />
           {/* The durable key — never the presigned preview URL. */}
           <input type="hidden" name="logoUrl" value={logoKey} />
-          {state.error && (
-            <div style={{ marginBottom: 14, padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12.5, color: ui.danger }}>
-              {state.error}
-            </div>
-          )}
+          {state.error && <ErrorBanner style={{ marginBottom: 14 }}>{state.error}</ErrorBanner>}
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 16 }}>
-            <div>
-              <label style={label}>Name *</label>
-              <input name="name" defaultValue={company.name} style={input} required />
-            </div>
-            <div>
-              <label style={label}>Ownership</label>
-              <select name="kind" defaultValue={company.kind} style={{ ...input, padding: '0 8px' }}>
+            <Field label="Name *" htmlFor="company-name">
+              <Input id="company-name" name="name" defaultValue={company.name} required />
+            </Field>
+            <Field label="Ownership" htmlFor="company-kind">
+              <Select id="company-kind" name="kind" defaultValue={company.kind}>
                 <option value="THIRD_PARTY">Third-party</option>
                 <option value="INTERNAL">Internal (our own site)</option>
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
 
           <div style={sectionHead}>As a client — report branding</div>
 
-          <div style={row}>
-            <label style={label}>Logo</label>
+          <Field label="Logo" error={logoError} style={row}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ width: 56, height: 56, borderRadius: 8, border: `1px solid ${ui.line}`, background: ui.fill, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                 {preview ? (
@@ -192,14 +186,10 @@ export function EditCompanyForm({ company, presets }: { company: ApiCompany; pre
                 </span>
               </div>
             </div>
-            {logoError && (
-              <div style={{ marginTop: 8, fontSize: 11.5, color: ui.danger, lineHeight: 1.4 }}>{logoError}</div>
-            )}
-          </div>
+          </Field>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-            <div>
-              <label style={label}>Brand Color</label>
+            <Field label="Brand Color" error={hexInvalid ? 'Expected #RRGGBB.' : undefined}>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   type="color"
@@ -208,53 +198,45 @@ export function EditCompanyForm({ company, presets }: { company: ApiCompany; pre
                   onChange={(e) => setHexFromPicker(e.target.value)}
                   style={{ width: 44, height: 36, padding: '2px 4px', border: `1px solid ${ui.line}`, borderRadius: 8, cursor: 'pointer', flexShrink: 0 }}
                 />
-                <input
+                <Input
                   name="primaryColor"
                   aria-label="Brand color hex value"
                   value={hex}
                   onChange={(e) => setHexFromText(e.target.value)}
                   placeholder="#1457A3"
                   spellCheck={false}
-                  style={{ ...input, ...mono, border: `1px solid ${hexInvalid ? ui.danger : ui.line}` }}
+                  invalid={hexInvalid}
+                  style={mono}
                 />
               </div>
-              {hexInvalid && (
-                <div style={{ marginTop: 4, fontSize: 11, color: ui.danger }}>Expected #RRGGBB.</div>
-              )}
-            </div>
-            <div>
-              <label style={label}>Default Preset</label>
-              <select name="defaultLoopPresetId" defaultValue={company.defaultLoopPresetId ?? ''}
-                style={{ width: '100%', height: 36, padding: '0 8px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8 }}>
+            </Field>
+            <Field label="Default Preset" htmlFor="company-preset">
+              <Select id="company-preset" name="defaultLoopPresetId" defaultValue={company.defaultLoopPresetId ?? ''}>
                 <option value="">None</option>
                 {presets.map((p) => <option key={p.id} value={p.id}>{p.name} (v{p.version})</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
 
           <div style={sectionHead}>As a factory — location</div>
 
-          <div style={row}>
-            <label style={label}>Address</label>
-            <textarea name="address" rows={2} defaultValue={company.address ?? ''} placeholder="City, Country"
-              style={{ width: '100%', padding: '6px 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', resize: 'none', boxSizing: 'border-box' as const }} />
-          </div>
+          <Field label="Address" htmlFor="company-address" style={row}>
+            <Textarea id="company-address" name="address" rows={2} defaultValue={company.address ?? ''} placeholder="City, Country" style={{ resize: 'none' }} />
+          </Field>
 
           {/*
             INS-071: a structured numeric pair. The old single JSON field's
             JSON.parse sat in an EMPTY catch, so a mistyped brace saved the row
             with no coordinates and no error. Range checks stay on the API.
           */}
-          <div style={{ marginBottom: 20 }}>
-            <label style={label}>GPS coordinates</label>
+          <Field label="GPS coordinates" hint="Decimal degrees — leave both blank for no pin." style={{ marginBottom: 20 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <input name="lat" type="number" step="any" min={-90} max={90} inputMode="decimal" aria-label="Latitude"
-                defaultValue={company.gps ? String(company.gps.lat) : ''} placeholder="Latitude (−90…90)" style={{ ...input, ...mono }} />
-              <input name="lng" type="number" step="any" min={-180} max={180} inputMode="decimal" aria-label="Longitude"
-                defaultValue={company.gps ? String(company.gps.lng) : ''} placeholder="Longitude (−180…180)" style={{ ...input, ...mono }} />
+              <Input name="lat" type="number" step="any" min={-90} max={90} inputMode="decimal" aria-label="Latitude"
+                defaultValue={company.gps ? String(company.gps.lat) : ''} placeholder="Latitude (−90…90)" style={mono} />
+              <Input name="lng" type="number" step="any" min={-180} max={180} inputMode="decimal" aria-label="Longitude"
+                defaultValue={company.gps ? String(company.gps.lng) : ''} placeholder="Longitude (−180…180)" style={mono} />
             </div>
-            <div style={{ fontSize: 11, color: ui.faint, marginTop: 5 }}>Decimal degrees — leave both blank for no pin.</div>
-          </div>
+          </Field>
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Btn kind="ghost" href="/dashboard">Cancel</Btn>

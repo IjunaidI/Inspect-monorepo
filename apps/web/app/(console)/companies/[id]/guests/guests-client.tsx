@@ -3,12 +3,10 @@
 import { useActionState, useTransition, useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Btn, Mono } from '@/components/inspect/shell';
+import { Field, Input, Select } from '@/components/inspect/field';
 import { ui } from '@/components/inspect/tokens';
 import type { ApiCompanyGuest } from '@/lib/api';
 import { inviteCompanyGuest, revokeCompanyGuest } from './actions';
-
-const label = { display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 };
-const input = { height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const };
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -105,18 +103,16 @@ export function GuestsClient({ companyId, initialGuests }: { companyId: string; 
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'flex-end' }}>
-            <div>
-              <label style={label}>Email *</label>
-              <input name="email" type="email" required style={{ ...input, width: '100%' }} placeholder="name@example.com" />
-            </div>
-            <div>
-              <label style={label}>Expires in</label>
-              <select name="expiresInDays" defaultValue="30" style={{ ...input, width: 120 }}>
+            <Field label="Email *" htmlFor="guest-email">
+              <Input id="guest-email" name="email" type="email" required placeholder="name@example.com" />
+            </Field>
+            <Field label="Expires in" htmlFor="guest-expires">
+              <Select id="guest-expires" name="expiresInDays" defaultValue="30" style={{ width: 120 }}>
                 <option value="7">7 days</option>
                 <option value="30">30 days</option>
                 <option value="90">90 days</option>
-              </select>
-            </div>
+              </Select>
+            </Field>
             <Btn kind="primary" type="submit" loading={pending} style={{ marginBottom: 1 }}>
               {pending ? 'Sending…' : 'Invite'}
             </Btn>

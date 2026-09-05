@@ -14,6 +14,8 @@ export interface ReportPhoto {
   id: string;
   storageKey?: string | null;
   viewUrl?: string | null;
+  /** The loop item this shot fills (e.g. "Right sleeve"); shown as the tile caption when set. */
+  label?: string | null;
 }
 
 export interface BrandedReportData {
@@ -48,6 +50,12 @@ export interface BrandedReportData {
     ac: number;
     re: number;
   }[];
+  /**
+   * Evidence rows in CAPTURE order. The console builds one row per inspected
+   * unit ("Unit 1", "Unit 2", ...) holding that unit's item shots in loop
+   * position order (INS-081 cycles); the guest portal, which has no slot data,
+   * passes a single flat row. `loop` is the row heading either way.
+   */
   photos?: {
     loop: string;
     shots: ReportPhoto[];
@@ -223,9 +231,9 @@ export function BrandedReport({
                 {row.shots.length === 0 ? (
                   <div style={{ fontSize: 12, color: ui.faint, fontStyle: 'italic' }}>No photos uploaded yet.</div>
                 ) : (
-                  <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                     {row.shots.map((photo, i) => (
-                      <div key={photo.id} style={{ flex: 1, borderRadius: 8, overflow: 'hidden', border: `1px solid ${ui.line}` }}>
+                      <div key={photo.id} style={{ flex: '1 1 150px', maxWidth: 260, borderRadius: 8, overflow: 'hidden', border: `1px solid ${ui.line}` }}>
                         {/* Real thumbnail when a presigned viewUrl exists (INS-049); gradient placeholder otherwise. */}
                         <div style={{ position: 'relative', height: 96, background: 'linear-gradient(135deg,#BFC8D2,#7E8794)' }}>
                           {photo.viewUrl && (
@@ -234,7 +242,10 @@ export function BrandedReport({
                           )}
                           <div style={{ position: 'absolute', top: 6, left: 6 }}><UnverifiedBadge /></div>
                         </div>
-                        <div style={{ padding: '6px 8px', fontSize: 10.5, color: ui.sub, ...mono }}>{String(i + 1).padStart(2, '0')} · {(photo.storageKey ?? photo.id).slice(-8)}</div>
+                        {/* Item name when the slot is known; the storage-key tail is the fallback for flat (portal) rows. */}
+                        <div style={{ padding: '6px 8px', fontSize: 10.5, color: ui.sub, ...mono, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {String(i + 1).padStart(2, '0')} · {photo.label ?? (photo.storageKey ?? photo.id).slice(-8)}
+                        </div>
                       </div>
                     ))}
                   </div>

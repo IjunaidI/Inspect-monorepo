@@ -1,8 +1,10 @@
-import { ChevronRight, ClipboardList } from 'lucide-react';
+import { ClipboardList, ImageOff } from 'lucide-react';
 import { auth } from '@/lib/auth';
 import { apiRoleAtLeast } from '@/lib/roles';
 import { apiGet, type ApiInspection } from '@/lib/api';
+import { groupPhotosByUnit } from '@/lib/photo-evidence';
 import { Btn, Mono, PageHead, SeverityTag } from '@/components/inspect/shell';
+import { Breadcrumb } from '@/components/inspect/breadcrumb';
 import { severity, ui, type SeverityKey } from '@/components/inspect/tokens';
 import { DecisionForm, SubmitForReview } from './decision-panel';
 import { ReInspectButton } from './re-inspect-button';
@@ -23,6 +25,70 @@ const POPULATABLE = new Set<string>(SUBMITTABLE_STATUSES);
 const REPORTABLE = new Set<string>(REPORTABLE_STATUSES);
 const REINSPECTABLE = new Set<string>(REINSPECTABLE_STATUSES);
 const CLASSES: SeverityKey[] = ['critical', 'major', 'minor'];
+
+/**
+ * INS-092: the evidence, in capture order — units as the inspector shot them,
+ * and inside a unit the loop items by position. Read-only; every photo here is
+ * already on the GET /inspections/:id payload (`items[].photos[]`), and
+ * `viewUrl` is the API's short-lived presigned GET (INS-049) — null when the
+ * presign failed, which renders as a neutral placeholder rather than a broken
+ * image. `cycleIndex` is 0-based in storage and may have gaps after a discard;
+ * the unit number shown is cycleIndex + 1, so a gap stays visible as one.
+ */
+function PhotoEvidence({ inspection }: { inspection: ApiInspection }) {
+  const items = inspection.items ?? [];
+  const units = groupPhotosByUnit(items);
+  const total = inspection.cycleState?.totalPhotos ?? units.reduce((n, u) => n + u.slots.filter((s) => s.photo).length, 0);
+
+  return (
+    <section aria-labelledby="photo-evidence" style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '14px 20px', borderBottom: `1px solid ${ui.line}` }}>
+        <h2 id="photo-evidence" style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Photo evidence</h2>
+        <span style={{ fontSize: 12, color: ui.sub }}>
+          <Mono>{units.length}</Mono> unit{units.length === 1 ? '' : 's'} · <Mono>{total}</Mono> photo{total === 1 ? '' : 's'} · in capture order
+        </span>
+      </div>
+      {units.length === 0 ? (
+        <div style={{ padding: 20, fontSize: 13, color: ui.sub }}>
+          {items.length === 0 ? 'This inspection has no loop items.' : 'No photos captured yet.'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {units.map((unit, i) => (
+            <div key={unit.cycleIndex} style={{ padding: '14px 20px', borderTop: i === 0 ? 'none' : `1px solid ${ui.lineSoft}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: ui.ink }}>Unit {unit.unitNumber}</span>
+                {unit.slots.some((s) => !s.photo) && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: severity.major.fg, background: severity.major.bg, padding: '1px 7px', borderRadius: 4 }}>
+                    Partial
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))', gap: 10 }}>
+                {unit.slots.map(({ item, photo }) => (
+                  <figure key={item.id} style={{ margin: 0 }}>
+                    <div style={{ aspectRatio: '4 / 3', borderRadius: 8, border: `1px solid ${ui.lineSoft}`, background: ui.fill, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {photo?.viewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- short-lived presigned URL; not an optimisable static asset
+                        <img src={photo.viewUrl} alt={`Unit ${unit.unitNumber} — ${item.itemName}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      ) : (
+                        <ImageOff size={18} color={ui.faint} aria-label={photo ? 'Preview unavailable' : 'Not captured'} />
+                      )}
+                    </div>
+                    <figcaption style={{ marginTop: 5, fontSize: 11.5, color: photo ? ui.ink : ui.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.itemName}>
+                      <Mono style={{ color: ui.faint, marginRight: 5 }}>{String(item.position + 1).padStart(2, '0')}</Mono>
+                      {item.itemName}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -55,14 +121,15 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
 
   return (
     <div style={{ padding: '24px 32px 40px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ui.sub, fontSize: 13, marginBottom: 14 }}>
-        <ClipboardList size={15} color={ui.sub} />
-        <span>Inspections</span>
-        <ChevronRight size={14} color={ui.faint} />
-        <Mono style={{ color: ui.ink, fontWeight: 600 }}>{inspection.purchaseOrder?.poNumber ?? id.slice(0, 8)}</Mono>
-        <ChevronRight size={14} color={ui.faint} />
-        <span style={{ color: ui.ink, fontWeight: 550 }}>Review</span>
-      </div>
+      <Breadcrumb
+        icon={<ClipboardList size={15} color={ui.sub} />}
+        items={[
+          { label: 'Inspections', href: '/inspections' },
+          { label: inspection.purchaseOrder?.poNumber ?? id.slice(0, 8), mono: true },
+          { label: 'Review' },
+        ]}
+        style={{ marginBottom: 14 }}
+      />
 
       <PageHead
         title="Report review"
@@ -104,6 +171,8 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
               No AQL result yet — submit the inspection to compute the sampling evaluation.
             </div>
           )}
+
+          <PhotoEvidence inspection={inspection} />
         </div>
 
         <div style={{ position: 'sticky', top: 0, background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 12, overflow: 'hidden' }}>

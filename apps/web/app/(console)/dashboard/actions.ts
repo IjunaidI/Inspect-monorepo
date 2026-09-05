@@ -62,10 +62,16 @@ function readKind(formData: FormData): string | undefined {
 
 // ── Companies ───────────────────────────────────────────────────
 
+/**
+ * INS-092: returns the created row instead of redirecting to /companies/[id].
+ * The form lives INSIDE the directory list, so the redirect threw the list —
+ * filters, page, search — away on every create. `revalidatePath('/dashboard')`
+ * refreshes the list in place; the client closes the form on `data`.
+ */
 export async function createCompany(
   _prev: unknown,
   formData: FormData,
-): Promise<{ error?: string }> {
+): Promise<{ data?: ApiCompany; error?: string }> {
   const name = String(formData.get('name') ?? '').trim();
   if (!name) return { error: 'Name is required' };
   const logoUrl = readLogoUrl(formData);
@@ -77,9 +83,9 @@ export async function createCompany(
   const address = (formData.get('address') as string) || undefined;
   const parsed = readGps(formData);
   if ('error' in parsed) return { error: parsed.error };
-  let id: string;
+  let data: ApiCompany;
   try {
-    const c = await apiPost<{ id: string }>('/companies', {
+    data = await apiPost<ApiCompany>('/companies', {
       name,
       kind: readKind(formData),
       logoUrl,
@@ -88,12 +94,11 @@ export async function createCompany(
       address,
       gps: parsed.gps,
     });
-    id = c.id;
   } catch (e) {
     return { error: msg(e, 'create failed') };
   }
   revalidatePath('/dashboard');
-  redirect(`/companies/${id}`);
+  return { data };
 }
 
 export async function updateCompany(

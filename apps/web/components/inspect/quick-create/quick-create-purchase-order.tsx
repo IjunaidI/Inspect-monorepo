@@ -6,10 +6,11 @@ import { rankCompaniesByActivity } from '@inspect/domain';
 import { Modal } from '@/components/inspect/modal';
 import { ErrorBanner } from '@/components/inspect/error-banner';
 import { EntityPicker } from '@/components/inspect/entity-picker';
+import { Field, Input } from '@/components/inspect/field';
 import { Btn } from '@/components/inspect/shell';
 import type { ApiCompany, ApiProduct, ApiPurchaseOrder } from '@/lib/api';
 import { quickCreatePurchaseOrder } from '@/app/(console)/purchase-orders/actions';
-import { QuickCreateCompany, qcInput, qcLabel } from './quick-create-company';
+import { QuickCreateCompany } from './quick-create-company';
 import { QuickCreateProduct } from './quick-create-product';
 
 type Creating = 'client' | 'factory' | 'product' | null;
@@ -45,8 +46,15 @@ export function QuickCreatePurchaseOrder({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const companyOptions = useMemo(
-    () => rankCompaniesByActivity(companies).map((c) => ({ id: c.id, label: c.name })),
+  // INS-087: each picker ranks on ITS trade role — the companies this org has
+  // recently used as a client float up in the Client picker, factories in the
+  // Factory picker. Same list, two orders.
+  const clientOptions = useMemo(
+    () => rankCompaniesByActivity(companies, 'client').map((c) => ({ id: c.id, label: c.name })),
+    [companies],
+  );
+  const factoryOptions = useMemo(
+    () => rankCompaniesByActivity(companies, 'factory').map((c) => ({ id: c.id, label: c.name })),
     [companies],
   );
   const productOptions = useMemo(
@@ -82,23 +90,21 @@ export function QuickCreatePurchaseOrder({
     <Modal title="New purchase order" onClose={onClose} width={520}>
       <form onSubmit={submit} style={{ marginTop: 14 }}>
         {error && <ErrorBanner style={{ marginBottom: 12 }}>{error}</ErrorBanner>}
+        <Field label="PO number *" htmlFor="qc-po-number" style={{ marginBottom: 14 }}>
+          <Input id="qc-po-number" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="e.g. PO-2026-NV-0042" required />
+        </Field>
         <div style={{ marginBottom: 14 }}>
-          <label style={qcLabel} htmlFor="qc-po-number">PO number *</label>
-          <input id="qc-po-number" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} style={qcInput} placeholder="e.g. PO-2026-NV-0042" required />
+          <EntityPicker label="Client *" options={clientOptions} value={clientId} onChange={setClientId} placeholder="Select the client…" emptyText="No companies yet." hintText="Receives the branded report." createLabel="+ Add new company…" onCreate={() => setCreating('client')} />
         </div>
         <div style={{ marginBottom: 14 }}>
-          <EntityPicker label="Client *" options={companyOptions} value={clientId} onChange={setClientId} placeholder="Select the client…" emptyText="No companies yet." hintText="Receives the branded report." createLabel="+ Add new company…" onCreate={() => setCreating('client')} />
-        </div>
-        <div style={{ marginBottom: 14 }}>
-          <EntityPicker label="Factory *" options={companyOptions} value={factoryId} onChange={setFactoryId} placeholder="Select the factory…" emptyText="No companies yet." invalid={selfDealing} hintText={selfDealing ? 'Client and factory must differ.' : 'Produces the goods being inspected.'} createLabel="+ Add new company…" onCreate={() => setCreating('factory')} />
+          <EntityPicker label="Factory *" options={factoryOptions} value={factoryId} onChange={setFactoryId} placeholder="Select the factory…" emptyText="No companies yet." invalid={selfDealing} hintText={selfDealing ? 'Client and factory must differ.' : 'Produces the goods being inspected.'} createLabel="+ Add new company…" onCreate={() => setCreating('factory')} />
         </div>
         <div style={{ marginBottom: 14 }}>
           <EntityPicker label="Product *" options={productOptions} value={productId} onChange={setProductId} placeholder="Select product…" emptyText="No products yet." createLabel="+ Add new product…" onCreate={() => setCreating('product')} />
         </div>
-        <div style={{ marginBottom: 16 }}>
-          <label style={qcLabel} htmlFor="qc-po-qty">Total quantity</label>
-          <input id="qc-po-qty" type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} style={qcInput} placeholder="Optional" />
-        </div>
+        <Field label="Total quantity" htmlFor="qc-po-qty" style={{ marginBottom: 16 }}>
+          <Input id="qc-po-qty" type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} placeholder="Optional" />
+        </Field>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Btn kind="ghost" onClick={onClose}>Cancel</Btn>
           <Btn kind="primary" type="submit" loading={pending} disabled={!ready}>

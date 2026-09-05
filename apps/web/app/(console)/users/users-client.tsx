@@ -6,6 +6,7 @@ import { Copy, Check, Plus, Search, MoreVertical } from 'lucide-react';
 import { Avatar, Mono, RoleBadge } from '@/components/inspect/shell';
 import { Spinner } from '@/components/inspect/loading';
 import { ErrorBanner } from '@/components/inspect/error-banner';
+import { Field, Input, Select } from '@/components/inspect/field';
 import { severity, ui, type RoleKey } from '@/components/inspect/tokens';
 import type { ApiUser } from '@/lib/api';
 import { addMember, deactivateUser, inviteUser, reactivateUser, updateUserRole } from './actions';
@@ -231,18 +232,25 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
         </div>
       </div>
 
-      {/* Inline add-member panel */}
-      {showInvite && (
-        <div style={{ background: ui.accentSoft, border: `1px solid #CFE5FD`, borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
+      {/*
+        Inline add-member panel. INS-092: it stays MOUNTED and is hidden with
+        the `hidden` attribute, and both mode forms are mounted the same way —
+        the panel used to unmount on toggle, so closing it (or switching
+        "Add directly" ↔ "Invite by email") threw away whatever was typed.
+        Uncontrolled inputs keep their DOM value while hidden.
+      */}
+      <div hidden={!showInvite} style={{ background: ui.accentSoft, border: `1px solid #CFE5FD`, borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 600 }}>Add a team member</div>
-            <button onClick={() => setShowInvite(false)} style={{ marginLeft: 'auto', background: 'transparent', borderWidth: 0, cursor: 'pointer', fontSize: 18, color: ui.sub, lineHeight: 1 }}>×</button>
+            <button type="button" aria-label="Close" onClick={() => setShowInvite(false)} style={{ marginLeft: 'auto', background: 'transparent', borderWidth: 0, cursor: 'pointer', fontSize: 18, color: ui.sub, lineHeight: 1 }}>×</button>
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
             {(['direct', 'invite'] as const).map((m) => (
               <button
                 key={m}
+                type="button"
+                aria-pressed={mode === m}
                 onClick={() => setMode(m)}
                 style={{ height: 30, padding: '0 14px', borderRadius: 999, fontSize: 12.5, fontWeight: mode === m ? 600 : 500, fontFamily: 'inherit', cursor: 'pointer', background: mode === m ? '#fff' : 'transparent', color: mode === m ? ui.accent : ui.sub, border: `1px solid ${mode === m ? ui.accent : ui.line}` }}
               >
@@ -251,13 +259,8 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
             ))}
           </div>
 
-          {mode === 'invite' ? (
-            <>
-              {state.error && (
-                <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12.5, color: ui.danger }}>
-                  {state.error}
-                </div>
-              )}
+          <div hidden={mode !== 'invite'}>
+              {state.error && <ErrorBanner style={{ marginBottom: 12, padding: '8px 12px' }}>{state.error}</ErrorBanner>}
 
               {state.data ? (
                 <div style={{ padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8 }}>
@@ -281,18 +284,16 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
               ) : (
                 <form action={action}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 10, alignItems: 'flex-end' }}>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Email *</label>
-                      <input name="email" type="email" required style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} placeholder="colleague@example.com" />
-                    </div>
-                    <div>
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Role</label>
-                      <select name="role" defaultValue="INSPECTOR" style={{ height: 36, padding: '0 8px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8 }}>
+                    <Field label="Email *" htmlFor="invite-email">
+                      <Input id="invite-email" name="email" type="email" required placeholder="colleague@example.com" />
+                    </Field>
+                    <Field label="Role" htmlFor="invite-role">
+                      <Select id="invite-role" name="role" defaultValue="INSPECTOR" style={{ width: 'auto' }}>
                         <option value="INSPECTOR">Inspector</option>
                         <option value="QA_MANAGER">QA Manager</option>
                         <option value="ORG_OWNER">Org Owner</option>
-                      </select>
-                    </div>
+                      </Select>
+                    </Field>
                     <button type="submit" disabled={pending} aria-busy={pending || undefined}
                       style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 550, fontFamily: 'inherit', background: ui.accent, color: '#fff', borderWidth: 0, cursor: pending ? 'default' : 'pointer', opacity: pending ? 0.65 : 1, marginBottom: 1 }}>
                       {pending && <Spinner size={13} />}
@@ -301,40 +302,32 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
                   </div>
                 </form>
               )}
-            </>
-          ) : (
-              <form action={addAction} ref={addFormRef}>
+          </div>
+
+          <form action={addAction} ref={addFormRef} hidden={mode !== 'direct'}>
                 {addedEmail && !addState.error && (
-                  <div style={{ marginBottom: 12, padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#16A34A' }}>
+                  <div role="status" style={{ marginBottom: 12, padding: '12px 16px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: 8, fontSize: 13, color: '#16A34A' }}>
                     {addedEmail} was added and can sign in now with the password you set. Add another below.
                   </div>
                 )}
-                {addState.error && (
-                  <div style={{ marginBottom: 12, padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 12.5, color: ui.danger }}>
-                    {addState.error}
-                  </div>
-                )}
+                {addState.error && <ErrorBanner style={{ marginBottom: 12, padding: '8px 12px' }}>{addState.error}</ErrorBanner>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Name</label>
-                    <input name="name" style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} placeholder="Full name" />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Email *</label>
-                    <input name="email" type="email" required style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} placeholder="colleague@example.com" />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Password * (min 8)</label>
-                    <input name="password" type="password" required minLength={8} style={{ width: '100%', height: 36, padding: '0 10px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8, outline: 'none', boxSizing: 'border-box' as const }} />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase' as const, letterSpacing: 0.4 }}>Role</label>
-                    <select name="role" defaultValue="INSPECTOR" style={{ width: '100%', height: 36, padding: '0 8px', fontSize: 13, fontFamily: 'inherit', border: `1px solid ${ui.line}`, borderRadius: 8 }}>
+                  <Field label="Name" htmlFor="add-name">
+                    <Input id="add-name" name="name" placeholder="Full name" />
+                  </Field>
+                  <Field label="Email *" htmlFor="add-email">
+                    <Input id="add-email" name="email" type="email" required placeholder="colleague@example.com" />
+                  </Field>
+                  <Field label="Password * (min 8)" htmlFor="add-password">
+                    <Input id="add-password" name="password" type="password" required minLength={8} />
+                  </Field>
+                  <Field label="Role" htmlFor="add-role">
+                    <Select id="add-role" name="role" defaultValue="INSPECTOR">
                       <option value="INSPECTOR">Inspector</option>
                       <option value="QA_MANAGER">QA Manager</option>
                       <option value="ORG_OWNER">Org Owner</option>
-                    </select>
-                  </div>
+                    </Select>
+                  </Field>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
                   <button type="submit" disabled={addPending} aria-busy={addPending || undefined}
@@ -343,10 +336,8 @@ export function UsersClient({ users, live, currentUserId }: { users: ApiUser[]; 
                     {addPending ? 'Adding…' : 'Add member'}
                   </button>
                 </div>
-              </form>
-          )}
-        </div>
-      )}
+          </form>
+      </div>
 
       <div style={{ background: '#fff', border: `1px solid ${ui.line}`, borderRadius: 10, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>

@@ -17,15 +17,14 @@ export async function createPurchaseOrder(_prev: unknown, formData: FormData): P
   const qty = formData.get('totalQuantity');
   const totalQuantity = qty ? Number(qty) : undefined;
 
-  let id: string;
   try {
-    const res = await apiPost<{ id: string }>('/purchase-orders', { poNumber, clientCompanyId, factoryCompanyId, productId, totalQuantity });
-    id = res.id;
+    await apiPost('/purchase-orders', { poNumber, clientCompanyId, factoryCompanyId, productId, totalQuantity });
   } catch (e) {
     return { error: msg(e, 'Failed to create purchase order') };
   }
+  // INS-092: back to the list the user came from, not the new row's edit page.
   revalidatePath('/purchase-orders');
-  redirect(`/purchase-orders/${id}`);
+  redirect('/purchase-orders');
 }
 
 export async function updatePurchaseOrder(_prev: unknown, formData: FormData): Promise<{ error?: string }> {

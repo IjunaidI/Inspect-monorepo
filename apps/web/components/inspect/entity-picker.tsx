@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { filterOptions } from '@inspect/domain';
+import { fieldLabelStyle as lbl } from './field';
 import { ui } from './tokens';
 
 export interface PickerOption {
@@ -11,8 +12,6 @@ export interface PickerOption {
   label: string;
   hint?: string;
 }
-
-const lbl: CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600, color: ui.sub, marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.4 };
 
 /**
  * Searchable entity combobox (INS-091). Replaces native <select> wherever the
