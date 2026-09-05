@@ -1,6 +1,6 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-04.** This is the source-of-truth dashboard: current state only.
+> **Last verified: 2026-09-05.** This is the source-of-truth dashboard: current state only.
 > The long per-session history that used to stack here was trimmed 2026-09-02 — it lives in git
 > history (`git log -- docs/STATUS.md`) and in the backlog archive
 > ([done/2026-09-02-backlog-archive.md](done/2026-09-02-backlog-archive.md)). Open work:
@@ -9,13 +9,25 @@
 
 ## Where the project stands
 
-**Latest landed: [INS-093](future/BACKLOG.md) (2026-09-04) — the mobile camera loop hardened.** The
+**Latest landed (2026-09-05): the low/medium backlog is cleared and the camera loop is network-aware.**
+Five items closed in one pass — [INS-089](future/BACKLOG.md) (the report signer is recorded and shown),
+[INS-092](future/BACKLOG.md) (every web + mobile friction papercut: shared form primitives on both
+platforms, breadcrumb, toasts, pull-to-refresh, partial retry, optimistic role change, PO search, latest-
+version-only presets…), [INS-087](future/BACKLOG.md) (Client and Factory pickers rank on their own trade
+role), [INS-034](future/BACKLOG.md) (guest visibility predicate pinned by 26 tests), [INS-085](future/BACKLOG.md)
+(Jest workers pinned). Photo evidence is now displayed in **capture order** — by unit, then item — on the
+review and report screens of both platforms. [INS-093](future/BACKLOG.md) grew connectivity awareness: the
+upload queue pauses offline and resumes on reconnect, classifies failures (server rejections stop retrying
+and offer Retake/Discard), and the loop cannot end — from the capture screen OR the review screen — while
+any photo is still on the device. Open backlog is down to the two items only the account owner can move.
+
+**Before that: [INS-093](future/BACKLOG.md) (2026-09-04) — the mobile camera loop hardened.** The
 first hands-on look at the capture screen found it "weird and nonsensical": a free "Next" button left
 units with holes, a retake blocked on the network, and uploads died with the screen. Now the cursor
 walks only shot slots plus one frontier, retakes are queued like any capture, uploads run in a
 background singleton (progress, timeouts, backoff, resume on foreground), every photo is cached
 on-device until the loop is submitted, End loop waits for uploads in a finishing sheet, and a gallery
-shows every unit × item. Verified by tests (mobile 15 → 39), type-check, lint, `expo export` **and on
+shows every unit × item. Verified by tests, type-check, lint, `expo export` **and on
 the Android emulator** (shoot → saved → retake in place → gate → discard → submit → review; two fixes
 fell out, see the backlog entry).
 
@@ -25,8 +37,7 @@ company, product or PO is created in a dialog (web) or bottom sheet (mobile), ap
 nesting one level (PO → company/product). The new-inspection dead end ("create four things elsewhere")
 is gone, every `alert()` on the console is an inline banner, every mobile form is keyboard-safe, mobile
 can create a company, and the client's default preset is honoured. Verified end to end in Chrome and on
-the Android emulator (16 commits on local `main`, **not yet pushed** — a push auto-deploys to Railway).
-The residue of the friction audit is [INS-092](future/BACKLOG.md).
+the Android emulator. The residue of the friction audit was [INS-092](future/BACKLOG.md), closed 2026-09-05.
 
 **INS-086 (React Native app) Phase 4 is CODE-COMPLETE — every screen-migration-ledger row is
 built.** 25 routes bundle green on Expo SDK 57. **The API is now reachable from a phone
@@ -59,17 +70,17 @@ acceptance pass**:
 
 | Pillar | State |
 |---|---|
-| **Domain core** (AQL engine, tamper-proof crypto, audit chain, cycle state, auth primitives) | Pure TypeScript, unit-tested: **api 661 tests / 42 suites**. |
-| **API** (NestJS 11 + Prisma 6, 24 org-scoped models) | All routes role-floored (OpenAPI carries `x-required-role`); DB-backed integration suite **147/16** runs green in CI against containers. Duplicate styleNumber/poNumber now proper 409s (fixed 2026-09-02). `POST /purchase-orders` answers in the list/get shape with its three parties (INS-091, 2026-09-04 — a just-created PO showed "—" for them). |
-| **Web console** (Next.js 15) | All screens live-wired; clicked through end-to-end 2026-08-31 (signed report + guest portal verified in a real browser). Six live bugs found by the Phase 4 contract passes were fixed 2026-09-02 (see below). **INS-091 (2026-09-04):** searchable `EntityPicker`s with inline company/product/PO quick-create (nested one level), `Modal` + `ErrorBanner` (no `alert()` left), the new-inspection dead end removed, client default preset honoured. First component tests (jsdom + Testing Library) — **47 Vitest tests.** |
-| **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **INS-093 (2026-09-04) hardened the camera loop:** no free "Next" (the cursor walks shot slots + one frontier), retakes go through the queue (`intent: replace`), uploads run in a background singleton with progress/timeouts/backoff and survive leaving the screen, every photo is cached on-device until the loop is submitted, End loop waits for uploads in a finishing sheet, and a gallery shows every unit × item. **39 Vitest tests** on the pure capture core. **INS-091 (2026-09-04):** `OptionPicker` search + "+ Add new…", quick-create sheets for company/product/PO, `FormScreen` keyboard handling on 11 form screens, company create from the directory. Device pass in progress (see above). |
-| **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**34 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity`, `filterOptions`), `@inspect/design-tokens` (+`brandFallbacks`). |
+| **Domain core** (AQL engine, tamper-proof crypto, audit chain, cycle state, auth primitives) | Pure TypeScript, unit-tested: **api 691 tests / 43 suites** (guest spec + report signer + per-role counts, 2026-09-05). |
+| **API** (NestJS 11 + Prisma 6, 24 org-scoped models) | All routes role-floored (OpenAPI carries `x-required-role`); DB-backed integration suite **147/16** runs green in CI against containers. Duplicate styleNumber/poNumber now proper 409s (fixed 2026-09-02). `POST /purchase-orders` answers in the list/get shape with its three parties (INS-091, 2026-09-04 — a just-created PO showed "—" for them). **2026-09-05:** `Report.generatedByUserId` recorded on generate and returned as `generatedBy` (INS-089); `GET /companies` rows carry `roleCounts {asClient, asFactory}` (INS-087); `guest.service.spec.ts` pins the visibility boundary (INS-034); Jest `maxWorkers` pinned (INS-085). |
+| **Web console** (Next.js 15) | All screens live-wired; clicked through end-to-end 2026-08-31 (signed report + guest portal verified in a real browser). Six live bugs found by the Phase 4 contract passes were fixed 2026-09-02 (see below). **INS-091 (2026-09-04):** searchable `EntityPicker`s with inline company/product/PO quick-create (nested one level), `Modal` + `ErrorBanner` (no `alert()` left), the new-inspection dead end removed, client default preset honoured. **INS-092 (2026-09-05):** shared `Field`/`Input`/`Select` primitives, one `Breadcrumb`, create-from-list stays on the list, PO parties read-only with a hint, add-member draft kept, one preset per name in `/inspections/new`; photo evidence on the review + report pages grouped by unit in capture order; "Signed by" filled from the recorded signer. **60 Vitest tests.** |
+| **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **INS-093 (2026-09-04) hardened the camera loop:** no free "Next" (the cursor walks shot slots + one frontier), retakes go through the queue (`intent: replace`), uploads run in a background singleton with progress/timeouts/backoff and survive leaving the screen, every photo is cached on-device until the loop is submitted, End loop waits for uploads in a finishing sheet, and a gallery shows every unit × item. **2026-09-05:** the queue is connectivity-aware (pauses offline, resumes on reconnect, classifies failures; rejected uploads offer Retake/Discard), the review screen shows photo evidence in capture order and refuses submit while uploads are pending, the report screen shows evidence by unit and the signer. **INS-092 (2026-09-05):** `components/ui.tsx` primitives, toasts, pull-to-refresh, partial retry, 44pt targets, optimistic role change, PO search. **46 Vitest tests.** **INS-091 (2026-09-04):** `OptionPicker` search + "+ Add new…", quick-create sheets for company/product/PO, `FormScreen` keyboard handling on 11 form screens, company create from the directory. Device pass in progress (see above). |
+| **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**39 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity` — per trade role since INS-087, `filterOptions`), `@inspect/design-tokens` (+`brandFallbacks`). |
 | **Deploy** (Railway project QCLink — a DEV environment) | API `Main Application` live at `main-application-production-6fa4.up.railway.app` (Dockerfile build, `/health` check, pre-deploy `migrate deploy` + seed, fresh signing key), console `serene-vision` at `serene-vision-production-8387.up.railway.app`, Postgres + Redis + bucket. Auto-deploys on push to `main`. Runbook: [reference/deploy-railway.md](reference/deploy-railway.md). |
 | **CI** (`.github/workflows/ci.yml`) | migrate→seed→type-check→api Jest→all Vitest suites→integration→builds→lint→OpenAPI staleness→single-resolved-React assertion. **Green on every 2026-09-02 push (10/10 commits).** The 2026-09-04 INS-091 commits have not been pushed yet, so CI has not seen them; locally every gate is green. |
 
-**Verified numbers (2026-09-04):** type-check 11/11 · lint 0 errors (1 known font warning) ·
-api 661/42 (serial on Windows — INS-085) · web 47/5 · domain 34/7 · api-client 29/2 · mobile 39/3 ·
-integration 147/16 (CI) · `expo export` 25 routes.
+**Verified numbers (2026-09-05):** type-check clean (api, web, mobile) · lint 0 errors (1 known font warning) ·
+api 691/43 · web 60/9 · domain 39/7 · api-client 29/2 · mobile 46/4 · integration 147/16 (CI) ·
+`expo export` green · `openapi.json` unchanged by the day's API changes.
 
 ## Fixed along the Phase 4 sweep (2026-09-02)
 
@@ -125,10 +136,8 @@ integration 147/16 (CI) · `expo export` 25 routes.
   `vitest.config.mts` — Next's tsconfig says `jsx: preserve`, which Vite 8 would otherwise obey — and a
   `// @vitest-environment jsdom` pragma per component test file; the server-side suite stays on `node`.
 
-## Open backlog (7 items)
+## Open backlog (2 items)
 
-[INS-002](future/BACKLOG.md) credential rotation
-(user-side) · [INS-086](future/BACKLOG.md) epic (device pass) · [INS-089](future/BACKLOG.md) record
-the report signer · [INS-034](future/BACKLOG.md) guest module spec · [INS-087](future/BACKLOG.md)
-per-role picker ranking · [INS-085](future/BACKLOG.md) Windows Jest workers (annotated) ·
-[INS-092](future/BACKLOG.md) UX friction audit residue (filed 2026-09-04 from the INS-091 audit).
+[INS-002](future/BACKLOG.md) credential rotation (user-side) · [INS-086](future/BACKLOG.md) epic
+(the on-device acceptance pass on a physical phone). Every low/medium item was closed 2026-09-05
+(INS-034, INS-085, INS-087, INS-089, INS-092).
