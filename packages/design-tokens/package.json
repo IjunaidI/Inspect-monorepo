@@ -1,14 +1,23 @@
 {
   "name": "@inspect/design-tokens",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
-  "description": "Platform-free Inspect design tokens (console, future mobile).",
+  "description": "Platform-free Inspect design tokens: semantic theme, type scale, spacing/radius/shadow, icon paths, the frozen report palette.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "type-check": "tsc -p tsconfig.json --noEmit",
+    "icons": "node scripts/build-icons.mjs",
     "clean": "rimraf dist .turbo"
+  },
+  "dependencies": {
+    "@inspect/shared-types": "workspace:^"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
   }
 }

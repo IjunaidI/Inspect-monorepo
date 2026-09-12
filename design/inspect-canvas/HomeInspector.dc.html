@@ -1,0 +1,130 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Libre+Baskerville:wght@400;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+  <style>
+  body { margin: 0; background: #FDFCF8; }
+  a { color: #3A7D44; } a:hover { color: #2F4F34; }
+  .screen { position: relative; width: 390px; height: 844px; overflow: hidden; background: #FDFCF8; color: #1A331C; font-family: 'Inter', -apple-system, system-ui, sans-serif; font-size: 14px; line-height: 20px; -webkit-font-smoothing: antialiased; }
+  .serif { font-family: 'Libre Baskerville', Georgia, serif; font-weight: 400; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .title { font-family: 'Libre Baskerville', Georgia, serif; font-size: 24px; line-height: 30px; font-weight: 400; color: #1A331C; margin: 0; }
+  .heading { font-family: 'Libre Baskerville', Georgia, serif; font-size: 18px; line-height: 24px; font-weight: 400; color: #1A331C; margin: 0; }
+  .overline { font-size: 10px; line-height: 14px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: #5C6B5E; }
+  .label { font-size: 12px; line-height: 16px; font-weight: 700; }
+  .caption { font-size: 11px; line-height: 14px; font-weight: 500; color: #5C6B5E; }
+  .strong { font-weight: 700; }
+  .card { background: #FFFFFF; border: 1px solid #E6E0D4; border-radius: 16px; box-shadow: 0 1px 2px rgba(26,51,28,0.05); }
+  .header { padding: 48px 24px 20px; background: #FFFFFF; border-bottom: 1px solid #E6E0D4; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .main { padding: 20px 24px 0; display: flex; flex-direction: column; gap: 20px; }
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 84px; box-sizing: border-box; padding: 8px 16px 20px; background: rgba(255,255,255,0.95); border-top: 1px solid #E6E0D4; display: flex; justify-content: space-around; align-items: center; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; min-height: 44px; justify-content: center; color: #5C6B5E; font-size: 10px; line-height: 12px; font-weight: 500; }
+  .tab.active { color: #3A7D44; font-weight: 700; }
+  .row { display: flex; align-items: center; gap: 12px; }
+  .chip { display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: 999px; background: #F2EEE6; color: #5C6B5E; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .chip.active { background: rgba(58,125,68,0.10); color: #3A7D44; box-shadow: inset 0 0 0 1px #3A7D44; }
+  .badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 10px; line-height: 14px; font-weight: 700; white-space: nowrap; }
+  .tile { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; height: 48px; padding: 0 20px; border-radius: 12px; font-size: 14px; font-weight: 700; box-sizing: border-box; }
+  .btn.primary { background: #3A7D44; color: #FFFFFF; }
+  .btn.secondary { background: #FFFFFF; color: #1A331C; border: 1px solid #E6E0D4; }
+  .btn.ghost { background: transparent; color: #3A7D44; }
+  .input { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border-radius: 10px; background: #F2EEE6; border: 1px solid #E6E0D4; color: #8C9E8D; font-size: 14px; box-sizing: border-box; }
+  .hscroll { display: flex; gap: 12px; overflow: hidden; }
+  .avatar { width: 40px; height: 40px; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 13px; font-weight: 700; flex: none; }
+</style>
+</helmet>
+<div class="screen">
+  <header class="header"><div class="row" style="gap:16px;min-width:0">
+      
+      <div style="min-width:0">
+        <div class="overline" style="margin-bottom:4px">Acme Apparel Group</div>
+        <h1 class="title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Good morning, Arjun</h1>
+      </div>
+    </div><div class="avatar" style="width:40px;height:40px;background:#8A6A1F;font-size:13px">AM</div></header>
+  <main class="main">
+    <section class="card" style="background:rgba(58,125,68,0.05);border-color:rgba(58,125,68,0.10);padding:20px;display:flex;flex-direction:column;gap:16px;box-shadow:none">
+      <div class="row" style="gap:14px">
+        <div class="tile" style="width:48px;height:48px;background:rgba(58,125,68,0.10)"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style="display:block;flex:none;color:#3A7D44;"><path fill="currentColor" fill-rule="evenodd" d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22ZM10.6935 15.8458L15.4137 13.059C16.1954 12.5974 16.1954 11.4026 15.4137 10.941L10.6935 8.15419C9.93371 7.70561 9 8.28947 9 9.21316V14.7868C9 15.7105 9.93371 16.2944 10.6935 15.8458Z" clip-rule="evenodd"/></svg></div>
+        <div style="min-width:0">
+          <div class="overline" style="color:#3A7D44">Continue where you left off</div>
+          <div class="strong" style="font-size:16px;line-height:22px;margin-top:4px">PO-4471 · Knit polo</div>
+          <div class="caption" style="margin-top:2px">Unit 3 of 8 · 2 shots left in this unit</div>
+        </div>
+      </div>
+      <div class="btn primary"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" style="display:block;flex:none;color:#FFFFFF;"><path fill="currentColor" fill-rule="evenodd" d="M9.77778 21H14.2222C17.3433 21 18.9038 21 20.0248 20.2646C20.51 19.9462 20.9267 19.5371 21.251 19.0607C22 17.9601 22 16.4279 22 13.3636C22 10.2994 22 8.76721 21.251 7.6666C20.9267 7.19014 20.51 6.78104 20.0248 6.46268C19.3044 5.99013 18.4027 5.82123 17.022 5.76086C16.3631 5.76086 15.7959 5.27068 15.6667 4.63636C15.4728 3.68489 14.6219 3 13.6337 3H10.3663C9.37805 3 8.52715 3.68489 8.33333 4.63636C8.20412 5.27068 7.63685 5.76086 6.978 5.76086C5.59733 5.82123 4.69555 5.99013 3.97524 6.46268C3.48995 6.78104 3.07328 7.19014 2.74902 7.6666C2 8.76721 2 10.2994 2 13.3636C2 16.4279 2 17.9601 2.74902 19.0607C3.07328 19.5371 3.48995 19.9462 3.97524 20.2646C5.09624 21 6.65675 21 9.77778 21ZM12 9.27273C9.69881 9.27273 7.83333 11.1043 7.83333 13.3636C7.83333 15.623 9.69881 17.4545 12 17.4545C14.3012 17.4545 16.1667 15.623 16.1667 13.3636C16.1667 11.1043 14.3012 9.27273 12 9.27273ZM12 10.9091C10.6193 10.9091 9.5 12.008 9.5 13.3636C9.5 14.7192 10.6193 15.8182 12 15.8182C13.3807 15.8182 14.5 14.7192 14.5 13.3636C14.5 12.008 13.3807 10.9091 12 10.9091ZM16.7222 10.0909C16.7222 9.63904 17.0953 9.27273 17.5556 9.27273H18.6667C19.1269 9.27273 19.5 9.63904 19.5 10.0909C19.5 10.5428 19.1269 10.9091 18.6667 10.9091H17.5556C17.0953 10.9091 16.7222 10.5428 16.7222 10.0909Z" clip-rule="evenodd"/></svg>Resume capture</div>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <div class="row" style="justify-content:space-between"><div class="overline">My work</div></div>
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px">
+        <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0">
+    <div class="row" style="gap:8px"><span style="width:8px;height:8px;border-radius:999px;background:#8C9E8D;display:inline-block;flex:none"></span><span class="label" style="color:#5C6B5E">Assigned to me</span></div>
+    <div style="display:flex;align-items:baseline;gap:6px">
+      <span class="serif" style="font-size:24px;line-height:30px">3</span>
+      
+    </div>
+    
+  </div>
+        <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0">
+    <div class="row" style="gap:8px"><span style="width:8px;height:8px;border-radius:999px;background:#5C7CFA;display:inline-block;flex:none"></span><span class="label" style="color:#5C6B5E">In progress</span></div>
+    <div style="display:flex;align-items:baseline;gap:6px">
+      <span class="serif" style="font-size:24px;line-height:30px">1</span>
+      
+    </div>
+    
+  </div>
+        <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0">
+    <div class="row" style="gap:8px"><span style="width:8px;height:8px;border-radius:999px;background:#C25E00;display:inline-block;flex:none"></span><span class="label" style="color:#5C6B5E">Awaiting review</span></div>
+    <div style="display:flex;align-items:baseline;gap:6px">
+      <span class="serif" style="font-size:24px;line-height:30px">2</span>
+      
+    </div>
+    
+  </div>
+        <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0">
+    <div class="row" style="gap:8px"><span style="width:8px;height:8px;border-radius:999px;background:#3A7D44;display:inline-block;flex:none"></span><span class="label" style="color:#5C6B5E">Decided this month</span></div>
+    <div style="display:flex;align-items:baseline;gap:6px">
+      <span class="serif" style="font-size:24px;line-height:30px">14</span>
+      
+    </div>
+    
+  </div>
+      </div>
+    </section>
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <div class="row" style="justify-content:space-between;align-items:flex-end"><h2 class="heading">Assigned to you</h2><div style="color:#3A7D44;font-size:14px;font-weight:600">All</div></div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="card"><div class="row" style="justify-content:space-between;gap:12px;padding:16px">
+    <div class="row" style="gap:14px;min-width:0">
+      
+      <div style="min-width:0">
+        <div class="strong" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">PO-4480 · Fleece hoodie</div>
+        <div class="caption" style="margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Harbor &amp; Co · Delta Mills · due Fri</div>
+      </div>
+    </div>
+    <div class="row" style="gap:10px;flex:none"><span class="badge" style="background:#F2EEE6;color:#5C6B5E">Assigned</span></div>
+  </div></div>
+        <div class="card"><div class="row" style="justify-content:space-between;gap:12px;padding:16px">
+    <div class="row" style="gap:14px;min-width:0">
+      
+      <div style="min-width:0">
+        <div class="strong" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">PO-4478 · Denim jacket</div>
+        <div class="caption" style="margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Northwind Retail · Sunrise Garments · due Mon</div>
+      </div>
+    </div>
+    <div class="row" style="gap:10px;flex:none"><span class="badge" style="background:#F2EEE6;color:#5C6B5E">Assigned</span></div>
+  </div></div>
+      </div>
+    </section>
+  </main>
+  <nav class="tabbar"><div class="tab active"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style="display:block;flex:none;color:currentColor;"><path fill="currentColor" fill-rule="evenodd" d="M2.5192 7.82274C2 8.77128 2 9.91549 2 12.2039V13.725C2 17.6258 2 19.5763 3.17157 20.7881C4.34315 22 6.22876 22 10 22H14C17.7712 22 19.6569 22 20.8284 20.7881C22 19.5763 22 17.6258 22 13.725V12.2039C22 9.91549 22 8.77128 21.4808 7.82274C20.9616 6.87421 20.0131 6.28551 18.116 5.10812L16.116 3.86687C14.1106 2.62229 13.1079 2 12 2C10.8921 2 9.88939 2.62229 7.88403 3.86687L5.88403 5.10813C3.98695 6.28551 3.0384 6.87421 2.5192 7.82274ZM11.25 18C11.25 18.4142 11.5858 18.75 12 18.75C12.4142 18.75 12.75 18.4142 12.75 18V15C12.75 14.5858 12.4142 14.25 12 14.25C11.5858 14.25 11.25 14.5858 11.25 15V18Z" clip-rule="evenodd"/></svg><span>Home</span></div><div class="tab"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style="display:block;flex:none;color:currentColor;"><path fill="currentColor" fill-rule="evenodd" d="M3.46447 3.46447C2 4.92893 2 7.28595 2 12C2 16.714 2 19.0711 3.46447 20.5355C4.92893 22 7.28595 22 12 22C16.714 22 19.0711 22 20.5355 20.5355C22 19.0711 22 16.714 22 12C22 7.28595 22 4.92893 20.5355 3.46447C19.0711 2 16.714 2 12 2C7.28595 2 4.92893 2 3.46447 3.46447ZM10.5431 7.51724C10.8288 7.2173 10.8172 6.74256 10.5172 6.4569C10.2173 6.17123 9.74256 6.18281 9.4569 6.48276L7.14286 8.9125L6.5431 8.28276C6.25744 7.98281 5.78271 7.97123 5.48276 8.2569C5.18281 8.54256 5.17123 9.01729 5.4569 9.31724L6.59976 10.5172C6.74131 10.6659 6.9376 10.75 7.14286 10.75C7.34812 10.75 7.5444 10.6659 7.68596 10.5172L10.5431 7.51724ZM13 8.25C12.5858 8.25 12.25 8.58579 12.25 9C12.25 9.41422 12.5858 9.75 13 9.75H18C18.4142 9.75 18.75 9.41422 18.75 9C18.75 8.58579 18.4142 8.25 18 8.25H13ZM10.5431 14.5172C10.8288 14.2173 10.8172 13.7426 10.5172 13.4569C10.2173 13.1712 9.74256 13.1828 9.4569 13.4828L7.14286 15.9125L6.5431 15.2828C6.25744 14.9828 5.78271 14.9712 5.48276 15.2569C5.18281 15.5426 5.17123 16.0173 5.4569 16.3172L6.59976 17.5172C6.74131 17.6659 6.9376 17.75 7.14286 17.75C7.34812 17.75 7.5444 17.6659 7.68596 17.5172L10.5431 14.5172ZM13 15.25C12.5858 15.25 12.25 15.5858 12.25 16C12.25 16.4142 12.5858 16.75 13 16.75H18C18.4142 16.75 18.75 16.4142 18.75 16C18.75 15.5858 18.4142 15.25 18 15.25H13Z" clip-rule="evenodd"/></svg><span>Inspections</span></div><div class="tab"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" style="display:block;flex:none;color:currentColor;"><g fill="currentColor"><circle cx="12" cy="6" r="4"/><path d="M20 17.5C20 19.9853 20 22 12 22C4 22 4 19.9853 4 17.5C4 15.0147 7.58172 13 12 13C16.4183 13 20 15.0147 20 17.5Z"/></g></svg><span>Profile</span></div></nav>
+</div>
+</x-dc>
+</body>
+</html>

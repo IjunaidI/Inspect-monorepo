@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notifications</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://code.iconify.design/iconify-icon/3.0.0/iconify-icon.min.js"></script>
+    <style type="text/tailwindcss">
+      @theme inline {
+        --color-background: var(--background);
+        --color-foreground: var(--foreground);
+        --color-primary: var(--primary);
+        --color-primary-foreground: var(--primary-foreground);
+        --color-secondary: var(--secondary);
+        --color-secondary-foreground: var(--secondary-foreground);
+        --color-muted: var(--muted);
+        --color-muted-foreground: var(--muted-foreground);
+        --color-accent: var(--accent);
+        --color-accent-foreground: var(--accent-foreground);
+        --color-destructive: var(--destructive);
+        --color-card: var(--card);
+        --color-card-foreground: var(--card-foreground);
+        --color-popover: var(--popover);
+        --color-popover-foreground: var(--popover-foreground);
+        --color-border: var(--border);
+        --color-input: var(--input);
+        --color-ring: var(--ring);
+        --color-chart-1: var(--chart-1);
+        --color-chart-2: var(--chart-2);
+        --color-chart-3: var(--chart-3);
+        --color-chart-4: var(--chart-4);
+        --color-chart-5: var(--chart-5);
+
+        --font-font-sans: var(--font-sans);
+        --font-font-heading: var(--font-heading);
+        --font-font-serif: var(--font-serif);
+        --font-font-mono: var(--font-mono);
+      }
+
+      @theme {
+        --radius-xs: calc(var(--radius) - 8px);
+        --radius-sm: calc(var(--radius) - 4px);
+        --radius-md: calc(var(--radius) - 2px);
+        --radius-lg: var(--radius);
+        --radius-xl: calc(var(--radius) + 4px);
+        --radius-2xl: calc(var(--radius) + 8px);
+        --radius-3xl: calc(var(--radius) + 16px);
+        --radius-4xl: calc(var(--radius) + 24px);
+      }
+
+      * {
+        corner-shape: var(--shape, round);
+      }
+
+      .rounded-full, .rounded-none,
+      .rounded-t-full, .rounded-t-none,
+      .rounded-r-full, .rounded-r-none,
+      .rounded-b-full, .rounded-b-none,
+      .rounded-l-full, .rounded-l-none,
+      .rounded-s-full, .rounded-s-none,
+      .rounded-e-full, .rounded-e-none,
+      .rounded-tl-full, .rounded-tl-none,
+      .rounded-tr-full, .rounded-tr-none,
+      .rounded-bl-full, .rounded-bl-none,
+      .rounded-br-full, .rounded-br-none,
+      .rounded-ss-full, .rounded-ss-none,
+      .rounded-se-full, .rounded-se-none,
+      .rounded-es-full, .rounded-es-none,
+      .rounded-ee-full, .rounded-ee-none {
+        corner-shape: round;
+      }
+
+      @utility rounded-* {
+        border-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-t-* {
+        border-top-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-top-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-r-* {
+        border-top-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-bottom-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-b-* {
+        border-bottom-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-bottom-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-l-* {
+        border-top-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-bottom-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-tl-* {
+        border-top-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-tr-* {
+        border-top-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-bl-* {
+        border-bottom-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-br-* {
+        border-bottom-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-s-* {
+        border-start-start-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-end-start-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-e-* {
+        border-start-end-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-end-end-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-ss-* {
+        border-start-start-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-se-* {
+        border-start-end-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-es-* {
+        border-end-start-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-ee-* {
+        border-end-end-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+
+      :root {
+        --shape: round;
+        --shape-multiplier: 1;
+
+          --background: #fdfcf8;
+        --foreground: #1a331c;
+        --primary: #3a7d44;
+        --primary-foreground: #ffffff;
+        --secondary: #e8ddcb;
+        --secondary-foreground: #2f4f34;
+        --muted: #f2eee6;
+        --muted-foreground: #5c6b5e;
+        --accent: #dcb878;
+        --accent-foreground: #1a331c;
+        --destructive: #cf4444;
+        --card: #ffffff;
+        --card-foreground: #1a331c;
+        --popover: #ffffff;
+        --popover-foreground: #1a331c;
+        --border: #e6e0d4;
+        --input: #f2eee6;
+        --ring: #3a7d44;
+        --chart-1: #3a7d44;
+        --chart-2: #dcb878;
+        --chart-3: #8c9e8d;
+        --chart-4: #c25e00;
+        --chart-5: #5c7cfa;
+
+        --font-sans: "Inter";
+        --font-heading: "Libre Baskerville";
+        --font-serif: "Playfair Display";
+        --font-mono: "JetBrains Mono";
+
+        --radius: 0.75rem;
+      }
+
+      /* Prevent layout shift for icons without explicit dimensions */
+      iconify-icon:not([width]):not([height]) {
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+      }
+
+      /* Hide scrollbars */
+      *,
+      *::before,
+      *::after {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      *::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="h-full bg-background flex flex-col font-sans">
+      <header class="pt-12 pb-6 px-6 bg-card border-b border-border sticky top-0 z-10">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-4">
+            <button
+              class="size-10 rounded-full border border-border flex items-center justify-center text-foreground hover:bg-secondary/20 transition-colors"
+            >
+              <iconify-icon icon="solar:arrow-left-linear" width="24" height="24"></iconify-icon>
+            </button>
+            <h1 class="font-heading text-2xl text-foreground">Notifications</h1>
+          </div>
+          <button class="text-primary text-xs font-bold uppercase tracking-wider">
+            Mark all as read
+          </button>
+        </div>
+      </header>
+      <main class="flex-1 overflow-y-auto pb-24">
+        <div class="px-6 py-4">
+          <h2 class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">
+            Today
+          </h2>
+          <div class="space-y-4">
+            <div class="flex gap-4 p-4 rounded-2xl bg-primary/5 border border-primary/10 relative">
+              <div class="absolute top-4 right-4 size-2 rounded-full bg-primary"></div>
+              <div
+                class="size-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"
+              >
+                <iconify-icon
+                  icon="solar:play-circle-bold"
+                  class="text-primary"
+                  width="24"
+                  height="24"
+                ></iconify-icon>
+              </div>
+              <div class="flex-1">
+                <div class="flex justify-between items-start mb-1">
+                  <h3 class="font-bold text-sm text-foreground">New Lesson Available</h3>
+                  <span class="text-[10px] text-muted-foreground">2h ago</span>
+                </div>
+                <p class="text-xs text-muted-foreground leading-relaxed">
+                  "Mastering the Stinger" by Tiger Woods is now live in your Academy.
+                </p>
+              </div>
+            </div>
+            <div class="flex gap-4 p-4 rounded-2xl bg-card border border-border relative">
+              <div class="absolute top-4 right-4 size-2 rounded-full bg-primary"></div>
+              <div
+                class="size-12 rounded-xl bg-accent/10 flex items-center justify-center shrink-0"
+              >
+                <iconify-icon
+                  icon="solar:medal-ribbon-bold"
+                  class="text-accent"
+                  width="24"
+                  height="24"
+                ></iconify-icon>
+              </div>
+              <div class="flex-1">
+                <div class="flex justify-between items-start mb-1">
+                  <h3 class="font-bold text-sm text-foreground">Achievement Unlocked!</h3>
+                  <span class="text-[10px] text-muted-foreground">5h ago</span>
+                </div>
+                <p class="text-xs text-muted-foreground leading-relaxed">
+                  Congratulations! You've earned the "Range Rat" badge for 5 consecutive days of
+                  practice.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="px-6 py-4">
+          <h2 class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">
+            Yesterday
+          </h2>
+          <div class="space-y-4">
+            <div class="flex gap-4 p-4 rounded-2xl bg-card border border-border">
+              <div
+                class="size-12 rounded-xl bg-secondary/20 flex items-center justify-center shrink-0"
+              >
+                <iconify-icon
+                  icon="solar:chart-square-bold"
+                  class="text-primary"
+                  width="24"
+                  height="24"
+                ></iconify-icon>
+              </div>
+              <div class="flex-1">
+                <div class="flex justify-between items-start mb-1">
+                  <h3 class="font-bold text-sm text-foreground">Handicap Updated</h3>
+                  <span class="text-[10px] text-muted-foreground">Yesterday</span>
+                </div>
+                <p class="text-xs text-muted-foreground leading-relaxed">
+                  Your handicap has dropped from 14.8 to 14.2 based on your last 3 rounds.
+                </p>
+              </div>
+            </div>
+            <div class="flex gap-4 p-4 rounded-2xl bg-card border border-border">
+              <div class="size-12 rounded-xl bg-input flex items-center justify-center shrink-0">
+                <iconify-icon
+                  icon="solar:flag-bold"
+                  class="text-muted-foreground"
+                  width="24"
+                  height="24"
+                ></iconify-icon>
+              </div>
+              <div class="flex-1">
+                <div class="flex justify-between items-start mb-1">
+                  <h3 class="font-bold text-sm text-foreground">Practice Reminder</h3>
+                  <span class="text-[10px] text-muted-foreground">Yesterday</span>
+                </div>
+                <p class="text-xs text-muted-foreground leading-relaxed">
+                  Don't forget your scheduled putting drills for the week. Consistency is key!
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="px-6 py-4">
+          <h2 class="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-4">
+            Last Week
+          </h2>
+          <div class="flex gap-4 p-4 rounded-2xl bg-card border border-border grayscale opacity-70">
+            <div class="size-12 rounded-xl bg-input flex items-center justify-center shrink-0">
+              <iconify-icon
+                icon="solar:user-bold"
+                class="text-muted-foreground"
+                width="24"
+                height="24"
+              ></iconify-icon>
+            </div>
+            <div class="flex-1">
+              <div class="flex justify-between items-start mb-1">
+                <h3 class="font-bold text-sm text-foreground">Friend Activity</h3>
+                <span class="text-[10px] text-muted-foreground">6d ago</span>
+              </div>
+              <p class="text-xs text-muted-foreground leading-relaxed">
+                Mark Stevens just finished a round at Pine Valley. Check his scorecard!
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+      <nav
+        class="fixed bottom-0 w-full bg-card/95 backdrop-blur-md border-t border-border pb-safe pt-2"
+      >
+        <div class="flex justify-around items-center px-4 h-16">
+          <a href="#" class="flex flex-col items-center gap-1 text-muted-foreground"
+            ><iconify-icon icon="solar:home-2-bold" width="24" height="24"></iconify-icon
+            ><span class="text-[10px] font-medium">Home</span></a
+          ><a href="#" class="flex flex-col items-center gap-1 text-muted-foreground"
+            ><iconify-icon icon="solar:notebook-bookmark-bold" width="24" height="24"></iconify-icon
+            ><span class="text-[10px] font-medium">Learn</span></a
+          ><a href="#" class="flex flex-col items-center gap-1 text-muted-foreground"
+            ><iconify-icon icon="solar:chart-square-bold" width="24" height="24"></iconify-icon
+            ><span class="text-[10px] font-medium">Stats</span></a
+          ><a href="#" class="flex flex-col items-center gap-1 text-muted-foreground"
+            ><iconify-icon icon="solar:user-bold" width="24" height="24"></iconify-icon
+            ><span class="text-[10px] font-medium">Profile</span></a
+          >
+        </div>
+      </nav>
+    </div>
+  </body>
+</html>

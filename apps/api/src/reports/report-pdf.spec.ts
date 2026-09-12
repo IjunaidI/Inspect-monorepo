@@ -7,6 +7,7 @@
  * not cover. Text is asserted through extractPdfText (pdf-lib content streams are
  * Flate-compressed hex, so byte-grepping would silently assert nothing).
  */
+import { hexToRgb01, report } from '@inspect/design-tokens';
 import { extractPdfText } from './pdf-text';
 import {
   conclusionOf,
@@ -297,5 +298,23 @@ describe('report-pdf helpers', () => {
   it('reportNo is a stable, uppercase synthetic display id', () => {
     expect(reportNo('rep_abcdef0123456789')).toBe('IR-REP_ABCD');
     expect(reportNo('')).toBe('IR-');
+  });
+});
+
+describe('frozen report palette (INS-094 D5)', () => {
+  it('derives the pdf-lib constants from the same values the renderer shipped with', () => {
+    // These were the literal rgb() constants in report-pdf.ts before the palette
+    // moved to @inspect/design-tokens. A change here re-colours every PDF
+    // rendered from now on and breaks parity with the on-screen report.
+    expect(hexToRgb01(report.ink)).toEqual([0x0b / 255, 0x12 / 255, 0x20 / 255]);
+    expect(hexToRgb01(report.sub)).toEqual([0x5b / 255, 0x65 / 255, 0x73 / 255]);
+    expect(hexToRgb01(report.faint)).toEqual([0x9a / 255, 0xa3 / 255, 0xae / 255]);
+    expect(hexToRgb01(report.line)).toEqual([0xe5 / 255, 0xe9 / 255, 0xef / 255]);
+    expect(hexToRgb01(report.lineSoft)).toEqual([0xf0 / 255, 0xf3 / 255, 0xf7 / 255]);
+    expect(hexToRgb01(report.fill)).toEqual([0xfa / 255, 0xfb / 255, 0xfc / 255]);
+    expect(hexToRgb01(report.pass)).toEqual([0x1f / 255, 0x6b / 255, 0x43 / 255]);
+    expect(hexToRgb01(report.critical)).toEqual([0xb4 / 255, 0x23 / 255, 0x18 / 255]);
+    expect(hexToRgb01(report.amber)).toEqual([0xb5 / 255, 0x79 / 255, 0x1a / 255]);
+    expect(report.defaultBrand).toBe('#1457A3');
   });
 });

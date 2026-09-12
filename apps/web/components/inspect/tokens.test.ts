@@ -1,30 +1,36 @@
 import { describe, expect, test } from 'vitest';
+import { light, report } from '@inspect/design-tokens';
 import { ui, mono, severity, roles } from './tokens';
 
 /**
- * Characterization tests for the design tokens (INS-086 Phase 1).
+ * Characterization tests for the console's view of the design tokens.
  *
- * The palette moved to `@inspect/design-tokens` and the two web-only CSS
- * derivations — the Next font variables — are now composed here from the
- * package's raw stacks. `tsc` cannot see a wrong colour or a mangled font
- * stack, and neither can a build. These values are asserted verbatim.
+ * INS-094: the values now flow from `@inspect/design-tokens`' semantic light
+ * theme through the `@deprecated palette` alias, so the console re-coloured to
+ * the v2 direction the day the package changed — every screen still reads
+ * `ui.ink`, `ui.line`, `ui.accent`. What this file pins is the web-only
+ * composition (the Next font variables) and the alias mapping itself, so a
+ * silently dropped key or a wrong role cannot pass a build.
  */
 describe('ui palette', () => {
-  test('keeps every hex value it had before extraction', () => {
+  test('is the legacy alias over the v2 light theme', () => {
     expect(ui).toMatchObject({
-      bg: '#F6F8FA',
-      panel: '#FFFFFF',
-      ink: '#0B1220',
-      sub: '#5B6573',
-      faint: '#9AA3AE',
-      line: '#E5E9EF',
-      lineSoft: '#F0F3F7',
-      fill: '#FAFBFC',
-      accent: '#037BF4',
-      accentSoft: '#F0F8FF',
-      danger: '#B42318',
-      assumeBg: '#7C2D12',
+      bg: light.background,
+      panel: light.card,
+      ink: light.foreground,
+      sub: light.mutedForeground,
+      faint: light.faint,
+      line: light.border,
+      lineSoft: light.borderSoft,
+      fill: light.muted,
+      accent: light.primary,
+      accentSoft: light.primarySoft,
+      danger: light.destructive,
     });
+    // The direction, verbatim — a screen that renders these is the v2 look.
+    expect(ui.bg).toBe('#FDFCF8');
+    expect(ui.accent).toBe('#3A7D44');
+    expect(ui.line).toBe('#E6E0D4');
   });
 
   test('puts the Next font CSS variable first, ahead of the shared stack', () => {
@@ -45,20 +51,23 @@ describe('mono', () => {
 });
 
 describe('severity and role maps', () => {
-  test('severity carries all three classes with their report colours', () => {
-    expect(severity.critical).toEqual({ key: 'critical', label: 'Critical', abbr: 'Crit', fg: '#B42318', bg: '#FBEAEA', dot: '#D14343' });
-    expect(severity.major).toEqual({ key: 'major', label: 'Major', abbr: 'Maj', fg: '#B5791A', bg: '#FAF1E2', dot: '#D99A20' });
-    expect(severity.minor).toEqual({ key: 'minor', label: 'Minor', abbr: 'Min', fg: '#475467', bg: '#EFF2F6', dot: '#8A93A1' });
+  test('severity carries all three classes, re-coloured onto the v2 hues', () => {
+    expect(Object.keys(severity).sort()).toEqual(['critical', 'major', 'minor']);
+    expect(severity.critical).toMatchObject({ key: 'critical', label: 'Critical', abbr: 'Crit', dot: light.destructive });
+    expect(severity.major).toMatchObject({ key: 'major', label: 'Major', abbr: 'Maj', dot: light.warning });
+    expect(severity.minor).toMatchObject({ key: 'minor', label: 'Minor', abbr: 'Min' });
   });
 
-  test('critical severity and the destructive action share one red', () => {
-    // tokens.ts documents this coupling; if they drift, "danger" stops meaning
-    // "critical" to the eye on the report.
-    expect(severity.critical.fg).toBe(ui.danger);
+  test('the app chrome severity map is NOT the report one', () => {
+    // The signed report keeps its frozen palette (`report.severity`); the
+    // console's chips follow the theme. If these ever converge again, one of
+    // them is reading the wrong table.
+    expect(severity.critical.fg).not.toBe(report.severity.critical.fg);
+    expect(report.severity.critical.fg).toBe('#B42318');
   });
 
   test('roles covers all four badge keys', () => {
     expect(Object.keys(roles).sort()).toEqual(['inspector', 'owner', 'platform', 'qa']);
-    expect(roles.platform).toEqual({ label: 'Platform Admin', fg: '#B5791A', bg: '#FAF1E2' });
+    expect(roles.platform.label).toBe('Platform Admin');
   });
 });

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stats</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://code.iconify.design/iconify-icon/3.0.0/iconify-icon.min.js"></script>
+    <style type="text/tailwindcss">
+      @theme inline {
+        --color-background: var(--background);
+        --color-foreground: var(--foreground);
+        --color-primary: var(--primary);
+        --color-primary-foreground: var(--primary-foreground);
+        --color-secondary: var(--secondary);
+        --color-secondary-foreground: var(--secondary-foreground);
+        --color-muted: var(--muted);
+        --color-muted-foreground: var(--muted-foreground);
+        --color-accent: var(--accent);
+        --color-accent-foreground: var(--accent-foreground);
+        --color-destructive: var(--destructive);
+        --color-card: var(--card);
+        --color-card-foreground: var(--card-foreground);
+        --color-popover: var(--popover);
+        --color-popover-foreground: var(--popover-foreground);
+        --color-border: var(--border);
+        --color-input: var(--input);
+        --color-ring: var(--ring);
+        --color-chart-1: var(--chart-1);
+        --color-chart-2: var(--chart-2);
+        --color-chart-3: var(--chart-3);
+        --color-chart-4: var(--chart-4);
+        --color-chart-5: var(--chart-5);
+
+        --font-font-sans: var(--font-sans);
+        --font-font-heading: var(--font-heading);
+        --font-font-serif: var(--font-serif);
+        --font-font-mono: var(--font-mono);
+      }
+
+      @theme {
+        --radius-xs: calc(var(--radius) - 8px);
+        --radius-sm: calc(var(--radius) - 4px);
+        --radius-md: calc(var(--radius) - 2px);
+        --radius-lg: var(--radius);
+        --radius-xl: calc(var(--radius) + 4px);
+        --radius-2xl: calc(var(--radius) + 8px);
+        --radius-3xl: calc(var(--radius) + 16px);
+        --radius-4xl: calc(var(--radius) + 24px);
+      }
+
+      * {
+        corner-shape: var(--shape, round);
+      }
+
+      .rounded-full, .rounded-none,
+      .rounded-t-full, .rounded-t-none,
+      .rounded-r-full, .rounded-r-none,
+      .rounded-b-full, .rounded-b-none,
+      .rounded-l-full, .rounded-l-none,
+      .rounded-s-full, .rounded-s-none,
+      .rounded-e-full, .rounded-e-none,
+      .rounded-tl-full, .rounded-tl-none,
+      .rounded-tr-full, .rounded-tr-none,
+      .rounded-bl-full, .rounded-bl-none,
+      .rounded-br-full, .rounded-br-none,
+      .rounded-ss-full, .rounded-ss-none,
+      .rounded-se-full, .rounded-se-none,
+      .rounded-es-full, .rounded-es-none,
+      .rounded-ee-full, .rounded-ee-none {
+        corner-shape: round;
+      }
+
+      @utility rounded-* {
+        border-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-t-* {
+        border-top-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-top-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-r-* {
+        border-top-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-bottom-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-b-* {
+        border-bottom-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-bottom-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-l-* {
+        border-top-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-bottom-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-tl-* {
+        border-top-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-tr-* {
+        border-top-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-bl-* {
+        border-bottom-left-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-br-* {
+        border-bottom-right-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-s-* {
+        border-start-start-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-end-start-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-e-* {
+        border-start-end-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+        border-end-end-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-ss-* {
+        border-start-start-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-se-* {
+        border-start-end-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-es-* {
+        border-end-start-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+      @utility rounded-ee-* {
+        border-end-end-radius: calc(--value(--radius-*, [length], [percentage]) * var(--shape-multiplier, 1));
+      }
+
+      :root {
+        --shape: round;
+        --shape-multiplier: 1;
+
+          --background: #fdfcf8;
+        --foreground: #1a331c;
+        --primary: #3a7d44;
+        --primary-foreground: #ffffff;
+        --secondary: #e8ddcb;
+        --secondary-foreground: #2f4f34;
+        --muted: #f2eee6;
+        --muted-foreground: #5c6b5e;
+        --accent: #dcb878;
+        --accent-foreground: #1a331c;
+        --destructive: #cf4444;
+        --card: #ffffff;
+        --card-foreground: #1a331c;
+        --popover: #ffffff;
+        --popover-foreground: #1a331c;
+        --border: #e6e0d4;
+        --input: #f2eee6;
+        --ring: #3a7d44;
+        --chart-1: #3a7d44;
+        --chart-2: #dcb878;
+        --chart-3: #8c9e8d;
+        --chart-4: #c25e00;
+        --chart-5: #5c7cfa;
+
+        --font-sans: "Inter";
+        --font-heading: "Libre Baskerville";
+        --font-serif: "Playfair Display";
+        --font-mono: "JetBrains Mono";
+
+        --radius: 0.75rem;
+      }
+
+      /* Prevent layout shift for icons without explicit dimensions */
+      iconify-icon:not([width]):not([height]) {
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+      }
+
+      /* Hide scrollbars */
+      *,
+      *::before,
+      *::after {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      *::-webkit-scrollbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="h-full bg-background flex flex-col font-sans">
+      <header
+        class="pt-12 pb-6 px-6 bg-card border-b border-border flex items-center justify-between"
+      >
+        <h1 class="font-heading text-2xl text-foreground">Analytics</h1>
+        <button class="text-primary font-bold text-sm">Export</button>
+      </header>
+      <main class="flex-1 overflow-y-auto px-6 pb-24 space-y-8 pt-6">
+        <section>
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="font-heading text-lg text-foreground">Handicap Trend</h2>
+            <div class="flex gap-2">
+              <span class="text-[10px] font-bold bg-secondary px-2 py-1 rounded">3 Months</span>
+            </div>
+          </div>
+          <div class="bg-card p-6 rounded-2xl border border-border shadow-sm">
+            <div class="h-40 w-full flex items-end gap-2 px-2">
+              <div class="flex-1 bg-chart-1/20 rounded-t-sm relative h-[80%]">
+                <div
+                  class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-chart-1"
+                >
+                  16.4
+                </div>
+              </div>
+              <div class="flex-1 bg-chart-1/40 rounded-t-sm relative h-[75%]">
+                <div
+                  class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-chart-1"
+                >
+                  15.8
+                </div>
+              </div>
+              <div class="flex-1 bg-chart-1/60 rounded-t-sm relative h-[70%]">
+                <div
+                  class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-chart-1"
+                >
+                  15.2
+                </div>
+              </div>
+              <div class="flex-1 bg-chart-1/80 rounded-t-sm relative h-[65%]">
+                <div
+                  class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-chart-1"
+                >
+                  14.8
+                </div>
+              </div>
+              <div class="flex-1 bg-primary rounded-t-sm relative h-[60%]">
+                <div
+                  class="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-primary"
+                >
+                  14.2
+                </div>
+              </div>
+            </div>
+            <div
+              class="flex justify-between mt-4 text-[10px] font-medium text-muted-foreground uppercase tracking-widest"
+            >
+              <span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span>
+            </div>
+          </div>
+        </section>
+        <section>
+          <h2 class="font-heading text-lg text-foreground mb-4">Scoring Average</h2>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-card p-4 rounded-xl border border-border">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="size-2 rounded-full bg-chart-1"></div>
+                <span class="text-xs font-bold text-muted-foreground">Par 3s</span>
+              </div>
+              <p class="text-2xl font-heading text-foreground">
+                3.4 <span class="text-xs font-sans text-destructive">-0.2</span>
+              </p>
+            </div>
+            <div class="bg-card p-4 rounded-xl border border-border">
+              <div class="flex items-center gap-2 mb-2">
+                <div class="size-2 rounded-full bg-chart-2"></div>
+                <span class="text-xs font-bold text-muted-foreground">Par 4s</span>
+              </div>
+              <p class="text-2xl font-heading text-foreground">
+                4.8 <span class="text-xs font-sans text-primary">+0.1</span>
+              </p>
+            </div>
+          </div>
+        </section>
+        <section class="bg-card rounded-2xl border border-border overflow-hidden">
+          <div class="p-4 border-b border-border bg-muted/30">
+            <h3 class="font-bold text-foreground">Driving Accuracy</h3>
+          </div>
+          <div class="p-5 space-y-6">
+            <div>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-sm font-medium">Fairways Hit</span
+                ><span class="text-sm font-bold text-primary">54%</span>
+              </div>
+              <div class="w-full bg-input rounded-full h-2">
+                <div class="bg-primary h-full w-[54%] rounded-full"></div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-8">
+              <div>
+                <span class="text-[10px] font-bold text-muted-foreground uppercase">Miss Left</span>
+                <p class="text-lg font-bold text-destructive">28%</p>
+              </div>
+              <div>
+                <span class="text-[10px] font-bold text-muted-foreground uppercase"
+                  >Miss Right</span
+                >
+                <p class="text-lg font-bold text-accent">18%</p>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section>
+          <div class="flex justify-between items-end mb-4">
+            <h2 class="font-heading text-lg text-foreground">Round History</h2>
+            <a href="#" class="text-sm font-semibold text-primary">View All</a>
+          </div>
+          <div class="space-y-3">
+            <div
+              class="bg-card p-4 rounded-xl border border-border flex justify-between items-center"
+            >
+              <div>
+                <h4 class="font-bold text-sm">Ocean Reef Club</h4>
+                <p class="text-[10px] text-muted-foreground">July 12 • Par 72</p>
+              </div>
+              <div class="flex items-center gap-4">
+                <div class="text-center">
+                  <p class="text-xs font-bold text-muted-foreground">SCORE</p>
+                  <p class="text-lg font-heading text-foreground">82</p>
+                </div>
+                <div class="text-center">
+                  <p class="text-xs font-bold text-muted-foreground">DIFF</p>
+                  <p class="text-lg font-heading text-primary">+10</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+      <nav
+        class="fixed bottom-0 w-full bg-card/95 backdrop-blur-md border-t border-border pb-safe pt-2"
+      >
+        <div class="flex justify-around items-center px-4 h-16">
+          <a href="#" class="flex flex-col items-center gap-1 text-muted-foreground"
+            ><iconify-icon icon="solar:home-2-bold" width="24" height="24"></iconify-icon
+            ><span class="text-[10px] font-medium">Home</span></a
+          ><a href="#" class="flex flex-col items-center gap-1 text-muted-foreground"
+            ><iconify-icon icon="solar:notebook-bookmark-bold" width="24" height="24"></iconify-icon
+            ><span class="text-[10px] font-medium">Learn</span></a
+          ><a href="#" class="flex flex-col items-center gap-1 text-primary"
+            ><iconify-icon icon="solar:chart-square-bold" width="24" height="24"></iconify-icon
+            ><span class="text-[10px] font-bold">Stats</span></a
+          ><a href="#" class="flex flex-col items-center gap-1 text-muted-foreground"
+            ><iconify-icon icon="solar:user-bold" width="24" height="24"></iconify-icon
+            ><span class="text-[10px] font-medium">Profile</span></a
+          >
+        </div>
+      </nav>
+    </div>
+  </body>
+</html>

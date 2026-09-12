@@ -26,6 +26,7 @@ import {
   rgb,
 } from 'pdf-lib';
 import { readCanonicalParties } from '@inspect/shared-types';
+import { hexToRgb01, report } from '@inspect/design-tokens';
 
 // ─────────────────────────── snapshot shapes ───────────────────────────
 // Structural, all-optional views of the signed payload. The snapshot is frozen
@@ -134,20 +135,23 @@ export interface ReportPdfInput {
 }
 
 // ─────────────────────────── design tokens ───────────────────────────
-// Ported from apps/web/components/inspect/tokens.ts — keep in sync by value, not
-// by import (the API must not depend on the web app).
+// The FROZEN report palette from @inspect/design-tokens (INS-094 D5) — the same
+// values apps/web/components/inspect/branded-report.tsx paints with, so the
+// on-screen report and this PDF agree by import, not by hand. The app theme
+// around the report may change; these do not.
 
-const INK = rgb(0x0b / 255, 0x12 / 255, 0x20 / 255);
-const SUB = rgb(0x5b / 255, 0x65 / 255, 0x73 / 255);
-const FAINT = rgb(0x9a / 255, 0xa3 / 255, 0xae / 255);
-const LINE = rgb(0xe5 / 255, 0xe9 / 255, 0xef / 255);
-const LINE_SOFT = rgb(0xf0 / 255, 0xf3 / 255, 0xf7 / 255);
-const FILL = rgb(0xfa / 255, 0xfb / 255, 0xfc / 255);
-const WHITE = rgb(1, 1, 1);
-const GREEN = rgb(0x1f / 255, 0x6b / 255, 0x43 / 255);
-const CRITICAL = rgb(0xb4 / 255, 0x23 / 255, 0x18 / 255);
-const AMBER = rgb(0xb5 / 255, 0x79 / 255, 0x1a / 255);
-const DEFAULT_BRAND = '#1457A3';
+const tone = (hex: string) => rgb(...hexToRgb01(hex));
+const INK = tone(report.ink);
+const SUB = tone(report.sub);
+const FAINT = tone(report.faint);
+const LINE = tone(report.line);
+const LINE_SOFT = tone(report.lineSoft);
+const FILL = tone(report.fill);
+const WHITE = tone(report.white);
+const GREEN = tone(report.pass);
+const CRITICAL = tone(report.critical);
+const AMBER = tone(report.amber);
+const DEFAULT_BRAND: string = report.defaultBrand;
 
 const PAGE_W = PageSizes.A4[0];
 const PAGE_H = PageSizes.A4[1];
@@ -564,12 +568,12 @@ function drawConclusionBand(
           : GREEN;
   const bg =
     conclusion === 'pending'
-      ? rgb(0xfa / 255, 0xfb / 255, 0xfc / 255)
+      ? FILL
       : conclusion === 'fail'
-        ? rgb(0xfb / 255, 0xea / 255, 0xea / 255)
+        ? tone(report.criticalBg)
         : conclusion === 'hold'
-          ? rgb(0xfa / 255, 0xf1 / 255, 0xe2 / 255)
-          : rgb(0xea / 255, 0xf6 / 255, 0xf0 / 255);
+          ? tone(report.amberBg)
+          : tone(report.passBg);
 
   const bandH = 54;
   const bandY = p.y - bandH;

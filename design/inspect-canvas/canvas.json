@@ -1,0 +1,101 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "Home — QA Manager",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "HomeInspector.dc.html",
+      "title": "Home — Inspector",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Inspections.dc.html",
+      "title": "Inspections",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Library.dc.html",
+      "title": "Library",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Profile.dc.html",
+      "title": "Profile",
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "LoopBuilder.dc.html",
+      "title": "Loop builder — dragging",
+      "x": 0,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "CapturePicker.dc.html",
+      "title": "Loop builder — add capture points",
+      "x": 470,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Capture.dc.html",
+      "title": "Capture",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844
+    }
+  ],
+  "annotations": [
+    {
+      "id": "direction",
+      "x": 0,
+      "y": -200,
+      "w": 520,
+      "text": "Inspect mobile v2 — direction\nCream canvas, forest-green primary, sand + gold accents. Libre Baskerville for titles and big numbers, Inter for everything else, JetBrains Mono for ids and hashes. Cards: 1px #E6E0D4 border, 16px radius, whisper shadow. Solar Bold icons for navigation and actions; linear glyphs for content (garment parts are custom drafts)."
+    },
+    {
+      "id": "tabs",
+      "x": 1880,
+      "y": -120,
+      "w": 300,
+      "text": "Tabs: Home · Inspections · Library · Profile. Library is hidden for inspectors (3 tabs, see Home — Inspector)."
+    },
+    {
+      "id": "builder",
+      "x": 0,
+      "y": 854,
+      "w": 470,
+      "text": "Loop builder: rows reorder by dragging the handle (react-native-sortables, haptics on lift/drop). Tapping a row opens an edit sheet with Move up / Move down / Remove as the accessible fallback. Hem is shown mid-drag."
+    },
+    {
+      "id": "picker",
+      "x": 470,
+      "y": 874,
+      "w": 470,
+      "text": "Capture-point library: global rows seeded per category + the org's own (\"Yours\"). Tap to multi-select in the order shots should happen; Custom… creates an org library row and adds it to the loop."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
