@@ -118,7 +118,7 @@ export default function Presets() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <BackButton fallbackHref="/dashboard" />
+        <BackButton fallbackHref="/library" />
         <View style={styles.headerRow}>
           <Text style={styles.title}>Loop presets</Text>
           <Pressable onPress={() => router.push('/presets/new')} hitSlop={8}>

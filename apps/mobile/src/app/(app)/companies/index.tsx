@@ -173,7 +173,7 @@ export default function Companies() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <BackButton fallbackHref="/dashboard" />
+        <BackButton fallbackHref="/library" />
         <View style={styles.titleRow}>
           <Text style={styles.title}>Companies</Text>
           <Pressable onPress={() => setCreating(true)} hitSlop={8} accessibilityRole="button">

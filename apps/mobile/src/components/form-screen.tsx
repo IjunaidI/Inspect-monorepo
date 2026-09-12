@@ -1,22 +1,12 @@
 /**
- * INS-091 — every form screen's shell. Before this, only /login avoided the
- * keyboard and no screen persisted taps, so the first tap on a button with the
- * keyboard up only dismissed the keyboard. One wrapper, one behaviour.
- *
- * INS-092 — `onRefresh` adds pull-to-refresh: the shell owns the spinner
- * state, the screen supplies the re-fetch.
+ * @deprecated INS-095 — the form shell is `Screen` in the kit (`scroll` +
+ * `keyboard`). This wrapper keeps the INS-091 call sites compiling with their
+ * original props until INS-096 re-points them.
  */
-import { palette } from '@inspect/design-tokens';
-import { useState, type ReactNode } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-} from 'react-native';
+import type { ReactNode } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { Screen } from './ui/screen';
 
 export function FormScreen({
   children,
@@ -31,47 +21,15 @@ export function FormScreen({
   /** Pull-to-refresh handler. Resolve when the re-fetch has landed. */
   onRefresh?: () => Promise<void>;
 }) {
-  const [refreshing, setRefreshing] = useState(false);
-
-  async function refresh() {
-    if (!onRefresh || refreshing) return;
-    setRefreshing(true);
-    try {
-      await onRefresh();
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
   return (
-    <SafeAreaView style={styles.screen}>
-      {header}
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={[styles.body, contentStyle]}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            onRefresh ? (
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={refresh}
-                tintColor={palette.accent}
-              />
-            ) : undefined
-          }
-        >
-          {children}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <Screen
+      keyboard
+      header={header}
+      edges={header ? ['top', 'left', 'right'] : undefined}
+      contentStyle={[{ gap: 12 }, contentStyle]}
+      onRefresh={onRefresh}
+    >
+      {children}
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.bg },
-  flex: { flex: 1 },
-  body: { padding: 16, gap: 12, paddingBottom: 40 },
-});

@@ -68,15 +68,34 @@ export class AuthController {
   @Get('me')
   async me(
     @CurrentUser() user: AuthUser,
-  ): Promise<AuthUser & { orgName: string | null }> {
+  ): Promise<
+    AuthUser & {
+      orgName: string | null;
+      email: string | null;
+      name: string | null;
+    }
+  > {
     // The console shell shows the real workspace name (null for the cross-tenant
-    // Platform Admin, which the web renders as "Platform").
-    const org = user.orgId
-      ? await this.prisma.organization.findUnique({
-          where: { id: user.orgId },
-          select: { name: true },
-        })
-      : null;
-    return { ...user, orgName: org?.name ?? null };
+    // Platform Admin, which the web renders as "Platform"). INS-099: the mobile
+    // Home greets by name and Profile shows the email — the JWT carries neither,
+    // so they are resolved here from the user row.
+    const [org, person] = await Promise.all([
+      user.orgId
+        ? this.prisma.organization.findUnique({
+            where: { id: user.orgId },
+            select: { name: true },
+          })
+        : null,
+      this.prisma.user.findUnique({
+        where: { id: user.userId },
+        select: { email: true, name: true },
+      }),
+    ]);
+    return {
+      ...user,
+      orgName: org?.name ?? null,
+      email: person?.email ?? null,
+      name: person?.name ?? null,
+    };
   }
 }

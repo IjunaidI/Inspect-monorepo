@@ -24,6 +24,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { FormScreen } from '@/components/form-screen';
 import { Button, Field, Input, TextButton, ui } from '@/components/ui';
+import { HOME_HREF } from '@/lib/navigation';
 import { client, signIn } from '@/lib/session';
 
 const ROLE_LABEL: Record<string, string> = {
@@ -116,7 +117,10 @@ export default function Invite() {
     // fails for any reason, the account still exists — land on login.
     try {
       await signIn(invite.email, password);
-      router.replace('/inspections');
+      // INS-095: the invite route stays mounted when signed in, so it must
+      // leave explicitly — after the guard has re-rendered (next tick).
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      router.replace(HOME_HREF as never);
     } catch {
       router.replace('/login');
     }

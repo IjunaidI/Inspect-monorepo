@@ -139,7 +139,7 @@ export default function Products() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <BackButton fallbackHref="/dashboard" />
+        <BackButton fallbackHref="/library" />
         <View style={styles.headerRow}>
           <Text style={styles.title}>Products</Text>
           <Pressable

@@ -291,7 +291,7 @@ export default function Users() {
             />
           }
         >
-          <BackButton fallbackHref="/dashboard" />
+          <BackButton fallbackHref="/library" />
           <Text style={ui.title}>Team</Text>
           <Text style={styles.subtitle}>
             {users.length} member{users.length === 1 ? '' : 's'}

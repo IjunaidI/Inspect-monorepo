@@ -17,5 +17,7 @@ describe('resolveBack', () => {
 
   it('falls back to the home screen when no fallback is given', () => {
     expect(resolveBack(false)).toEqual({ kind: 'replace', href: HOME_HREF });
+    // INS-095: Home is the tabs' index, not the inspections list.
+    expect(HOME_HREF).toBe('/');
   });
 });

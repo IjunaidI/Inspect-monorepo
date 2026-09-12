@@ -1,6 +1,5 @@
 import { ApiError } from '@inspect/api-client';
 import { palette } from '@inspect/design-tokens';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -15,7 +14,6 @@ import {
 import { signIn } from '@/lib/session';
 
 export default function Login() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -26,8 +24,9 @@ export default function Login() {
     setBusy(true);
     setError(null);
     try {
+      // INS-095: signIn() flips the root `Stack.Protected` guard, which
+      // unmounts this screen and mounts the tabs — no explicit navigation.
       await signIn(email.trim(), password);
-      router.replace('/inspections');
     } catch (e) {
       setError(
         e instanceof ApiError && e.status === 401

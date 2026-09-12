@@ -21,7 +21,7 @@
  */
 import { ApiError } from '@inspect/api-client';
 import { palette } from '@inspect/design-tokens';
-import { roleAtLeast } from '@inspect/domain';
+import { latestPresetPerName, roleAtLeast } from '@inspect/domain';
 import type {
   AqlPreviewDto,
   CompanyDto,
@@ -136,7 +136,8 @@ export default function NewInspection() {
       setLists(result.values);
       setLoad(result.load);
       if (result.values.presets) {
-        const first = result.values.presets[0] ?? null;
+        // INS-097: one row per preset NAME (the latest version), as the console does.
+        const first = latestPresetPerName(result.values.presets)[0] ?? null;
         setPreset((p) => p ?? first);
       }
       return result;
@@ -159,7 +160,13 @@ export default function NewInspection() {
     else toast('Could not refresh the lists', { tone: 'danger' });
   }
 
-  const presets = lists.presets ?? [];
+  const presets = useMemo(() => lists.presets ?? [], [lists.presets]);
+  // INS-097 (INS-076 residue): the picker lists the latest version per name and
+  // pins the current selection (a company default may point at an older version).
+  const presetOptions = useMemo(
+    () => latestPresetPerName(presets, preset ? [preset.id] : []),
+    [presets, preset],
+  );
   const inspectors = useMemo(
     () => (lists.users ?? []).filter((u) => u.role === 'INSPECTOR' && u.status === 'ACTIVE'),
     [lists.users],
@@ -343,7 +350,7 @@ export default function NewInspection() {
         <OptionPicker
           label="Loop preset *"
           value={preset}
-          options={presets}
+          options={presetOptions}
           display={presetLabel}
           placeholder="Select the preset…"
           onSelect={(p) => {

@@ -132,7 +132,7 @@ export default function Reports() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <BackButton fallbackHref="/dashboard" />
+        <BackButton fallbackHref="/library" />
         <Text style={styles.title}>Reports</Text>
         {rows !== null ? (
           <Text style={styles.subtitle}>

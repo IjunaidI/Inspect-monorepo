@@ -60,8 +60,26 @@ export const client = createApiClient({
 export interface Identity {
   userId?: string;
   email?: string;
+  /** INS-099: the person's display name (from /auth/me); null on older API builds. */
+  name?: string | null;
   role?: string;
   orgName?: string | null;
+}
+
+// INS-095: the root layout mirrors the session into React state so the
+// `Stack.Protected` guard flips on every signIn/signOut, wherever it is called.
+const listeners = new Set<() => void>();
+
+/** Subscribe to sign-in / sign-out. Returns the unsubscribe function. */
+export function subscribeSession(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function emitSessionChange(): void {
+  for (const listener of listeners) listener();
 }
 
 /** Exchange credentials, persist the session. Throws `ApiError` when refused. */
@@ -72,6 +90,7 @@ export async function signIn(email: string, password: string): Promise<Identity>
   const identity: Identity = {
     userId: me.userId,
     email: me.email,
+    name: typeof me.name === 'string' ? me.name : null,
     role: me.role,
     orgName: me.orgName ?? null,
   };
@@ -82,6 +101,7 @@ export async function signIn(email: string, password: string): Promise<Identity>
     String(decodeJwtExp(pair.accessToken) ?? Date.now() + DEFAULT_ACCESS_TTL_MS),
   );
   await SecureStore.setItemAsync(KEY_IDENTITY, JSON.stringify(identity));
+  emitSessionChange();
   return identity;
 }
 
@@ -89,6 +109,7 @@ export async function signOut(): Promise<void> {
   await Promise.all(
     [KEY_ACCESS, KEY_REFRESH, KEY_EXPIRES, KEY_IDENTITY].map((k) => SecureStore.deleteItemAsync(k)),
   );
+  emitSessionChange();
 }
 
 export async function hasSession(): Promise<boolean> {

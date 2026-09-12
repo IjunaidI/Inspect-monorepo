@@ -8,8 +8,11 @@
  */
 export type BackTarget = { kind: 'back' } | { kind: 'replace'; href: string };
 
-/** The default landing screen for every authenticated user. */
-export const HOME_HREF = '/inspections';
+/** The default landing screen for every authenticated user — the Home tab (INS-095). */
+export const HOME_HREF = '/';
+
+/** The hub every QA-side list screen falls back to when it has no history. */
+export const LIBRARY_HREF = '/library';
 
 export function resolveBack(canGoBack: boolean, fallbackHref: string = HOME_HREF): BackTarget {
   return canGoBack ? { kind: 'back' } : { kind: 'replace', href: fallbackHref };

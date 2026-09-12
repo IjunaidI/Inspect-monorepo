@@ -5,6 +5,15 @@
 > Design: [../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md](../in-progress/specs/2026-08-26-inspect-react-native-migration-design.md) ·
 > Epic: [INS-086](../future/BACKLOG.md) · Procedure: the `migrate-screen` skill.
 >
+> **Visual v2 (2026-09-12, [INS-095](../future/BACKLOG.md)/[INS-099](../future/BACKLOG.md)):** the
+> route tree moved under `src/app/(app)/` with a `(tabs)` group — **Home · Inspections · Library ·
+> Profile** (four new tab screens, built on the `src/components/ui/` kit; `/dashboard` is now a redirect
+> to `/`, `/inspections` is the Inspections tab). URLs of every row below are unchanged. Rows are not yet
+> re-skinned individually — they render through the `palette` alias and the `BackButton`/`FormScreen`/
+> `QuickCreateSheet` shims until [INS-096](../future/BACKLOG.md) batches M3–M7 (capture/review/report,
+> new inspection + presets, CRUD + login/invite, cleanup). The preset builder (`/presets/new`) is
+> rewritten in [INS-098](../future/BACKLOG.md) on top of the capture-point library.
+>
 > **Last updated: 2026-09-02 — EVERY PHASE 4 ROW IS BUILT.** The final row (`/presets/new`, the
 > builder) landed: single-pane authoring — ordered items with up/down reorder, loop-global
 > severity-grouped defect chips as REAL Pressables (fixing the recorded a11y gap), inline custom
