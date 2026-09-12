@@ -1,6 +1,6 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-09-06.** This is the source-of-truth dashboard: current state only.
+> **Last verified: 2026-09-12.** This is the source-of-truth dashboard: current state only.
 > The long per-session history that used to stack here was trimmed 2026-09-02 — it lives in git
 > history (`git log -- docs/STATUS.md`) and in the backlog archive
 > ([done/2026-09-02-backlog-archive.md](done/2026-09-02-backlog-archive.md)). Open work:
@@ -9,7 +9,64 @@
 
 ## Where the project stands
 
-**Latest landed (2026-09-05): the low/medium backlog is cleared and the camera loop is network-aware.**
+**Latest (2026-09-12): the design revamp has started — Phase 0 (mockups + docs) and Phase 1 (tokens v2)
+are committed on local `main` (see Repository state below).** The account owner approved a master plan to re-skin the whole app
+mobile-first in the look of the reference they supplied (`design/*.html`: cream canvas, forest-green
+primary, sand + gold, Inter + Libre Baskerville + JetBrains Mono, 12px radius, bordered cards, Solar icons),
+add a **capture-point library + drag-and-drop loop builder**, and a **Home tab** — backlog
+[INS-094 … INS-101](future/BACKLOG.md), spec + plan
+[docs/in-progress/*/2026-09-12-inspect-design-revamp*](in-progress/specs/2026-09-12-inspect-design-revamp-design.md).
+**Phase 0 done:** the *Inspect Mobile v2* design canvas (8 phone artboards — Home QA / Home inspector /
+Inspections / Library / Profile / Loop builder dragging / Add-capture-points sheet / Capture) is saved
+online (link in the spec; regenerate with `node design/inspect-canvas/build.mjs`); reference doc
+[reference/design-system.md](reference/design-system.md). **Phase 1 done in code:**
+`@inspect/design-tokens` rebuilt as a real design system (semantic `ThemeColors` light + dark shape, type
+scale with expo-google-fonts native keys, `space`/`radius`/`shadow`, tone/status/severity/role maps,
+a 96-icon SVG map incl. 14 custom garment glyphs, `themeToCssVariables`, and a **frozen `report` palette**
+that both the web `branded-report.tsx` and the API `report-pdf.ts` now read — the "keep in sync by value"
+hand-rule is gone). The old `palette` keys survive as a `@deprecated` alias onto the new theme, so every
+web and mobile screen already renders the v2 colours with zero screen edits. **Verified:** tokens 24/24
+(incl. WCAG ≥ 4.5 for every tone pair), web 60/60, api **692/43** (+ the palette-parity pin), mobile 46/4,
+type-check clean on api/web/mobile, web + mobile lint clean, **and on the Android emulator** (Expo Go
+against the Railway API, 2026-09-12): `/inspections` renders the cream canvas, forest-green header
+actions, warm hairline cards and re-coloured status chips — the alias flipped the whole app. Phase 1 is
+complete; INS-094 is done.
+
+**Phases 2 and 4 done (2026-09-12, INS-095 + INS-099): the mobile app has its foundation and its four
+tabs.** Nine font faces (Inter · Libre Baskerville · JetBrains Mono) load behind the splash; `src/theme`
+composes the tokens into RN styles (`text()` never emits `fontWeight`); the kit under
+`src/components/ui/` (Icon over the token SVG map, Button, Field/Input, Chip, Badge/StatusChip, Card/
+ListCard, ListRow, StatCard/Grid, IconTile, Header/BackButton, Screen, Section*, Sheet, ProgressBar,
+Empty/Error/Skeleton, TabBar, Avatar) replaces both old primitive sheets — the old names still resolve
+from the same import path while the remaining screens are re-skinned. Navigation is now
+`Stack.Protected` (`(app)` when signed in, `login` when not, `invite` always) over a `(app)/(tabs)`
+group — **Home · Inspections · Library · Profile**, Library hidden below QA — with every flow pushed
+full-screen above the bar; URLs did not change, `/dashboard` redirects to `/`. The four tabs are the
+real screens: Home (role-shaped quick start, pipeline stat cards, recent inspections/reports; inspector:
+Continue/Start card + "Assigned to you"), Inspections (search + status-bucket chips), Library (hub with
+live counts + most-used loop), Profile (identity, role, web console link, Sign out — `/auth/me` now
+returns `email` + `name`). **Verified on the emulator (Expo Go → Railway API) for `qa.mobile@` (4 tabs)
+and `inspector.mobile@` (3 tabs):** cold start → splash → Home; Sign out → login → sign in flips the guard
+with no explicit navigation; the invite deep link opens while signed in; `expo export` green (4.7 MB
+Hermes bundle — first recorded baseline); mobile tsc/lint clean, 46 tests; API auth specs 37/37.
+Placeholder app-icon / splash artwork regenerated in the palette (`assets/brand/build-icons.mjs`).
+
+**Phase 3 also done (2026-09-12, INS-097): the capture-point library exists end to end.** New Prisma
+model `CapturePoint` (hybrid GLOBAL + ORG, mirroring `DefectCatalog`; the scope enum is now the shared
+`CatalogScope`), `PresetLoopItem.capturePointId` as NON-authoritative lineage (pinned out of the
+inspection snapshot by test), migration `20260912000000_capture_point_library` **applied to the shared
+dev DB** and 55 global capture points seeded (idempotent). API `GET/POST/DELETE /capture-points`
+(POST is find-or-create by folded name — a custom point typed in the builder becomes a reusable org row),
+`POST /loop-presets` validates + persists the lineage and `GET /loop-presets/:id` joins it back.
+`@inspect/domain` gained the chooser/builder rules (`groupCapturePoints`, `isInLoop`, `moveItem`,
+`LOOP_TEMPLATES`, `resolveTemplate`), the Home counting rules (`statusCounts`, `bucketCounts`,
+`nextForInspector`) and `latestPresetPerName` (moved from the web; the mobile preset picker now lists one
+row per name too). **Verified:** integration `capture-points.e2e-spec.ts` **6/6** against the dev DB,
+api unit suites green (capture-points 11, lineage 4, snapshot pin), `wire-contract.spec.ts` green,
+`openapi.json` regenerated with the two new paths, domain 59/59, type-check api/web/mobile, lint on every
+new file. The mobile builder that CONSUMES the library is Phase 5 (INS-098), after the kit (Phase 2).
+
+**Before that (2026-09-05): the low/medium backlog is cleared and the camera loop is network-aware.**
 Five items closed in one pass — [INS-089](future/BACKLOG.md) (the report signer is recorded and shown),
 [INS-092](future/BACKLOG.md) (every web + mobile friction papercut: shared form primitives on both
 platforms, breadcrumb, toasts, pull-to-refresh, partial retry, optimistic role change, PO search, latest-
@@ -21,8 +78,13 @@ upload queue pauses offline and resumes on reconnect, classifies failures (serve
 and offer Retake/Discard), and the loop cannot end — from the capture screen OR the review screen — while
 any photo is still on the device. Open backlog is down to the two items only the account owner can move.
 
-**Repository state (2026-09-06):** six commits on local `main` are **not yet pushed** (`b29f72c` camera
-loop → `6c7b84b` lockfile). Pushing auto-deploys the API to Railway, and that deploy's pre-deploy
+**Repository state (2026-09-12):** Phases 0–4 are committed on local `main` as four commits, **not yet
+pushed**: `f4e43c3` feat(design) tokens v2 + frozen report palette + design canvas/spec/plan (INS-094) ·
+`009ba3e` feat(api) capture-point library (INS-097) · `7229f3c` feat(mobile) foundation, kit, tabs, Home
+(INS-095/099) · a docs commit (STATUS, BACKLOG, CLAUDE.md). They sit on top of the six earlier unpushed
+commits (`b29f72c` camera loop → `6c7b84b` lockfile), so **ten commits** are waiting on `git push`. Only
+`.claude/settings.local.json` (permission allowlist noise) was left uncommitted. **Eleven pre-existing prettier/CRLF lint errors** show on Windows in files this
+session did not touch (`reports.service.spec.ts` and friends); CI on Linux is the honest read. Pushing auto-deploys the API to Railway, and that deploy's pre-deploy
 `prisma migrate deploy` applies the new `20260904220908_report_generated_by` migration there (already
 applied to the shared dev database, so it is a no-op for the data and forward-only). **One thing is
 verified only by tests, not on a device:** the 2026-09-05 mobile work (offline pause/resume, rejected-upload
@@ -79,17 +141,22 @@ acceptance pass**:
 
 | Pillar | State |
 |---|---|
-| **Domain core** (AQL engine, tamper-proof crypto, audit chain, cycle state, auth primitives) | Pure TypeScript, unit-tested: **api 691 tests / 43 suites** (guest spec + report signer + per-role counts, 2026-09-05). |
-| **API** (NestJS 11 + Prisma 6, 24 org-scoped models) | All routes role-floored (OpenAPI carries `x-required-role`); DB-backed integration suite **147/16** runs green in CI against containers. Duplicate styleNumber/poNumber now proper 409s (fixed 2026-09-02). `POST /purchase-orders` answers in the list/get shape with its three parties (INS-091, 2026-09-04 — a just-created PO showed "—" for them). **2026-09-05:** `Report.generatedByUserId` recorded on generate and returned as `generatedBy` (INS-089); `GET /companies` rows carry `roleCounts {asClient, asFactory}` (INS-087); `guest.service.spec.ts` pins the visibility boundary (INS-034); Jest `maxWorkers` pinned (INS-085). |
+| **Domain core** (AQL engine, tamper-proof crypto, audit chain, cycle state, auth primitives) | Pure TypeScript, unit-tested: **api 709 tests / 45 suites** (2026-09-12: + the frozen-report-palette parity pin, the capture-points service spec, the preset-lineage spec and the snapshot key pin). |
+| **API** (NestJS 11 + Prisma 6, **25** org-scoped models) | **2026-09-12 (INS-097):** `CapturePoint` model + `capture-points` module (`GET/POST/DELETE /capture-points`, find-or-create, QA floor, audited), `PresetLoopItem.capturePointId` lineage validated on `POST /loop-presets` and joined on GET; `DefectScope` → `CatalogScope`; seed grows the 55-row global capture-point library; integration **153/17** locally (the new spec 6/6 against the dev DB). All routes role-floored (OpenAPI carries `x-required-role`); DB-backed integration suite runs green in CI against containers. Duplicate styleNumber/poNumber now proper 409s (fixed 2026-09-02). `POST /purchase-orders` answers in the list/get shape with its three parties (INS-091, 2026-09-04 — a just-created PO showed "—" for them). **2026-09-05:** `Report.generatedByUserId` recorded on generate and returned as `generatedBy` (INS-089); `GET /companies` rows carry `roleCounts {asClient, asFactory}` (INS-087); `guest.service.spec.ts` pins the visibility boundary (INS-034); Jest `maxWorkers` pinned (INS-085). |
 | **Web console** (Next.js 15) | All screens live-wired; clicked through end-to-end 2026-08-31 (signed report + guest portal verified in a real browser). Six live bugs found by the Phase 4 contract passes were fixed 2026-09-02 (see below). **INS-091 (2026-09-04):** searchable `EntityPicker`s with inline company/product/PO quick-create (nested one level), `Modal` + `ErrorBanner` (no `alert()` left), the new-inspection dead end removed, client default preset honoured. **INS-092 (2026-09-05):** shared `Field`/`Input`/`Select` primitives, one `Breadcrumb`, create-from-list stays on the list, PO parties read-only with a hint, add-member draft kept, one preset per name in `/inspections/new`; photo evidence on the review + report pages grouped by unit in capture order; "Signed by" filled from the recorded signer. **60 Vitest tests.** |
-| **Mobile** (`apps/mobile`, Expo SDK 57) | **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **INS-093 (2026-09-04) hardened the camera loop:** no free "Next" (the cursor walks shot slots + one frontier), retakes go through the queue (`intent: replace`), uploads run in a background singleton with progress/timeouts/backoff and survive leaving the screen, every photo is cached on-device until the loop is submitted, End loop waits for uploads in a finishing sheet, and a gallery shows every unit × item. **2026-09-05:** the queue is connectivity-aware (pauses offline, resumes on reconnect, classifies failures; rejected uploads offer Retake/Discard), the review screen shows photo evidence in capture order and refuses submit while uploads are pending, the report screen shows evidence by unit and the signer. **INS-092 (2026-09-05):** `components/ui.tsx` primitives, toasts, pull-to-refresh, partial retry, 44pt targets, optimistic role change, PO search. **46 Vitest tests.** **INS-091 (2026-09-04):** `OptionPicker` search + "+ Add new…", quick-create sheets for company/product/PO, `FormScreen` keyboard handling on 11 form screens, company create from the directory. Device pass in progress (see above). |
-| **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**39 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity` — per trade role since INS-087, `filterOptions`), `@inspect/design-tokens` (+`brandFallbacks`). |
+| **Mobile** (`apps/mobile`, Expo SDK 57) | **2026-09-12 (INS-095/099):** v2 foundation — fonts behind the splash, `src/theme`, the `src/components/ui/` kit, `Stack.Protected` session gate, `(app)/(tabs)` = Home · Inspections · Library · Profile (custom `TabBar`, Library hidden below QA), every flow pushed above the bar, `/dashboard` → `/`; verified on the emulator for both roles. Remaining screens still render through the `palette` alias + shims until INS-096 M3–M7. Before that: **25 routes — the full Phase 4 surface**: login · dashboard hub · inspections (list/new/capture/review/report) · reports · companies (list/detail/guests) · products×3 · purchase-orders×3 · users · invite · presets (list/detail/builder). Capture carries the spec §5.1 offline photo queue (hash-at-capture, stable clientRequestId, 409→human-resolved conflict, submit blocked while queued). **INS-093 (2026-09-04) hardened the camera loop:** no free "Next" (the cursor walks shot slots + one frontier), retakes go through the queue (`intent: replace`), uploads run in a background singleton with progress/timeouts/backoff and survive leaving the screen, every photo is cached on-device until the loop is submitted, End loop waits for uploads in a finishing sheet, and a gallery shows every unit × item. **2026-09-05:** the queue is connectivity-aware (pauses offline, resumes on reconnect, classifies failures; rejected uploads offer Retake/Discard), the review screen shows photo evidence in capture order and refuses submit while uploads are pending, the report screen shows evidence by unit and the signer. **INS-092 (2026-09-05):** `components/ui.tsx` primitives, toasts, pull-to-refresh, partial retry, 44pt targets, optimistic role change, PO search. **46 Vitest tests.** **INS-091 (2026-09-04):** `OptionPicker` search + "+ Add new…", quick-create sheets for company/product/PO, `FormScreen` keyboard handling on 11 form screens, company create from the directory. Device pass in progress (see above). |
+| **Shared packages** | `@inspect/shared-types` (every wire shape — ~14 more moved in 2026-09-02; guarded by `wire-contract.spec.ts`), `@inspect/api-client` (29 tests), `@inspect/domain` (**59 tests**: ROLE_RANK, status sets + STATUS_BUCKETS, report display rules, `reportNumber`, `initialsFrom`, `hashIndex`, `rankCompaniesByActivity` — per trade role since INS-087, `filterOptions`; **2026-09-12:** capture-point grouping/`isInLoop`/`moveItem`/`LOOP_TEMPLATES`, `latestPresetPerName` (from web), Home `bucketCounts`/`nextForInspector`), **`@inspect/design-tokens` v2 (INS-094, 2026-09-12: `colors` light/dark, `typography`, `layout`, `semantic`, frozen `report`, 96-icon `icons` map, `css` emitter, `@deprecated palette` alias — 24 tests incl. WCAG contrast; now also a dependency of `apps/api` for the report palette).** |
 | **Deploy** (Railway project QCLink — a DEV environment) | API `Main Application` live at `main-application-production-6fa4.up.railway.app` (Dockerfile build, `/health` check, pre-deploy `migrate deploy` + seed, fresh signing key), console `serene-vision` at `serene-vision-production-8387.up.railway.app`, Postgres + Redis + bucket. Auto-deploys on push to `main`. Runbook: [reference/deploy-railway.md](reference/deploy-railway.md). |
 | **CI** (`.github/workflows/ci.yml`) | migrate→seed→type-check→api Jest→all Vitest suites→integration→builds→lint→OpenAPI staleness→single-resolved-React assertion. **Green on every 2026-09-02 push (10/10 commits).** The 2026-09-04 INS-091 commits have not been pushed yet, so CI has not seen them; locally every gate is green. |
 
-**Verified numbers (2026-09-05):** type-check clean (api, web, mobile) · lint 0 errors (1 known font warning) ·
-api 691/43 · web 60/9 · domain 39/7 · api-client 29/2 · mobile 46/4 · integration 147/16 (CI) ·
-`expo export` green · `openapi.json` unchanged by the day's API changes.
+**Verified numbers (2026-09-12):** type-check clean (api, web, mobile) · lint 0 errors on every file touched
+today (web 1 known font warning; 11 pre-existing CRLF prettier errors in untouched API specs on Windows) ·
+api **709/45** · web 56/8 (4 preset tests moved to domain) · domain **59/10** · api-client 29/2 ·
+design-tokens **24/1** · mobile 46/4 · integration: the new `capture-points.e2e-spec.ts` 6/6 against the
+dev DB (the other 16 suites last ran green in CI 2026-09-05; no existing route changed) · `openapi.json`
+regenerated (+2 paths) · mobile `expo export --platform android` green, **4.7 MB Hermes bundle** (first
+recorded baseline, after fonts + svg + kit) · emulator: both roles walked through Home / Inspections /
+Library / Profile, sign-out → sign-in through the guard, invite deep link.
 
 ## Fixed along the Phase 4 sweep (2026-09-02)
 
@@ -145,17 +212,27 @@ api 691/43 · web 60/9 · domain 39/7 · api-client 29/2 · mobile 46/4 · integ
   `vitest.config.mts` — Next's tsconfig says `jsx: preserve`, which Vite 8 would otherwise obey — and a
   `// @vitest-environment jsdom` pragma per component test file; the server-side suite stays on `node`.
 
-## Open backlog (2 items)
+## Open backlog (10 items)
 
-[INS-002](future/BACKLOG.md) credential rotation (user-side) · [INS-086](future/BACKLOG.md) epic
-(the on-device acceptance pass on a physical phone — now also covering the 2026-09-05 offline/rejected
-upload behaviour and the review-screen submit gate). Every low/medium item was closed 2026-09-05
-(INS-034, INS-085, INS-087, INS-089, INS-092).
+**The design revamp (2026-09-12):** done — [INS-094](future/BACKLOG.md) tokens v2 + frozen report
+palette · [INS-095](future/BACKLOG.md) mobile foundation · [INS-097](future/BACKLOG.md) capture-point
+library · [INS-099](future/BACKLOG.md) Home tab. Open — [INS-096](future/BACKLOG.md) mobile screen
+re-skin batches (M2 tabs done; M3–M7 open) · [INS-098](future/BACKLOG.md) drag-and-drop loop builder ·
+[INS-100](future/BACKLOG.md) web follow-through · [INS-101](future/BACKLOG.md) dark mode (parked). Phase order and gates:
+[the plan](in-progress/plans/2026-09-12-inspect-design-revamp.md).
+
+**Carried over:** [INS-002](future/BACKLOG.md) credential rotation (user-side) · [INS-086](future/BACKLOG.md)
+epic (the on-device acceptance pass on a physical phone — the visual pass folds into it).
 
 ## Next steps, in order
 
-1. `git push` — deploys the API (with the report-signer migration) to Railway; check `/health` after.
-2. `eas build --profile preview --platform android` and walk the ledger on a phone, including: shoot a
-   unit, go offline, shoot more, retake, come back online, watch the strip drain, End loop → review.
-3. INS-002 credential rotation (user-side).
-4. The parked product decisions listed under "Recorded observations, not fixed" above.
+1. `git push` — deploys the API to Railway. **Do this soon:** the shared dev DB already carries the
+   `CatalogScope` enum rename and the `capture_points` table, while the deployed API still runs the
+   pre-rename Prisma client — `/defect-catalog` writes on the remote API may fail until it redeploys.
+2. **Phase 5 (INS-098)** the drag-and-drop loop builder on top of the library and the kit
+   (`react-native-sortables`, chooser sheet, custom → library, edit sheet with the accessible
+   Move up/down). Then Phase 6 (capture/review/report re-skin), 7 (remaining screens + shim cleanup),
+   8 (web), 9 (device pass).
+3. `eas build --profile preview --platform android` and walk the ledger on a phone (INS-086), now
+   including the visual pass.
+4. INS-002 credential rotation (user-side); the parked product decisions above.

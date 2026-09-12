@@ -70,6 +70,84 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 
 ---
 
+### INS-094 · Design tokens v2 + frozen report palette   [HIGH]
+- status: done
+- done: 2026-09-12 — `packages/design-tokens/src/{colors,typography,layout,semantic,report,icons,css,legacy}.ts` + `index.test.ts` (24 tests incl. WCAG ≥ 4.5 for every tone pair over card and canvas; `*Strong` text variants exist because the base green/orange/red fail on their own tints); `scripts/build-icons.mjs` generates a 96-icon SVG map (82 Solar, 14 custom garment glyphs) from `icons/solar-icons.json`. `palette` is the `@deprecated` alias onto `light`. Web: `tokens.test.ts` re-pinned; `branded-report.tsx` reads `report.*` via its own `ReportSeverityTag`/`ReportUnverifiedBadge` (same wording as the shell's). API: `@inspect/design-tokens` dependency; `report-pdf.ts` derives its pdf-lib constants from `report` (+ parity pin in `report-pdf.spec.ts`, 692/43). Docs: `docs/reference/design-system.md`, `CLAUDE.md:67/169`. Verified: tokens 24/24 · web 60/60 · api 692/43 · mobile 46/4 · type-check api/web/mobile · lint web/mobile · **emulator**: `/inspections` renders cream + forest with zero screen edits.
+- area: Shared packages (`@inspect/design-tokens`) / web + API report renderers
+- evidence: `packages/design-tokens/src/index.ts` is 75 lines: a 12-colour `palette`, two font stacks, severity/role maps — no type scale, spacing, radius, shadow, success/warning tokens. 30 mobile files and ~50 web files import it directly; `apps/api/src/reports/report-pdf.ts` re-declares the palette as pdf-lib constants "keep in sync by value".
+- problem: The product has no design system to re-skin against — every screen hand-rolls its numbers, and the reference direction the user picked (`design/*.html`: cream/forest/sand/gold, Inter + Libre Baskerville + JetBrains Mono, 12px radius, bordered cards) has nowhere to land.
+- fix: Split the package into `colors` (semantic `ThemeColors`, `light` + `dark` shapes), `typography` (font families with native keys + a type scale), `layout` (space/radius/shadow/MIN_TARGET), `semantic` (tones, `statusTone`, `verdictTone`, re-coloured severity/roles/brandFallbacks), `report` (the FROZEN document palette both renderers read), `icons` (curated Solar + garment-glyph path map), `legacy` (`@deprecated palette` alias onto the new theme), `css` (variable emitter). Vitest in the package; web `tokens.test.ts` re-pinned; `branded-report.tsx` and `report-pdf.ts` read `report.*`.
+- verify: `pnpm type-check` + every suite green; the alias flips both apps to the new palette with no screen edits; `report.*` values equal the old PDF literals (test); WCAG ≥ 4.5 for every tone fg/bg pair (test).
+- refs: spec [../in-progress/specs/2026-09-12-inspect-design-revamp-design.md](../in-progress/specs/2026-09-12-inspect-design-revamp-design.md) · plan [../in-progress/plans/2026-09-12-inspect-design-revamp.md](../in-progress/plans/2026-09-12-inspect-design-revamp.md) · canvas source `design/inspect-canvas/`
+
+### INS-095 · Mobile foundation: fonts, icons, theme, tabs, component kit   [HIGH]
+- status: done
+- done: 2026-09-12 — **Deps:** `react-native-svg` 15.15.4, `@expo-google-fonts/{inter,libre-baskerville,jetbrains-mono}`, `expo-haptics` (all Expo Go-safe). **Theme:** `src/theme/{index,fonts}.ts` — `theme`, `useTheme()`, `text(role)` (never emits `fontWeight`), `elevation()`, `tone()`, nine font faces held behind the splash. **Kit** `src/components/ui/`: `Icon` (SvgXml over the token map), `Button`/`TextButton`/`ButtonRow`, `Field`/`Input`/`Textarea`, `Chip`, `Badge`/`StatusChip`/`SeverityBadge`, `Card`/`ListCard`, `ListRow`, `StatCard`/`Grid` (unwraps Fragments), `IconTile`, `Header`/`BackButton` (circle + text variants), `Screen` (absorbs `FormScreen`), `Section*`, `Sheet` (sheet/dialog/full; absorbs `QuickCreateSheet`), `ProgressBar`, `EmptyState`/`ErrorState`/`Skeleton`, `TabBar`, `Avatar`; `legacy.tsx` keeps the old `ui` StyleSheet re-coloured; `back-button.tsx`/`form-screen.tsx`/`quick-create-sheet.tsx` are shims. **Navigation:** root `_layout.tsx` holds the splash until fonts + session resolve, `GestureHandlerRootView`, `SessionProvider` (`src/lib/session-context.tsx`, fed by `subscribeSession()` in `session.ts` so every existing `signIn`/`signOut` flips the guard), `Stack.Protected` for `(app)` vs `login`, `invite` public; `(app)/_layout.tsx` anchored on `(tabs)`; `(app)/(tabs)/_layout.tsx` = Home · Inspections · Library (`href: null` below QA) · Profile with the custom `TabBar`; every other route moved under `(app)/` unchanged (URLs identical); `/dashboard` redirects to `/`; `HOME_HREF = '/'`, `LIBRARY_HREF`; `app.json` cream/forest colours; `assets/brand/build-icons.mjs` regenerates the icon/adaptive/splash artwork (placeholder collar mark). `/auth/me` now also returns `email` + `name` (mobile greets by name; the JWT carries neither). **Verified on the emulator (Expo Go → Railway API):** cold start → splash → Home with serif title, Solar tabs; QA sees 4 tabs, inspector 3; Sign out → login → sign in as inspector → Home flips through the guard with no explicit navigation; `exp://…/--/invite?token=x` deep link opens the public invite route while signed in; mobile tsc/lint clean, 46 tests. Two defects fixed in the pass: `Grid` received a Fragment as one child (cards stacked), and `SplashScreen.setOptions` warns in Expo Go. **Lesson:** the detached Metro launcher must not set `CI=1` (disables watching — new routes never reached the device; recorded in memory).
+- area: Mobile / Architecture
+- evidence: `apps/mobile/src/app/_layout.tsx` is a 19-line flat Stack (no tabs, no `GestureHandlerRootView`); no font is loaded (`expo-font` unused); no icon library (Unicode glyphs); two competing primitive sheets (`components/ui.tsx`, `components/capture/ui.ts`); 14 files with hardcoded hexes; every screen hand-rolls its header.
+- problem: 21 screens reachable only by pushing from two ad-hoc link rows; the app has no persistent chrome, no typography, no icons and no theme layer to re-skin through.
+- fix: `@expo-google-fonts/{inter,libre-baskerville,jetbrains-mono}` held behind the splash; `react-native-svg` + `<Icon>` over the token path map; `src/theme` (`useTheme`, `text()`, `elevation()`); root layout with `Stack.Protected` session gate + `SessionProvider`; `(app)/(tabs)` = Home · Inspections · Library (QA+) · Profile with a custom `TabBar`, every flow pushed full-screen; kit in `src/components/ui/` (Screen, Header, Card, StatCard, ListRow, ListCard, IconTile, Chip, Badge/StatusChip, Button, Sheet, EmptyState, Skeleton, Avatar…) absorbing both old sheets, `form-screen`, `back-button`, `quick-create-sheet`; `app.json` colours + new icon/splash artwork.
+- verify: Cold start → splash → Home with serif title and Solar tabs; inspector account sees 3 tabs; `inspect://invite?token=` and `inspect://inspections/<id>/capture` deep links work cold and warm; 46 mobile tests untouched; `expo export` size delta recorded.
+- refs: as INS-094
+
+### INS-096 · Mobile screen re-skin (batches M2–M7)   [HIGH]
+- status: todo
+- area: Mobile
+- evidence: 25 routes styled ad hoc off `palette.*`.
+- problem: Once the kit exists every screen still has to be rebuilt from it — including the 1013-line capture screen, whose behaviour (`src/lib/capture-core.ts`, `photo-queue.ts`) must not change.
+- fix: M2 the four tabs · M3 capture (restyle only, zero lines in `src/lib`) · M4 review + report · M5 new inspection + presets · M6 companies/users/products/POs/reports/login/invite · M7 delete the alias, `capture/ui.ts`, `form-screen.tsx`, `back-button.tsx`, `quick-create-sheet.tsx`; ESLint `no-restricted-imports`; hex/`fontWeight` grep gate.
+- verify: Per batch: type-check, lint, tests, `expo export`, emulator screenshot; M3 re-runs the INS-093 path (shoot → retake → gate → discard → submit → review) and the airplane-mode strip.
+- refs: as INS-094
+
+### INS-097 · Capture-point library (contract, domain, API, seed)   [HIGH]
+- status: done
+- done: 2026-09-12 — **Contract:** `CATALOG_SCOPES`/`CatalogScope` (shared with the defect catalog; `DefectScope` kept as a deprecated alias), `CAPTURE_POINT_CATEGORIES`, `CapturePointDto`, `CreateCapturePointInput`, `PresetItemDto.capturePointId?` + joined `capturePoint?`, `PresetItemInput.capturePointId?`; both registered in `wire-contract.spec.ts`. **Schema:** `enum DefectScope` RENAMED to `CatalogScope` (hand-written `ALTER TYPE … RENAME`, rows untouched), `enum CapturePointCategory`, `model CapturePoint` (`@@unique([orgId,name])`, partial unique `capture_points_global_name_key` on global names, `CHECK ((scope='GLOBAL') = ("orgId" IS NULL))`), `PresetLoopItem.capturePointId?` (`SetNull`, indexed) — migration `20260912000000_capture_point_library`, applied to the shared dev DB; `prisma migrate diff` DB↔schema empty. **Seed:** `prisma/capture-points.seed-data.ts` (55 rows in 6 categories, each a capture instruction, `iconKey` typed as `IconName`); second run creates 0. **API:** `src/capture-points/` — `GET /capture-points?q&category&includeArchived`, `POST` = find-or-create by trimmed/space-folded, case-insensitive name across global + org (P2002 race converges on the winner), `DELETE /:id` archive (global/foreign → 403), class floor `QA_MANAGER`, audit `capturePoint.created|archived` inside the tx; `loop-presets.service` validates `items[].capturePointId` against `OR:[{orgId},{orgId:null}]` (400 otherwise), persists it, joins `capturePoint {id,category,iconKey}` on GET; `inspection-mapping.spec.ts` pins the snapshot item keys to `position,itemName,description,referenceImageUrl` (lineage never reaches a signed artifact). **Domain:** `capture-points.ts` (`groupCapturePoints`, `iconForCapturePoint`, `isInLoop`, `draftItemFromCapturePoint`, `moveItem`, `LOOP_TEMPLATES` ×3, `resolveTemplate`), `presets.ts` (`latestPresetPerName` MOVED from `apps/web/lib/presets.ts`; web `create-form.tsx` re-pointed, mobile `inspections/new.tsx` picker now shows one row per preset name), `home.ts` (`statusCounts`, `bucketCounts`, `nextForInspector`) — domain 39 → **59 tests**. **Verified:** api unit specs green (capture-points 11, lineage 4, mapping pin), `wire-contract.spec.ts` green, **integration `capture-points.e2e-spec.ts` 6/6 against the dev DB** (globals visible to two orgs; ORG row invisible/unarchivable/unusable as lineage cross-tenant; folded duplicate → same id; global name → global row; snapshot carries no lineage), `openapi.json` regenerated (+`/capture-points`, `/capture-points/{id}`), type-check api/web/mobile, lint on every new file. **Note:** the deployed Railway API still runs the pre-rename Prisma client against the renamed enum type — push `main` (auto-deploy) before exercising `/defect-catalog` writes remotely.
+- area: API / shared contract / domain
+- evidence: `PresetLoopItem.itemName` is free text; both builders add blank "Item 01" rows; no model, route or seed for reusable capture points; no garment category anywhere.
+- problem: Building a loop means typing every shot by hand, and nothing an org names is reusable next time.
+- fix: `CapturePoint` mirroring `DefectCatalog` (`CatalogScope` GLOBAL|ORG shared enum, `orgId?`, `category CapturePointCategory`, `iconKey?`, partial unique index on global names, scope/org CHECK); `PresetLoopItem.capturePointId?` NON-authoritative (`SetNull`, pinned out of `loopPresetSnapshot` by test); ~55 seeded global rows with capture-instruction descriptions; `GET/POST/DELETE /capture-points` (POST = find-or-create by folded name; QA_MANAGER floor; audit); `POST /loop-presets` validates + persists `capturePointId`; DTOs in shared-types + wire-contract registration; domain `groupCapturePoints`, `isInLoop`, `moveItem`, `LOOP_TEMPLATES`, `resolveTemplate`, `latestPresetPerName` (moved from web), `bucketCounts`, `nextForInspector`; integration spec (cross-tenant + snapshot key pin); `openapi.json` regenerated.
+- verify: Seed twice → second run creates 0; integration spec green (global visible to two orgs, ORG row invisible cross-tenant, find-or-create returns the same id for a folded duplicate, snapshot items carry no `capturePointId`); `pnpm type-check`.
+- refs: as INS-094 · INS-081 (loop shape) · INS-076 (preset versions)
+
+### INS-098 · Drag-and-drop loop builder (mobile) + web builder parity   [HIGH]
+- status: todo
+- area: Mobile + web (preset builder)
+- evidence: `apps/mobile/src/app/presets/new.tsx` reorders with ↑/↓ `Glyph` presses; `apps/web/app/(console)/presets/new/builder.tsx` with `ChevronUp/Down`; `react-native-reanimated` 4.5.1 + `react-native-gesture-handler` installed and unused.
+- problem: Ordering a 12-shot loop by single-step swaps is slow and joyless; there is no library to pick from.
+- fix: Mobile: `react-native-sortables` list with a drag handle + haptics, `capture-point-chooser` sheet (search, category chips, 2-col tiles, multi-select in tap order, "Custom…" → `POST /capture-points`), `item-edit-sheet` keeping Move up/down/Remove as the accessible fallback (INS-092), template chips; detail rows show category icons. Web: `@dnd-kit/sortable` + a library panel; `actions.ts` imports `PresetItemInput` from shared-types. Presets stay immutable (save = new version).
+- verify: Emulator: add 6 points from the library → drag one to position 1 → edit-sheet Move down → Custom… "Hem tape close-up" → save → detail shows the dragged order with icons → reopening the chooser lists the custom point under "Yours".
+- refs: as INS-094 · INS-097 (the library it consumes)
+
+### INS-099 · Home tab + `/dashboard` fold   [HIGH]
+- status: done
+- done: 2026-09-12 — `(app)/(tabs)/index.tsx`: greeting header (org overline, first name from `/auth/me`'s new `name`, avatar), role-shaped body — QA+: quick-start carousel (New inspection · New loop · Reports · Library), `Pipeline` 2×2 `StatCard`s (`bucketCounts(inspectionsByStatus)` for In progress / Awaiting review, Pass rate + DPHU from `quality`, "—" when null), Recent inspections (3, `StatusChip`, → capture or review by `isLockedStatus`), Recent reports (3, → `/inspections/:id/report`); inspector: `nextForInspector` emphasis card with Resume/Start capture, `My work` 2×2 from `bucketCounts(statusCounts(rows))`, "Assigned to you" rows. Pure fetch + `.then(apply)` via `fetchMissing`; a 401 signs out through the guard. `/dashboard` is a redirect to `/` for one release. No new API beyond the two identity fields on `/auth/me`. Verified on the emulator for both `qa.mobile@` and `inspector.mobile@` against the Railway API (real counts: 4 inspections, pass rate 100 %, DPHU 0.63, 2 signed reports).
+- area: Mobile
+- evidence: `/` redirects to `/inspections`; `/dashboard` (QA floor) is a tile grid + seven text links; inspectors have no landing surface.
+- problem: The user asked for a Home with quick-start buttons and stat cards; today the app opens on a list.
+- fix: `(tabs)/index.tsx`: greeting header, quick-start carousel (New inspection / New loop / Continue / Reports; inspector: Continue-or-Start / My inspections via `nextForInspector`), 2×2 `StatCard`s (QA+ from `GET /dashboard/summary`; inspector from `bucketCounts(statusCounts(GET /inspections))`), Recent inspections (+ reports for QA+). `/dashboard` → redirect for one release, then deleted. No new API.
+- verify: QA and inspector accounts show their variants; null pass rate renders "—"; `HOME_HREF = '/'` test.
+- refs: as INS-094
+
+### INS-100 · Web console follow-through (tokens, fonts, shell, builder)   [MEDIUM]
+- status: todo
+- area: Web console
+- evidence: `apps/web/app/globals.css` stock shadcn HSL vars disconnected from the palette; fonts via raw `<link>`; `components/inspect/shell.tsx` 488 lines of the old hairline system.
+- problem: Once mobile ships the new language the console must follow or the product has two brands.
+- fix: W1 `themeToCssVariables(light)` into globals.css + Tailwind `var(--x)`; W2 `next/font/google`; W4 shell re-skin + `field.test.tsx` radius; web builder DnD + library panel (INS-098). Icons stay lucide.
+- verify: `pnpm web test`, `type-check`, `next build`; Chrome click-through of dashboard + builder.
+- refs: as INS-094
+
+### INS-101 · Dark mode   [LOW]
+- status: todo
+- area: Shared packages / mobile / web
+- evidence: `dark: ThemeColors` shipped in INS-094 but no app resolves it.
+- problem: `app.json` says `userInterfaceStyle: automatic` while the palette is light-only.
+- fix: `useTheme()` becomes a context read of `useColorScheme()`; web `.dark` block + toggle; audit every `onImage`/scrim use.
+- verify: Both platforms render every kit component in dark without a hardcoded light hex.
+- refs: as INS-094
+
+---
+
 ## Medium
 
 ### INS-089 · Nothing records who generated a signed report   [MEDIUM]

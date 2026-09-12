@@ -64,8 +64,12 @@ single `pnpm install` at the root installs everything):
   or `expo-secure-store`. See [`.claude/rules/wire-contract.md`](.claude/rules/wire-contract.md).
 - `packages/domain/` — `@inspect/domain`: platform-free rules with no I/O and no React. Holds the single
   `ROLE_RANK` table that both the API's `RolesGuard` and the console read.
-- `packages/design-tokens/` — `@inspect/design-tokens`: the palette, font **stacks** and severity/role maps.
-  Deliberately free of CSS — `var(--font-sans)` and `CSSProperties` are composed in `apps/web`.
+- `packages/design-tokens/` — `@inspect/design-tokens`: the v2 design system as **values** — semantic
+  `ThemeColors` (`light`/`dark`), the type scale + font families (with expo-google-fonts native keys),
+  `space`/`radius`/`shadow`, tone/status/severity/role maps, the curated icon SVG map, and the **frozen
+  `report` palette** both report renderers read ([INS-094](docs/future/BACKLOG.md)). Deliberately free of
+  CSS and of `StyleSheet` — each app composes its own presentation. `palette` is a `@deprecated` migration
+  alias. Reference: [docs/reference/design-system.md](docs/reference/design-system.md).
 
 All four packages build to `dist/` and are consumed through it; `apps/web`'s Vitest aliases `@inspect/*` to
 package **source**, so a stale `dist` cannot fake a green suite. Node ≥ 20, pnpm 9.12.0 (root `package.json`).
@@ -113,7 +117,7 @@ Run from the **repo root** unless noted — Turbo fans tasks out across both app
 - `pnpm api prisma:migrate` — `prisma migrate dev` (apply/author migrations against `DATABASE_URL`).
 - `pnpm api prisma:generate` — regenerate the Prisma client (also runs on `postinstall`).
 - `pnpm api prisma:studio` — Prisma Studio.
-- `pnpm --filter @inspect/api exec prisma db seed` — seed the **global defect library** (14 pre-classified defects; idempotent; wired via the `prisma.seed` → `ts-node --transpile-only prisma/seed.ts` hook).
+- `pnpm --filter @inspect/api exec prisma db seed` — seed the **global defect library** (14 pre-classified defects) **and the global capture-point library** (55 garment capture points in 6 categories, `prisma/capture-points.seed-data.ts`); idempotent; wired via the `prisma.seed` → `ts-node --transpile-only prisma/seed.ts` hook.
 
 ### Web (`pnpm web <script>`, or `cd apps/web`)
 - `pnpm web dev` — `next dev --turbopack -p 3001`. Talks to the API at `INSPECT_API_URL`; falls back to design demo data when the API is unreachable.
@@ -159,14 +163,14 @@ The correctness-critical logic lives as plain TypeScript under `src/`, consumed 
 - **Global guards** (`app.module.ts`): `JwtAuthGuard` then `RolesGuard` are registered as `APP_GUARD`, so **every route is protected by default**. Opt out / scope with `@Public()`, `@Roles(min)`, and `@CurrentUser()` (in `src/auth/`).
 - **Feature modules** mirror the domain: `companies`, `products`, `purchase-orders`, `loop-presets`, `defect-catalog`, `inspections`, `populate`, `reports`, `guest`, `orgs`, `invitations`, `users`, `company-guests`. Most are CRUD controller+service with no spec yet.
 - **`PrismaModule`** is global; inject `PrismaService`. **`CacheModule`** is Redis-backed (Keyv). There is **no** `ScheduleModule` — it was removed as dead in INS-053; re-add it only when a real scheduled job lands.
-- **Prisma schema:** `apps/api/prisma/schema.prisma` is the **single canonical schema** (24 models, `orgId`-scoped). (A root `LoopQC_schema.prisma` mirror existed historically and was removed 2026-06-20 — there is now exactly one schema.)
+- **Prisma schema:** `apps/api/prisma/schema.prisma` is the **single canonical schema** (25 models, `orgId`-scoped; `CapturePoint` — the hybrid GLOBAL + ORG capture-point library — landed 2026-09-12, [INS-097](docs/future/BACKLOG.md)). (A root `LoopQC_schema.prisma` mirror existed historically and was removed 2026-06-20 — there is now exactly one schema.)
 
 ## Frontend architecture (`apps/web`)
 
 - **Routing:** screens under `app/(console)/` (dashboard, inspections/new, presets, populate, review, report, users) and `app/{login,invite,portal,report}/`. `(console)` is a route group (shared shell layout), not a URL segment.
 - **Auth:** NextAuth v5 **Credentials** (`lib/auth.ts`) POSTs to the API `/auth/login`, then GETs `/auth/me`; the session carries the API-issued JWT + role + orgId. The API stays the canonical RBAC authority.
 - **Data layer:** `lib/api.ts` exposes `apiGet`/`loadOrFallback` (live read with demo fallback), the write helpers `apiPost/Put/Patch/Delete` + `ApiError` ([INS-022](docs/future/BACKLOG.md) done), and unauthenticated `apiGetPublic`/`apiPostPublic`. All major screens are wired live via Server Components (reads) + Server Actions (writes); the JWT stays server-side (but leaks via the session — [INS-045](docs/future/BACKLOG.md)).
-- **Design system:** `components/inspect/` (`tokens.ts`, `shell.tsx`, `branded-report.tsx`) — Inter + JetBrains Mono, `#037BF4` accent, hairline UI. `components/ui/` is shadcn/Radix. Don't introduce a second component vocabulary.
+- **Design system:** values come from `@inspect/design-tokens` (v2, [docs/reference/design-system.md](docs/reference/design-system.md): cream canvas, forest-green `primary`, Inter + Libre Baskerville + JetBrains Mono, 12px radius, bordered cards). Web composition lives in `components/inspect/` (`tokens.ts`, `shell.tsx`); `components/ui/` is shadcn/Radix. **`branded-report.tsx` reads the frozen `report` palette, never the theme** — the signed document must match its PDF. Don't introduce a second component vocabulary; web keeps lucide icons, mobile uses the token icon map via `<Icon>`.
 
 ## Domain invariants (uphold these in every new write path)
 
