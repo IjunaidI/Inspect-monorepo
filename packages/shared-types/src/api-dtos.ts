@@ -11,6 +11,8 @@
  */
 import type {
   AqlClassOutcome,
+  CapturePointCategory,
+  CatalogScope,
   DefectClass,
   DefectScope,
   DefectSeverity,
@@ -104,6 +106,18 @@ export interface PresetItemDto {
   position: number;
   /** Present on GET /loop-presets/:id — the key decorated with a short-lived view URL (INS-052). */
   referenceImage?: { key: string; viewUrl: string | null } | null;
+  /**
+   * INS-097: NON-authoritative lineage to the library row this item was picked
+   * from. `itemName`/`description` stay the truth (they are what the inspection
+   * snapshot copies); this only drives "already in loop" highlighting and icons.
+   */
+  capturePointId?: string | null;
+  /** Present on GET /loop-presets/:id — the joined library row's category + icon for the detail screen. */
+  capturePoint?: {
+    id: string;
+    category: CapturePointCategory;
+    iconKey?: string | null;
+  } | null;
 }
 
 export interface LoopPresetDetailDto extends LoopPresetDto {
@@ -122,6 +136,8 @@ export interface PresetItemInput {
   description?: string;
   /** Storage key under orgs/<orgId>/presets/ — never a presigned URL. */
   referenceImageUrl?: string;
+  /** INS-097: lineage to the library row (global or this org's). Optional; names stay required. */
+  capturePointId?: string;
 }
 
 /** Body of POST /loop-presets — one loop; tags and the sheet are loop-global. */
@@ -138,6 +154,35 @@ export interface CreateLoopPresetInput {
 export interface CreateDefectInput {
   name: string;
   defaultSeverity: DefectSeverity;
+}
+
+/**
+ * One row of the capture-point library (INS-097): the GLOBAL seeded set plus
+ * this org's own points, as returned by GET /capture-points.
+ */
+export interface CapturePointDto {
+  id: string;
+  name: string;
+  /** Written as a capture instruction ("Lay flat, collar buttoned, shoot straight down"). */
+  description?: string | null;
+  category: CapturePointCategory;
+  scope: CatalogScope;
+  /** An `IconName` from @inspect/design-tokens; null = the category's default icon. */
+  iconKey?: string | null;
+  /** Storage key under orgs/<orgId>/presets/ (org rows only). */
+  referenceImageUrl?: string | null;
+  isArchived: boolean;
+}
+
+/**
+ * Body of POST /capture-points — FIND-OR-CREATE an ORG library row by folded
+ * name: a name that already exists (globally or in this org) returns that row.
+ */
+export interface CreateCapturePointInput {
+  name: string;
+  category: CapturePointCategory;
+  description?: string;
+  iconKey?: string;
 }
 
 export interface DefectCatalogDto {
@@ -157,7 +202,10 @@ export interface UserDto {
 }
 export interface AqlResultDto {
   systemRecommendation: AqlClassOutcome;
-  perClass: Record<DefectClass, { found: number; ac: number; re: number; outcome: AqlClassOutcome }>;
+  perClass: Record<
+    DefectClass,
+    { found: number; ac: number; re: number; outcome: AqlClassOutcome }
+  >;
   qaDecision?: QaDecision | null;
   qaRemarks?: string | null;
 }
@@ -167,15 +215,27 @@ export interface InspectionDto {
   /** Prisma enum (e.g. PRE_SHIPMENT) — render with underscores replaced. */
   inspectionType?: string;
   lotSize?: number | null;
-  computedSampling?: { sampleSizeCodeLetter: string; sampleSize: number; perClass: Record<string, { aql: number; ac: number; re: number }> } | null;
+  computedSampling?: {
+    sampleSizeCodeLetter: string;
+    sampleSize: number;
+    perClass: Record<string, { aql: number; ac: number; re: number }>;
+  } | null;
   aqlResult?: AqlResultDto | null;
   /**
    * INS-055: trade role lives on this EDGE, not on the company row — the same
    * company can be the client here and the factory on another inspection. The
    * factory edge stays optional, exactly as `supplier` was.
    */
-  clientCompany?: { id: string; name: string; primaryColor?: string | null } | null;
-  factoryCompany?: { id: string; name: string; gps?: { lat: number; lng: number } | null } | null;
+  clientCompany?: {
+    id: string;
+    name: string;
+    primaryColor?: string | null;
+  } | null;
+  factoryCompany?: {
+    id: string;
+    name: string;
+    gps?: { lat: number; lng: number } | null;
+  } | null;
   product?: { id: string; styleNumber: string } | null;
   purchaseOrder?: { id: string; poNumber: string } | null;
   /** Present on GET /inspections/:id (safe select: id/name/email). */
@@ -191,9 +251,18 @@ export interface InspectionDto {
   loopPresetSnapshot?: {
     presetId: string;
     version: number;
-    items: { position: number; itemName: string; description?: string; referenceImageUrl?: string }[];
+    items: {
+      position: number;
+      itemName: string;
+      description?: string;
+      referenceImageUrl?: string;
+    }[];
     measurementFields: { label: string; unit?: string }[];
-    allowedDefects: { defectCatalogId: string; name: string; severity: DefectSeverity }[];
+    allowedDefects: {
+      defectCatalogId: string;
+      name: string;
+      severity: DefectSeverity;
+    }[];
   } | null;
   // NO `inspectorId`: `Inspection` has no such column. The only `inspectorId`
   // in the schema lives INSIDE the `tamperProof` JSON and means the ACTUAL
@@ -239,7 +308,10 @@ export interface UpdatePurchaseOrderInput {
 export interface AqlPreviewDto {
   sampleSizeCodeLetter: string;
   sampleSize: number;
-  perClass: Record<'critical' | 'major' | 'minor', { aql: number; ac: number; re: number }>;
+  perClass: Record<
+    'critical' | 'major' | 'minor',
+    { aql: number; ac: number; re: number }
+  >;
 }
 
 // ── Populate API shapes ──
@@ -442,7 +514,10 @@ export interface GuestReportDto {
   pdfStorageKey?: string | null;
   verificationToken?: string | null;
   canonicalSnapshot?: Record<string, unknown> | null;
-  brandingSnapshot?: { logoUrl?: string | null; primaryColor?: string | null } | null;
+  brandingSnapshot?: {
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+  } | null;
   /** Present on the detail endpoint (GET /guest/reports/:id) only. */
   photos?: GuestReportPhotoDto[];
 }

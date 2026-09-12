@@ -22,6 +22,7 @@ import { LoopPresetsModule } from './loop-presets/loop-presets.module';
 import { InspectionsModule } from './inspections/inspections.module';
 import { StorageModule } from './storage/storage.module';
 import { DefectCatalogModule } from './defect-catalog/defect-catalog.module';
+import { CapturePointsModule } from './capture-points/capture-points.module';
 import { PopulateModule } from './populate/populate.module';
 import { AuditModule } from './audit/audit.module';
 import { MailModule } from './mail/mail.module';
@@ -143,6 +144,7 @@ function validateEnv(config: Record<string, unknown>): Record<string, unknown> {
     InspectionsModule,
     StorageModule,
     DefectCatalogModule,
+    CapturePointsModule,
     PopulateModule,
     AuditModule,
     MailModule,

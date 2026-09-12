@@ -56,7 +56,16 @@ export class LoopPresetsService {
     const preset = await this.prisma.loopPreset.findFirst({
       where: { id, orgId },
       include: {
-        items: { orderBy: { position: 'asc' } },
+        items: {
+          orderBy: { position: 'asc' },
+          // INS-097: the joined library row gives the detail screen its
+          // category icon. Lineage only — itemName/description are the truth.
+          include: {
+            capturePoint: {
+              select: { id: true, category: true, iconKey: true },
+            },
+          },
+        },
         measurementFields: { orderBy: { position: 'asc' } },
         allowedDefects: { include: { defectCatalog: true } },
       },
@@ -117,6 +126,30 @@ export class LoopPresetsService {
       }
     }
 
+    // INS-097: a library lineage must point at a row this org can see — a
+    // global entry or its own. Same tenant rule as the defect tags above.
+    const capturePointIds = [
+      ...new Set(
+        input.items
+          .map((it) => it.capturePointId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    ];
+    if (capturePointIds.length > 0) {
+      const found = await this.prisma.capturePoint.findMany({
+        where: {
+          id: { in: capturePointIds },
+          OR: [{ orgId }, { orgId: null }],
+        },
+        select: { id: true },
+      });
+      if (found.length !== capturePointIds.length) {
+        throw new BadRequestException(
+          'one or more capturePointIds are not accessible',
+        );
+      }
+    }
+
     // New presets auto-version per name (editing == new version; history is preserved).
     const latest = await this.prisma.loopPreset.findFirst({
       where: { orgId, name: input.name.trim() },
@@ -141,6 +174,7 @@ export class LoopPresetsService {
               itemName: it.itemName.trim(),
               description: it.description,
               referenceImageUrl: it.referenceImageUrl,
+              capturePointId: it.capturePointId ?? null,
             })),
           },
           measurementFields: {

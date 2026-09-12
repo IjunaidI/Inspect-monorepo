@@ -59,8 +59,29 @@ export type AqlLevel = (typeof AQL_LEVELS)[number];
 export const DEFECT_SEVERITIES = ['CRITICAL', 'MAJOR', 'MINOR'] as const;
 export type DefectSeverity = (typeof DEFECT_SEVERITIES)[number];
 
-export const DEFECT_SCOPES = ['GLOBAL', 'ORG'] as const;
-export type DefectScope = (typeof DEFECT_SCOPES)[number];
+/**
+ * Hybrid-library scope shared by the defect catalog and the capture-point
+ * library (INS-097): GLOBAL rows are seeded (orgId null) and visible to every
+ * org; ORG rows belong to one organization.
+ */
+export const CATALOG_SCOPES = ['GLOBAL', 'ORG'] as const;
+export type CatalogScope = (typeof CATALOG_SCOPES)[number];
+/** @deprecated Use CATALOG_SCOPES — kept so existing DefectCatalogDto readers do not churn. */
+export const DEFECT_SCOPES = CATALOG_SCOPES;
+/** @deprecated Use CatalogScope. */
+export type DefectScope = CatalogScope;
+
+/** Where on (or around) the garment a library capture point is shot (INS-097). */
+export const CAPTURE_POINT_CATEGORIES = [
+  'OVERALL',
+  'TOP',
+  'BOTTOM',
+  'LABELS_TRIMS',
+  'PACKAGING',
+  'TEST',
+  'OTHER',
+] as const;
+export type CapturePointCategory = (typeof CAPTURE_POINT_CATEGORIES)[number];
 
 export const AQL_CLASS_OUTCOMES = ['PASS', 'FAIL'] as const;
 export type AqlClassOutcome = (typeof AQL_CLASS_OUTCOMES)[number];
@@ -97,8 +118,22 @@ export type DefectClass = (typeof DEFECT_CLASSES)[number];
 
 /** ISO 2859-1 sample-size code letters. */
 export const AQL_CODE_LETTERS = [
-  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-  'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R',
+  'A',
+  'B',
+  'C',
+  'D',
+  'E',
+  'F',
+  'G',
+  'H',
+  'J',
+  'K',
+  'L',
+  'M',
+  'N',
+  'P',
+  'Q',
+  'R',
 ] as const;
 export type AqlCodeLetter = (typeof AQL_CODE_LETTERS)[number];
 

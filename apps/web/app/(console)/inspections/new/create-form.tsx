@@ -9,7 +9,7 @@ import { EntityPicker } from '@/components/inspect/entity-picker';
 import { ErrorBanner } from '@/components/inspect/error-banner';
 import { QuickCreatePurchaseOrder } from '@/components/inspect/quick-create/quick-create-purchase-order';
 import type { ApiPurchaseOrder, ApiLoopPreset, ApiUser, AqlPreview, ApiCompany, ApiProduct } from '@/lib/api';
-import { latestPresetPerName } from '@/lib/presets';
+import { latestPresetPerName } from '@inspect/domain';
 import { createInspection, previewAql } from '../actions';
 
 const field: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 6 };

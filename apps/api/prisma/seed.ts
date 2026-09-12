@@ -5,6 +5,11 @@
  * catalogue (orgId = null, scope = GLOBAL) whose severities feed AQL directly.
  * Org-specific custom defects are added by QA Managers at runtime, not here.
  *
+ * Also seeds the GLOBAL capture-point library (INS-097, `capture-points.seed-data.ts`):
+ * what a pre-shipment garment inspection photographs, per category, each row
+ * carrying its capture instruction. Org-specific points are created from the
+ * loop builder at runtime.
+ *
  * Idempotent: re-running only inserts globals that are missing (matched by name).
  *
  * Also (optional) bootstraps the FIRST Platform Admin when BOOTSTRAP_ADMIN_EMAIL +
@@ -18,8 +23,9 @@
  * are NOT seeded — they live as code/seed lookup constants in the AQL engine
  * (spec §8), not as database rows.
  */
-import { PrismaClient, DefectScope, DefectSeverity, UserRole, UserStatus } from '@prisma/client';
+import { PrismaClient, CatalogScope, DefectSeverity, UserRole, UserStatus } from '@prisma/client';
 import { hashPassword } from '../src/auth/password';
+import { GLOBAL_CAPTURE_POINTS } from './capture-points.seed-data';
 
 const prisma = new PrismaClient();
 
@@ -91,14 +97,14 @@ async function main(): Promise<void> {
     // Match on (scope=GLOBAL, name); orgId is null for globals so a compound
     // upsert on [orgId, name] is unreliable (NULL != NULL) — use findFirst.
     const existing = await prisma.defectCatalog.findFirst({
-      where: { scope: DefectScope.GLOBAL, name: defect.name },
+      where: { scope: CatalogScope.GLOBAL, name: defect.name },
       select: { id: true },
     });
     if (existing) continue;
 
     await prisma.defectCatalog.create({
       data: {
-        scope: DefectScope.GLOBAL,
+        scope: CatalogScope.GLOBAL,
         orgId: null,
         name: defect.name,
         defaultSeverity: defect.defaultSeverity,
@@ -107,10 +113,35 @@ async function main(): Promise<void> {
     created += 1;
   }
 
+  // INS-097: the global capture-point library — same idempotent findFirst loop
+  // (NULL orgId makes a compound upsert unreliable here too).
+  let pointsCreated = 0;
+  for (const point of GLOBAL_CAPTURE_POINTS) {
+    const existing = await prisma.capturePoint.findFirst({
+      where: { scope: CatalogScope.GLOBAL, name: point.name },
+      select: { id: true },
+    });
+    if (existing) continue;
+
+    await prisma.capturePoint.create({
+      data: {
+        scope: CatalogScope.GLOBAL,
+        orgId: null,
+        name: point.name,
+        description: point.description,
+        category: point.category,
+        iconKey: point.iconKey,
+      },
+    });
+    pointsCreated += 1;
+  }
+
   // eslint-disable-next-line no-console
   console.log(
     `Seed complete: ${created} global defect(s) created, ` +
-      `${GLOBAL_DEFECTS.length - created} already present.`,
+      `${GLOBAL_DEFECTS.length - created} already present; ` +
+      `${pointsCreated} global capture point(s) created, ` +
+      `${GLOBAL_CAPTURE_POINTS.length - pointsCreated} already present.`,
   );
 
   await seedBootstrapAdmin();

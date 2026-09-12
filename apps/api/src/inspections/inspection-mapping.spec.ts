@@ -71,6 +71,32 @@ describe('buildPresetSnapshot — INS-081', () => {
     ]);
   });
 
+  it('copies exactly the four item fields — a library lineage never reaches the snapshot (INS-097)', () => {
+    // PresetLoopItem.capturePointId is NON-authoritative: the library row can be
+    // renamed or archived and a historical inspection (and its signed report)
+    // must not notice. The doctrine is "names are copied, FKs are not", so the
+    // snapshot's key set is pinned here.
+    const withLineage: PresetLike = {
+      ...preset,
+      items: preset.items.map((it) => ({
+        ...it,
+        capturePointId: 'cp_global_sleeve',
+        capturePoint: {
+          id: 'cp_global_sleeve',
+          category: 'TOP',
+          iconKey: 'sleeve',
+        },
+      })) as PresetLike['items'],
+    };
+    const snap = buildPresetSnapshot(withLineage);
+    for (const item of snap.items) {
+      expect(Object.keys(item).sort()).toEqual(
+        ['description', 'itemName', 'position', 'referenceImageUrl'].sort(),
+      );
+    }
+    expect(JSON.stringify(snap)).not.toContain('capturePoint');
+  });
+
   it('resolves defect names and severities loop-global, not per item', () => {
     const snap = buildPresetSnapshot(preset);
     expect(snap.allowedDefects).toEqual([

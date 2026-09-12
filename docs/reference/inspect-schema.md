@@ -93,3 +93,33 @@ A 4-lens review (spec-fidelity, tenancy/RBAC/isolation, immutability/deletion/au
 - **No hard-delete of non-draft inspections:** `Cascade` from `Inspection` to its loops/photos/defects is safe only because submitted inspections are soft-deleted/archived and `Report`/`BillableEvent`/`Org` references are `Restrict`. The app must block deletion of any inspection with `status != DRAFT`.
 - **`DefectInstance` integrity:** exactly one of `defectCatalogId` / `customText` must be set (catalog XOR custom).
 - **`BillableEvent` of kind `RE_INSPECTION`** must reference an inspection whose `supersedesInspectionId` is set.
+
+## 8. Addendum — the loop shape since INS-081, and the capture-point library (INS-097, 2026-09-12)
+
+> **Sections 0–7 above predate INS-081 (2026-08-12) and are stale on the loop shape.** Lines that
+> still say `PresetLoopStep`, `PresetStepAllowedDefect`, `InspectionLoop`, `Photo.inspectionLoopId`,
+> `requiredShotCount` or "shot counts" describe the dropped design. The current shape:
+
+- A `LoopPreset` **is one loop** of ordered `PresetLoopItem`s; an item **takes exactly one image**
+  (there is no shot count — an item is a shot). Defect tags (`PresetAllowedDefect`) and the measurement
+  sheet (`PresetMeasurementField`) are **loop-global**. There is no `InspectionLoop` model: an inspection
+  materialises `InspectionLoopItem`s from its frozen `loopPresetSnapshot`, and populate walks them once
+  **per inspected unit** (`Photo.cycleIndex`, `@@unique([inspectionLoopItemId, cycleIndex])`). Governing
+  record: `docs/done/specs/2026-08-12-loop-items-and-populate-cycles-design.md`.
+- **`CapturePoint`** (INS-097) is the hybrid **capture-point library**: what a garment inspection
+  photographs, as reusable rows. It mirrors `DefectCatalog` exactly — `scope CatalogScope` (the enum
+  formerly named `DefectScope`, now shared), `orgId String?` (null = GLOBAL seeded), `@@unique([orgId,
+  name])` plus the partial unique index `capture_points_global_name_key` on global names, and a `CHECK`
+  that `scope = 'GLOBAL'` iff `orgId IS NULL`. Fields: `name`, `description` (the capture instruction),
+  `category CapturePointCategory` (OVERALL · TOP · BOTTOM · LABELS_TRIMS · PACKAGING · TEST · OTHER),
+  `iconKey` (an `IconName` from `@inspect/design-tokens`), optional `referenceImageUrl`, `isArchived`.
+  55 global rows are seeded from `apps/api/prisma/capture-points.seed-data.ts`; org rows are created
+  find-or-create from the loop builder (`POST /capture-points`).
+- **`PresetLoopItem.capturePointId` is lineage, not truth.** It is nullable, `onDelete: SetNull`, and is
+  **never** copied into `Inspection.loopPresetSnapshot` or `InspectionLoopItem` — `buildPresetSnapshot()`
+  copies `position, itemName, description, referenceImageUrl` only, and
+  `inspection-mapping.spec.ts` pins that key set. Renaming or archiving a library row therefore cannot
+  touch a historical inspection or its signed report, in line with the snapshot doctrine in §1.
+- **Tenant rule for lineage:** `POST /loop-presets` refuses (400) any `capturePointId` that is not a
+  GLOBAL row or this org's own — the same `OR: [{ orgId }, { orgId: null }]` predicate as
+  `allowedDefectCatalogIds`. Pinned live by `test/integration/capture-points.e2e-spec.ts`.

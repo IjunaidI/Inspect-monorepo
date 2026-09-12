@@ -103,9 +103,22 @@ enum DefectSeverity {
   MINOR
 }
 
-enum DefectScope {
+/// Hybrid-library scope shared by DefectCatalog and CapturePoint (INS-097;
+/// renamed from DefectScope). GLOBAL rows are seeded with orgId null.
+enum CatalogScope {
   GLOBAL
   ORG
+}
+
+/// Where on (or around) the garment a library capture point is shot (INS-097).
+enum CapturePointCategory {
+  OVERALL
+  TOP
+  BOTTOM
+  LABELS_TRIMS
+  PACKAGING
+  TEST
+  OTHER
 }
 
 /// Per-class AQL outcome and the system's overall recommendation (spec §8).
@@ -187,6 +200,7 @@ model Organization {
   purchaseOrders  PurchaseOrder[]
   loopPresets     LoopPreset[]
   defectCatalog   DefectCatalog[]
+  capturePoints   CapturePoint[]
   inspections     Inspection[]
   inspectionItems InspectionLoopItem[]
   photos          Photo[]
@@ -422,12 +436,18 @@ model PresetLoopItem {
   itemName          String
   description       String?
   referenceImageUrl String?
+  /// INS-097: NON-authoritative lineage to the library row the item was picked
+  /// from. Never copied into Inspection.loopPresetSnapshot or InspectionLoopItem —
+  /// names are copied (inspection-mapping.spec.ts pins the snapshot keys).
+  capturePointId    String?
   createdAt         DateTime @default(now())
 
-  loopPreset LoopPreset @relation(fields: [loopPresetId], references: [id], onDelete: Cascade)
+  loopPreset   LoopPreset    @relation(fields: [loopPresetId], references: [id], onDelete: Cascade)
+  capturePoint CapturePoint? @relation(fields: [capturePointId], references: [id], onDelete: SetNull)
 
   @@unique([loopPresetId, position])
   @@index([loopPresetId])
+  @@index([capturePointId])
   @@map("preset_loop_items")
 }
 
@@ -473,7 +493,7 @@ model PresetAllowedDefect {
 /// @@unique([orgId, name]) alone cannot dedupe global rows.
 model DefectCatalog {
   id              String         @id @default(cuid())
-  scope           DefectScope
+  scope           CatalogScope
   orgId           String? // null = GLOBAL seeded library
   name            String
   defaultSeverity DefectSeverity
@@ -490,6 +510,39 @@ model DefectCatalog {
   @@index([scope])
   @@index([orgId])
   @@map("defect_catalog")
+}
+
+/// Hybrid capture-point library (INS-097): GLOBAL seeded rows (orgId=null) + per-org
+/// custom rows, mirroring DefectCatalog. A PresetLoopItem may POINT at one for the
+/// chooser and analytics, but the item's own itemName/description are the truth —
+/// a rename here never touches a preset, an inspection snapshot or a signed report.
+/// Global-name uniqueness (orgId IS NULL) is a PARTIAL UNIQUE INDEX in the migration
+/// (Postgres NULLs are distinct), and a CHECK ties scope to orgId nullability.
+model CapturePoint {
+  id                String               @id @default(cuid())
+  scope             CatalogScope
+  orgId             String? // null = GLOBAL seeded library
+  name              String
+  /// Written as a capture instruction ("Lay flat, collar buttoned, shoot straight down").
+  description       String?
+  category          CapturePointCategory
+  /// An IconName from @inspect/design-tokens; null = the category's default icon.
+  iconKey           String?
+  /// Storage key under orgs/<orgId>/presets/ (org rows only). No upload UI yet.
+  referenceImageUrl String?
+  isArchived        Boolean              @default(false)
+  createdByUserId   String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  organization Organization?    @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  loopItems    PresetLoopItem[]
+
+  @@unique([orgId, name])
+  @@index([scope])
+  @@index([orgId])
+  @@index([category])
+  @@map("capture_points")
 }
 
 // ─────────────────────────────────────────────
