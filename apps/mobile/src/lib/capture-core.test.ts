@@ -5,7 +5,11 @@ import {
   advanceCursor,
   canSubmit,
   createQueuedPhoto,
+  defaultTagTarget,
   discardQueued,
+  evidenceCursorsInUnit,
+  notesUnit,
+  taggedCatalogIds,
   effectiveSlotFilled,
   enqueue,
   markConflict,
@@ -203,5 +207,87 @@ describe('canSubmit', () => {
 
   it('passes on complete cycles with an empty queue', () => {
     expect(canSubmit(clean, 0)).toEqual({ ok: true });
+  });
+});
+
+describe('unit sheet: which unit, which shot a defect pins to', () => {
+  // Unit 1 fully shot (3 items), unit 2 has items 1-2 shot, the frontier is
+  // unit 2 item 3. Unit 3 does not exist yet.
+  const filled = [
+    { cycleIndex: 0, itemIndex: 0 },
+    { cycleIndex: 0, itemIndex: 1 },
+    { cycleIndex: 0, itemIndex: 2 },
+    { cycleIndex: 1, itemIndex: 1 },
+    { cycleIndex: 1, itemIndex: 0 },
+  ];
+
+  it("lists only the unit's shots, in item order", () => {
+    expect(evidenceCursorsInUnit(filled, 1)).toEqual([
+      { cycleIndex: 1, itemIndex: 0 },
+      { cycleIndex: 1, itemIndex: 1 },
+    ]);
+    expect(evidenceCursorsInUnit(filled, 7)).toEqual([]);
+  });
+
+  it('is about the cursor unit while that unit holds a shot', () => {
+    expect(notesUnit(filled, { cycleIndex: 1, itemIndex: 2 })).toBe(1);
+    expect(notesUnit(filled, { cycleIndex: 0, itemIndex: 1 })).toBe(0);
+  });
+
+  it('is about the unit just completed when the cursor opened a fresh, empty unit', () => {
+    // Shooting the last item of unit 2 moves the frontier to unit 3 item 1;
+    // "Unit notes" there must still annotate unit 2, which is what has evidence.
+    const done = [...filled, { cycleIndex: 1, itemIndex: 2 }];
+    expect(notesUnit(done, { cycleIndex: 2, itemIndex: 0 })).toBe(1);
+  });
+
+  it('stays on the cursor unit when nothing has been shot at all', () => {
+    expect(notesUnit([], { cycleIndex: 0, itemIndex: 0 })).toBe(0);
+  });
+
+  it('targets the cursor slot when it holds a shot', () => {
+    expect(defaultTagTarget(filled, { cycleIndex: 0, itemIndex: 1 })).toEqual({
+      cycleIndex: 0,
+      itemIndex: 1,
+    });
+  });
+
+  it('targets the shot just taken when the cursor stands on the frontier', () => {
+    // The frontier follows a capture immediately, so the inspector on the
+    // empty slot is reporting what they saw on the previous one.
+    expect(defaultTagTarget(filled, { cycleIndex: 1, itemIndex: 2 })).toEqual({
+      cycleIndex: 1,
+      itemIndex: 1,
+    });
+  });
+
+  it("targets the completed unit's last shot from the next unit's first slot", () => {
+    const done = [...filled, { cycleIndex: 1, itemIndex: 2 }];
+    expect(defaultTagTarget(done, { cycleIndex: 2, itemIndex: 0 })).toEqual({
+      cycleIndex: 1,
+      itemIndex: 2,
+    });
+  });
+
+  it('has no target before the first shot', () => {
+    expect(defaultTagTarget([], { cycleIndex: 0, itemIndex: 0 })).toBeNull();
+  });
+
+  it('reads the catalog defects already on one slot, ignoring other units and custom tags', () => {
+    const items = [
+      {
+        id: 'item-1',
+        defects: [
+          { cycleIndex: 0, defectCatalog: { id: 'cat-a' } },
+          { cycleIndex: 1, defectCatalog: { id: 'cat-b' } }, // other unit
+          { cycleIndex: 0, defectCatalog: null, customText: 'loose thread' }, // custom
+        ],
+      },
+      { id: 'item-2', defects: [{ cycleIndex: 0, defectCatalog: { id: 'cat-c' } }] },
+    ];
+    expect([...taggedCatalogIds(items, { inspectionLoopItemId: 'item-1', cycleIndex: 0 })]).toEqual(
+      ['cat-a'],
+    );
+    expect(taggedCatalogIds(items, { inspectionLoopItemId: 'item-9', cycleIndex: 0 }).size).toBe(0);
   });
 });

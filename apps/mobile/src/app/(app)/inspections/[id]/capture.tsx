@@ -54,9 +54,12 @@ import {
   cachedUriForSlot,
   canSubmit,
   createQueuedPhoto,
+  defaultTagTarget,
   entryForSlot,
+  evidenceCursorsInUnit,
   filledCursors,
   frontier as frontierOf,
+  notesUnit,
   sameCursor,
   slotSequence,
   snapCursor,
@@ -64,7 +67,13 @@ import {
   type Cursor,
   type QueuedPhoto,
 } from '@/lib/capture-core';
-import { hashFile, photoQueue, stashCapture, summarize, type QueueSnapshot } from '@/lib/photo-queue';
+import {
+  hashFile,
+  photoQueue,
+  stashCapture,
+  summarize,
+  type QueueSnapshot,
+} from '@/lib/photo-queue';
 import { client } from '@/lib/session';
 
 type Load =
@@ -108,6 +117,8 @@ export default function Capture() {
   const [preview, setPreview] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<Sheet>('none');
+  /** Inspector's override of the shot a defect pins to; null = the default (see `defaultTagTarget`). */
+  const [tagTarget, setTagTarget] = useState<Cursor | null>(null);
   const [retakeMode, setRetakeMode] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -183,6 +194,26 @@ export default function Capture() {
   const myActive = useMemo(() => activeEntries(queue, inspectionId), [queue, inspectionId]);
   const inflight = myActive.find((q) => q.state === 'uploading');
 
+  // ── Unit notes: the sheet is about the unit that holds evidence ───────────
+  // A defect pins to a shot and the frontier moves the moment one is taken, so
+  // the sheet opened from the camera targets the shot just taken, not the
+  // empty slot under the viewfinder (device-pass defect, 2026-10-13).
+  const noteCycle = notesUnit(filled, cursor);
+  const noteTargets = evidenceCursorsInUnit(filled, noteCycle);
+  const tagCursor: Cursor | null =
+    tagTarget && noteTargets.some((c) => sameCursor(c, tagTarget))
+      ? tagTarget
+      : defaultTagTarget(filled, cursor);
+  const tagItem = tagCursor ? items[tagCursor.itemIndex] : undefined;
+  const tagSlot =
+    tagCursor && tagItem
+      ? { inspectionLoopItemId: tagItem.id, cycleIndex: tagCursor.cycleIndex }
+      : null;
+  const tagServerPhoto: PhotoDto | undefined = tagItem?.photos?.find(
+    (p) => p.cycleIndex === tagCursor?.cycleIndex,
+  );
+  const tagEntry = tagSlot ? entryForSlot(queue, inspectionId, tagSlot) : undefined;
+
   // ── Actions ───────────────────────────────────────────────────────────────
 
   async function capture() {
@@ -239,21 +270,26 @@ export default function Capture() {
   }
 
   async function tagDefect(catalogItem: DefectCatalogDto) {
-    if (!slot) return;
-    await post(`/inspections/${inspectionId}/populate/defects`, {
+    if (!tagSlot) return false;
+    return post(`/inspections/${inspectionId}/populate/defects`, {
       defectCatalogId: catalogItem.id,
       severity: catalogItem.defaultSeverity,
-      inspectionLoopItemId: slot.inspectionLoopItemId,
-      cycleIndex: slot.cycleIndex,
+      inspectionLoopItemId: tagSlot.inspectionLoopItemId,
+      cycleIndex: tagSlot.cycleIndex,
       clientRequestId: newDefectRequestId(),
     });
   }
 
+  function openUnitSheet() {
+    setTagTarget(null); // start from the default: the shot just taken, or the cursor's own
+    setSheet('unit');
+  }
+
   async function saveMeasurement(label: string, unit: string | undefined, value: string) {
-    const existing = measurementFor(inspection?.measurements, cursor.cycleIndex, label);
+    const existing = measurementFor(inspection?.measurements, noteCycle, label);
     if ((existing?.recordedValue ?? '') === value) return;
     await post(`/inspections/${inspectionId}/populate/measurements`, {
-      cycleIndex: cursor.cycleIndex,
+      cycleIndex: noteCycle,
       label,
       unit,
       recordedValue: value,
@@ -448,9 +484,7 @@ export default function Capture() {
                 : [
                     counts.uploading > 0 ? `${counts.uploading} uploading` : null,
                     counts.retrying > 0 ? `${counts.retrying} retrying` : null,
-                    counts.rejected > 0
-                      ? `${counts.rejected} rejected — retake or discard`
-                      : null,
+                    counts.rejected > 0 ? `${counts.rejected} rejected — retake or discard` : null,
                     counts.conflicts > 0
                       ? `${counts.conflicts} need${counts.conflicts === 1 ? 's' : ''} your decision`
                       : null,
@@ -551,14 +585,18 @@ export default function Capture() {
             </View>
           ) : null}
           {retakeMode ? (
-            <View style={[styles.pill, styles.pillBottomLeft, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+            <View
+              style={[styles.pill, styles.pillBottomLeft, { backgroundColor: 'rgba(0,0,0,0.6)' }]}
+            >
               <Text style={styles.pillText}>
                 Retaking · unit {cursor.cycleIndex + 1} · {currentItem?.itemName}
               </Text>
             </View>
           ) : null}
           {showCamera && !retakeMode && !locked && permission?.granted ? (
-            <View style={[styles.pill, styles.pillBottomLeft, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+            <View
+              style={[styles.pill, styles.pillBottomLeft, { backgroundColor: 'rgba(0,0,0,0.6)' }]}
+            >
               <Text style={styles.pillText}>Next shot</Text>
             </View>
           ) : null}
@@ -617,10 +655,7 @@ export default function Capture() {
           onPress={() => jumpTo(stepCursor(sequence, cursor, 1))}
           disabled={atFrontier || seqIndex < 0 || seqIndex >= sequence.length - 1}
           hitSlop={8}
-          style={[
-            styles.navBtn,
-            (atFrontier || seqIndex >= sequence.length - 1) && ui.dim,
-          ]}
+          style={[styles.navBtn, (atFrontier || seqIndex >= sequence.length - 1) && ui.dim]}
           accessibilityRole="button"
           accessibilityLabel="Next shot"
         >
@@ -668,7 +703,7 @@ export default function Capture() {
                 <Text style={ui.btnGhostLabel}>Retake</Text>
               </Pressable>
             ) : null}
-            <Pressable style={ui.btn} onPress={() => setSheet('unit')} accessibilityRole="button">
+            <Pressable style={ui.btn} onPress={openUnitSheet} accessibilityRole="button">
               <Text style={ui.btnLabel}>Defects & measurements</Text>
             </Pressable>
           </View>
@@ -686,7 +721,7 @@ export default function Capture() {
         ) : showCamera ? (
           <Pressable
             style={styles.sideBtn}
-            onPress={() => setSheet('unit')}
+            onPress={openUnitSheet}
             hitSlop={8}
             accessibilityRole="button"
           >
@@ -702,7 +737,9 @@ export default function Capture() {
           ? `${state.completedCycles} unit${state.completedCycles === 1 ? '' : 's'} complete`
           : ''}
         {target ? ` / ${target} target — end on any complete unit` : ''}
-        {counts.active > 0 ? `  ·  ${counts.active} ${offline ? 'waiting for network' : 'uploading'}` : ''}
+        {counts.active > 0
+          ? `  ·  ${counts.active} ${offline ? 'waiting for network' : 'uploading'}`
+          : ''}
       </Text>
 
       {/* Unit sheet: defects + measurements */}
@@ -715,9 +752,7 @@ export default function Capture() {
         <View style={ui.sheetBackdrop}>
           <View style={ui.sheetBody}>
             <View style={ui.sheetHandleRow}>
-              <Text style={ui.sheetTitle}>
-                Unit {cursor.cycleIndex + 1} · {currentItem?.itemName}
-              </Text>
+              <Text style={ui.sheetTitle}>Unit {noteCycle + 1}</Text>
               <Pressable onPress={() => setSheet('none')} hitSlop={8}>
                 <Text style={ui.link}>Done</Text>
               </Pressable>
@@ -726,18 +761,24 @@ export default function Capture() {
               <UnitSheet
                 catalog={load.kind === 'ready' ? load.catalog : []}
                 inspection={inspection!}
-                cursor={cursor}
-                canTag={!locked && Boolean(serverPhoto)}
-                pendingUpload={!serverPhoto && Boolean(slotEntry)}
+                cycleIndex={noteCycle}
+                justCompleted={noteCycle !== cursor.cycleIndex}
+                targets={noteTargets}
+                target={tagCursor}
+                onTarget={setTagTarget}
+                canTag={!locked && Boolean(tagServerPhoto)}
+                pendingUpload={!tagServerPhoto && Boolean(tagEntry)}
+                offline={offline}
                 busy={busy}
                 onTag={tagDefect}
                 onCustom={(text, sev) =>
-                  slot
+                  tagSlot
                     ? post(`/inspections/${inspectionId}/populate/defects`, {
                         customText: text,
                         severity: sev,
-                        inspectionLoopItemId: slot.inspectionLoopItemId,
-                        cycleIndex: slot.cycleIndex,
+                        inspectionLoopItemId: tagSlot.inspectionLoopItemId,
+                        cycleIndex: tagSlot.cycleIndex,
+                        clientRequestId: newDefectRequestId(),
                       })
                     : Promise.resolve(false)
                 }

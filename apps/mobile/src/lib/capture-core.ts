@@ -331,8 +331,7 @@ export interface ErrorLike {
  * automatically; permanent failures wait for a human.
  */
 export function classifyUploadError(e: unknown, online: boolean | null = null): FailureKind {
-  const err: ErrorLike =
-    typeof e === 'string' ? { message: e } : ((e as ErrorLike | null) ?? {});
+  const err: ErrorLike = typeof e === 'string' ? { message: e } : ((e as ErrorLike | null) ?? {});
   const status = typeof err.status === 'number' ? err.status : undefined;
   if (status !== undefined) {
     if (status === 408 || status === 425 || status === 429 || status >= 500) return 'transient';
@@ -341,7 +340,11 @@ export function classifyUploadError(e: unknown, online: boolean | null = null): 
   }
   if (online === false) return 'offline';
   const msg = `${err.name ?? ''} ${err.message ?? ''}`.toLowerCase();
-  if (/network request failed|failed to connect|unable to resolve host|enotfound|econnrefused|econnreset|network is unreachable|no address associated|software caused connection abort|socket/i.test(msg)) {
+  if (
+    /network request failed|failed to connect|unable to resolve host|enotfound|econnrefused|econnreset|network is unreachable|no address associated|software caused connection abort|socket/i.test(
+      msg,
+    )
+  ) {
     return online === null ? 'offline' : 'transient';
   }
   if (/missing on this device/i.test(msg)) return 'permanent';
@@ -419,11 +422,13 @@ export function selectNextUpload(
  * Milliseconds until the earliest backed-off failure is due; null when none.
  * Permanent failures never come due.
  */
-export function nextRetryDelay(queue: readonly QueuedPhoto[], now: number = Date.now()): number | null {
+export function nextRetryDelay(
+  queue: readonly QueuedPhoto[],
+  now: number = Date.now(),
+): number | null {
   const due = queue
     .filter(
-      (q) =>
-        q.state === 'failed' && q.nextAttemptAt !== undefined && q.failureKind !== 'permanent',
+      (q) => q.state === 'failed' && q.nextAttemptAt !== undefined && q.failureKind !== 'permanent',
     )
     .map((q) => Math.max(0, (q.nextAttemptAt as number) - now));
   return due.length ? Math.min(...due) : null;
@@ -554,7 +559,11 @@ export function stepCursor(sequence: readonly Cursor[], cursor: Cursor, dir: 1 |
  * Keep a cursor that is still legal (a filled slot or the frontier); otherwise
  * — its unit was discarded, or the flow just landed — snap it to the frontier.
  */
-export function snapCursor(sequence: readonly Cursor[], frontierCursor: Cursor, cursor: Cursor): Cursor {
+export function snapCursor(
+  sequence: readonly Cursor[],
+  frontierCursor: Cursor,
+  cursor: Cursor,
+): Cursor {
   return sequence.some((c) => sameCursor(c, cursor)) ? cursor : frontierCursor;
 }
 
@@ -575,6 +584,65 @@ export function retreatCursor(itemCount: number, cursor: Cursor): Cursor {
     return { cycleIndex: cursor.cycleIndex - 1, itemIndex: itemCount - 1 };
   }
   return cursor;
+}
+
+// ── Unit notes: which unit, which shot a defect pins to ─────────────────────
+
+/** The shots of one unit, in item order — the only legal targets for a defect tag. */
+export function evidenceCursorsInUnit(filled: readonly Cursor[], cycleIndex: number): Cursor[] {
+  return filled
+    .filter((c) => c.cycleIndex === cycleIndex)
+    .sort((a, b) => a.itemIndex - b.itemIndex);
+}
+
+/**
+ * Which unit the notes sheet is about. The cursor's, while that unit holds a
+ * shot. When the cursor stands on item 1 of a unit with no shots yet — the
+ * frontier right after a unit was completed — it is the unit just finished:
+ * that is what the inspector has evidence for and still needs to annotate.
+ * Falls back to the cursor's unit before the very first shot.
+ */
+export function notesUnit(filled: readonly Cursor[], cursor: Cursor): number {
+  if (evidenceCursorsInUnit(filled, cursor.cycleIndex).length > 0) return cursor.cycleIndex;
+  let latest = -1;
+  for (const c of filled) {
+    if (c.cycleIndex < cursor.cycleIndex && c.cycleIndex > latest) latest = c.cycleIndex;
+  }
+  return latest >= 0 ? latest : cursor.cycleIndex;
+}
+
+/**
+ * Where a defect tag lands by default. The API refuses a tag on a slot without
+ * a photo, and the frontier follows a capture immediately — so an inspector
+ * standing on the next empty slot is almost always reporting what they saw on
+ * the shot they just took. The cursor's own slot when it holds a shot; else
+ * the last shot before it in the notes unit; else that unit's last shot; null
+ * before the first shot.
+ */
+export function defaultTagTarget(filled: readonly Cursor[], cursor: Cursor): Cursor | null {
+  const unit = notesUnit(filled, cursor);
+  const shots = evidenceCursorsInUnit(filled, unit);
+  if (shots.some((c) => sameCursor(c, cursor))) return cursor;
+  const before =
+    unit === cursor.cycleIndex ? shots.filter((c) => c.itemIndex < cursor.itemIndex) : shots;
+  const pool = before.length ? before : shots;
+  return pool[pool.length - 1] ?? null;
+}
+
+/** Minimal item shape the tag-state read needs from the server payload. */
+export interface ServerItemDefects {
+  id: string;
+  defects?: { cycleIndex?: number | null; defectCatalog?: { id: string } | null }[];
+}
+
+/** Catalog defects already recorded on one slot — the chips that render as selected. */
+export function taggedCatalogIds(items: readonly ServerItemDefects[], slot: SlotRef): Set<string> {
+  const out = new Set<string>();
+  const item = items.find((i) => i.id === slot.inspectionLoopItemId);
+  for (const d of item?.defects ?? []) {
+    if (d.cycleIndex === slot.cycleIndex && d.defectCatalog?.id) out.add(d.defectCatalog.id);
+  }
+  return out;
 }
 
 // ── The submit gate ─────────────────────────────────────────────────────────

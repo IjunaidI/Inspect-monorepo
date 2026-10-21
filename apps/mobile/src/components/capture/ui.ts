@@ -10,7 +10,8 @@ import { StyleSheet } from 'react-native';
 import type { FailureKind, QueuedPhotoState } from '@/lib/capture-core';
 
 export const SEVERITIES: DefectSeverity[] = ['CRITICAL', 'MAJOR', 'MINOR'];
-export const TINT: Record<DefectSeverity, { fg: string; bg: string }> = {
+/** Severity presentation for chips: `dot` marks an available tag, `fg`/`bg` a recorded one. */
+export const TINT: Record<DefectSeverity, { fg: string; bg: string; dot: string }> = {
   CRITICAL: severityTint.critical,
   MAJOR: severityTint.major,
   MINOR: severityTint.minor,
