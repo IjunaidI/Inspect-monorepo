@@ -55,7 +55,14 @@ function sha256Hex(data: string): string {
 
 export function presignS3Url(opts: PresignOptions): string {
   const url = new URL(opts.endpoint);
-  const host = url.host;
+  // Virtual-hosted style names the bucket in the host (bucket.endpoint). Without
+  // this the bucket appeared nowhere in the URL and the provider answered 403.
+  // An endpoint that already carries the bucket subdomain is used as-is.
+  const virtualHosted = opts.forcePathStyle === false;
+  const host =
+    virtualHosted && !url.host.startsWith(`${opts.bucket}.`)
+      ? `${opts.bucket}.${url.host}`
+      : url.host;
   const amzDate = opts.now
     .toISOString()
     .replace(/[-:]/g, '')
@@ -63,11 +70,10 @@ export function presignS3Url(opts: PresignOptions): string {
   const dateStamp = amzDate.slice(0, 8);
   const scope = `${dateStamp}/${opts.region}/s3/aws4_request`;
 
-  // Path-style canonical URI (bucket in the path). Slashes in the key are kept.
-  const canonicalUri =
-    opts.forcePathStyle === false
-      ? '/' + uriEncode(opts.key, false)
-      : '/' + uriEncode(opts.bucket, false) + '/' + uriEncode(opts.key, false);
+  // Path style puts the bucket in the URI; virtual-hosted, in the host. Slashes in the key are kept.
+  const canonicalUri = virtualHosted
+    ? '/' + uriEncode(opts.key, false)
+    : '/' + uriEncode(opts.bucket, false) + '/' + uriEncode(opts.key, false);
 
   const params: Record<string, string> = {
     'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',

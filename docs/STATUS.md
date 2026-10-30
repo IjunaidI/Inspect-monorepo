@@ -1,8 +1,8 @@
 # Project Status — Inspect
 
-> **Last verified: 2026-10-13** (mobile only — tsc, lint, 55 Vitest tests and a rebuilt APK after the
-> capture-sheet fixes in device-pass item 5; the last full sweep of every gate was 2026-09-12). This is the
-> source-of-truth dashboard: current state only.
+> **Last verified: 2026-10-30** (INS-110: storage signer specs 58/58, populate + storage 121/121, api + mobile
+> type-check, mobile tests, plus a live read-only bucket probe; mobile capture-sheet fixes 2026-10-13; the
+> last full sweep of every gate was 2026-09-12). This is the source-of-truth dashboard: current state only.
 > The long per-session history that used to stack here was trimmed 2026-09-02 — it lives in git
 > history (`git log -- docs/STATUS.md`) and in the backlog archive
 > ([done/2026-09-02-backlog-archive.md](done/2026-09-02-backlog-archive.md)). Open work:
@@ -11,7 +11,53 @@
 
 ## Where the project stands
 
-**Latest (2026-09-12): the design revamp has started — Phase 0 (mockups + docs) and Phase 1 (tokens v2)
+**Latest (2026-10-30): mobile photo-upload 403 fixed in Railway ([INS-110](future/BACKLOG.md)); one device check left.**
+Cause: `Main Application`'s `S3_ACCESS_KEY_ID`/`S3_SECRET_ACCESS_KEY` no longer matched the
+`assembled-basket` bucket, so every presigned PUT/GET was refused with 403 `SignatureDoesNotMatch`.
+Shown by our signer and by curl's independent `--aws-sigv4` alike; the API cannot 403 an inspector on
+populate. The user re-pointed both at the bucket's credentials (`${{assembled-basket.…}}`
+references); redeploy `7923bd28` succeeded and the read-only probe now returns **404 `NoSuchKey`**
+(credentials accepted). **Unverified:** an actual capture reaching `uploaded` on a phone.
+Incidental code fixes, committed and pushed 2026-10-30 together with the INS-102 work below: `sigv4.ts` virtual-hosted mode
+never put the bucket in the host (not the cause; fixed and pinned to AWS's reference vector; storage
+58/58, populate + storage 121/121, api + mobile type-check, mobile 46/46), and the mobile PUT error
+now carries S3's `<Code>`.
+
+**Before that (2026-09-24): the first APK is built — [INS-102](future/BACKLOG.md) is done.** The user
+asked to resolve the blockers and install what was required, so the Mac now carries JDK 17 and the
+Android SDK (platform 36, build-tools 36, NDK 27.1, CMake) via Homebrew, and
+`expo prebuild` + `gradlew assembleRelease` produced `com.donanlumina.inspect` 0.1.0 (versionCode 1,
+139 MB universal, debug-keystore signed) with the Railway origins verified inside the Hermes bundle.
+The two remaining INS-102 code items landed in the same pass: `config.ts` now throws at launch in a
+release build when the API origin is unset or not https, and `src/app/_layout.tsx` exports a root
+`ErrorBoundary`; the LAN IP left the `development` EAS profile. Mobile type-check/lint/46 tests green
+after the edits; incremental rebuild 27 s. **Not yet done:** installing it on a phone (the INS-086
+ledger walk), `eas login` for the cloud path, and everything from the review below. The review doc, backlog/STATUS edits
+and the `apps/mobile` changes were committed and pushed 2026-10-30; the generated
+`apps/mobile/android/` directory is gitignored.
+
+**Before that (2026-09-22): release-readiness review done; the APK export was blocked on an Expo login.**
+The account owner asked for the APK and a high-level review of the whole app. Four parallel review
+passes (mobile shell/auth/config · capture loop + photo queue · CRUD screens vs the API contract ·
+API + web console) are written up in
+[in-progress/2026-09-22-release-readiness-review.md](in-progress/2026-09-22-release-readiness-review.md)
+and filed as **[INS-102 … INS-109](future/BACKLOG.md)** (two BLOCKERs, four HIGH, two MEDIUM).
+Headline: invariant drift between mobile and API is **zero** and the wire contract is clean, but
+(a) the evidence chain trusts a client-asserted `storageKey`/`contentHash` (INS-103), (b) the console
+serves demo fixtures during a real outage (INS-104), (c) the photo queue can erase unsent photos on
+a corrupt relaunch and never drains on cold start (INS-105), and (d) an expired session strands the
+user on every non-list screen (INS-106). **Fixed this session (INS-102):** an EAS build of a clean
+checkout could not resolve the shared packages (`dist/` is gitignored) → `eas-build-post-install`
+now builds them (proven locally); `android.package` / `ios.bundleIdentifier` =
+`com.donanlumina.inspect`; app version 0.1.0. **Verified on this Mac (fresh checkout, first
+`pnpm install`):** mobile type-check + lint clean, 46/46 Vitest, `expo export --platform android`
+green (4.7 MB Hermes bundle with the Railway origins baked in), `expo config` resolves the
+identifiers; expo-doctor only reports 19 patch-level package updates. **Not done:** the APK — this
+Mac has no Expo login, no Java and no Android SDK; `eas build` stops at "An Expo user account is
+required". Options are in the backlog's "Needs a human" #1. Nothing is committed yet: the review doc,
+the backlog/STATUS edits and the three `apps/mobile` config edits are uncommitted on `main`.
+
+**Before that (2026-09-12): the design revamp has started — Phase 0 (mockups + docs) and Phase 1 (tokens v2)
 are committed on local `main` (see Repository state below).** The account owner approved a master plan to re-skin the whole app
 mobile-first in the look of the reference they supplied (`design/*.html`: cream canvas, forest-green
 primary, sand + gold, Inter + Libre Baskerville + JetBrains Mono, 12px radius, bordered cards, Solar icons),
@@ -232,7 +278,14 @@ Library / Profile, sign-out → sign-in through the guard, invite deep link.
   `vitest.config.mts` — Next's tsconfig says `jsx: preserve`, which Vite 8 would otherwise obey — and a
   `// @vitest-environment jsdom` pragma per component test file; the server-side suite stays on `node`.
 
-## Open backlog (10 items)
+## Open backlog (18 items)
+
+**The 2026-09-22 review:** BLOCKER — [INS-102](future/BACKLOG.md) release pipeline (build half
+done) · [INS-103](future/BACKLOG.md) server-owned storage keys + verified hashes. HIGH —
+[INS-104](future/BACKLOG.md) web demo fallback · [INS-105](future/BACKLOG.md) photo-queue
+durability · [INS-106](future/BACKLOG.md) session lifecycle · [INS-107](future/BACKLOG.md) token
+revocation / password reset / deploy re-seed. MEDIUM — [INS-108](future/BACKLOG.md) 50-row caps +
+stale lists · [INS-109](future/BACKLOG.md) API hardening.
 
 **The design revamp (2026-09-12):** done — [INS-094](future/BACKLOG.md) tokens v2 + frozen report
 palette · [INS-095](future/BACKLOG.md) mobile foundation · [INS-097](future/BACKLOG.md) capture-point
@@ -246,10 +299,12 @@ epic (the on-device acceptance pass on a physical phone — the visual pass fold
 
 ## Next steps, in order
 
-1. `git push` — deploys the API to Railway. **Do this soon:** the shared dev DB already carries the
-   `CatalogScope` enum rename and the `capture_points` table, while the deployed API still runs the
-   pre-rename Prisma client — `/defect-catalog` writes on the remote API may fail until it redeploys.
-2. **Phase 5 (INS-098)** the drag-and-drop loop builder on top of the library and the kit
+1. **Install the APK on a phone and walk the ledger (INS-086).** Commit the 2026-09-22/24 review +
+   INS-102 edits. For a cloud build later, `eas login` on this machine.
+2. **INS-105 + INS-106** before the device pass goes to a field pilot; **INS-103 + INS-104** before
+   any customer sees a report or the console.
+3. (`git push` of the 2026-09-12 work is done — `main` is in sync with `origin/main`.)
+4. **Phase 5 (INS-098)** the drag-and-drop loop builder on top of the library and the kit
    (`react-native-sortables`, chooser sheet, custom → library, edit sheet with the accessible
    Move up/down). Then Phase 6 (capture/review/report re-skin), 7 (remaining screens + shim cleanup),
    8 (web), 9 (device pass).

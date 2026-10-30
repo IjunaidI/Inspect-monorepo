@@ -35,6 +35,35 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - verify: A secret scan of tracked files + history finds no live credential; any keypair that ever appeared in a commit is rotated/revoked.
 - refs: [../done/2026-09-02-backlog-archive.md](../done/2026-09-02-backlog-archive.md) (full history)
 
+### INS-102 · Mobile release pipeline cannot build a clean checkout   [BLOCKER]
+- status: done
+- done: 2026-09-24 — **first APK built** (`com.donanlumina.inspect` 0.1.0, versionCode 1, 139 MB universal, debug-keystore signed, Railway origins baked in and verified inside the Hermes bundle) locally on the Mac: JDK 17 + Android command-line tools via Homebrew, SDK platform 36 / build-tools 36 / NDK 27.1 / CMake 3.22 (licences accepted on the user's instruction), `expo prebuild --platform android` + `gradlew assembleRelease` (16m48s cold, 27s incremental). In code: `eas-build-post-install` builds the shared packages (proven locally); `android.package` + `ios.bundleIdentifier`; version 0.1.0; `config.ts` throws at launch in a release build when `EXPO_PUBLIC_INSPECT_API_URL` is unset or not https (and strips trailing slashes); root `ErrorBoundary` in `src/app/_layout.tsx` (kit `ErrorState` + retry); the hard-coded LAN IP is gone from the `development` profile. Deferred to INS-101: `userInterfaceStyle: automatic` on a light-only theme. The EAS cloud path still needs `eas login` on this machine; the local path is now the documented fallback (`docs/reference` note in STATUS).
+- area: Mobile / Infra
+- evidence: `packages/*/package.json` ship `main: dist/index.js` with `dist/` gitignored and no EAS hook; `apps/mobile/app.json` had no identifiers; `apps/mobile/src/lib/config.ts:8` falls back to `http://localhost:3000`; `eas.json:11-12`.
+- problem: An EAS cloud build died on `Cannot find module '@inspect/shared-types'` before any device was involved, and `--non-interactive` refused to run without identifiers. A profile missing `EXPO_PUBLIC_INSPECT_API_URL` ships a binary that silently calls localhost (and plain `http://` is blocked in release anyway).
+- fix: (done) hook + identifiers + version. (open) `config.ts` throws or renders a config-error screen when the URL is unset outside `__DEV__` and refuses non-https in release; drop the `env` block from the `development` profile; export `ErrorBoundary` from `src/app/_layout.tsx`.
+- verify: `eas build --profile preview --platform android` produces an installable APK that signs in against Railway; a build with the URL unset fails visibly instead of calling localhost.
+- refs: [../in-progress/2026-09-22-release-readiness-review.md](../in-progress/2026-09-22-release-readiness-review.md) §1 · INS-086
+
+### INS-103 · Evidence chain is anchored on client-asserted `storageKey` + `contentHash`   [BLOCKER]
+- status: todo
+- area: Populate / Storage / Reports
+- evidence: `apps/api/src/populate/populate.service.ts:222-260` (register) and `:336-372` (retake) persist `input.storageKey` and `input.contentHash` verbatim; no check that the key lies under `orgs/{orgId}/inspections/{id}/photos/`; the hash is never recomputed from the object; `populate.controller.ts:36` floors at `INSPECTOR` (CLAUDE.md's "Platform-Admin-only" is stale).
+- problem: Any inspector can register a photo row — and have a report signed — over a key that holds no bytes, holds different bytes than the hash claims, or belongs to another inspection/org they learned the key of. The tamper-proof claim covers a client assertion, not the evidence.
+- fix: `presign` returns an opaque presign id; `register` looks the key up server-side (bound to inspection + actor, single-use, TTL) and HEADs/streams the object to compute `contentHash` before the row is written; reject on mismatch. Same for retake and the preset/company image paths.
+- verify: Integration test: register with a foreign key → 400/403; register with a wrong hash → 409; the happy path's stored hash equals sha256 of the object bytes.
+- refs: [../in-progress/2026-09-22-release-readiness-review.md](../in-progress/2026-09-22-release-readiness-review.md) §5 · INS-109 (presigned PUT constraints)
+
+### INS-110 · Mobile photo uploads rejected 403 by object storage   [BLOCKER]
+- status: in-progress (credentials fixed; awaiting an on-device capture)
+- done: 2026-10-30 — the user re-pointed `Main Application`'s `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` at the `assembled-basket` credentials (Railway dashboard, `${{assembled-basket.…}}` references); redeploy `7923bd28` SUCCESS 20:57 +05:00. Re-probe with the deployed variables: **404 `NoSuchKey`** from both our signer and curl `--aws-sigv4` (was 403 `SignatureDoesNotMatch`). Not yet seen: a real capture reaching `uploaded` on a device.
+- area: Storage / Infra
+- evidence: 2026-10-30 read-only probes against the deployed config (`S3_ENDPOINT=https://t3.storageapi.dev`, bucket `assembled-basket-ejvlgjkf`, `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=true`): a presigned GET of a missing key answers **403 `SignatureDoesNotMatch`** in path and virtual-hosted style, for region `auto` and `us-east-1`, from both our signer and **curl's independent `--aws-sigv4`**. The signer itself reproduces AWS's published reference URL byte for byte. The key ID is accepted and the secret does not match it, so the `S3_*` credentials on `Main Application` are stale (most likely the bucket's credentials were regenerated after they were copied). The API cannot 403 an inspector on populate: the floor is `INSPECTOR`, and a foreign or unassigned inspection is a 404.
+- problem: Every presigned PUT is refused, so no captured photo reaches the server. Presigned GETs (`viewUrl`) and report PDF uploads fail the same way.
+- fix: (open) Point `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` (and ideally all `S3_*`) on `Main Application` at the bucket's current credentials (Credentials tab), preferably as `${{assembled-basket.…}}` reference variables so a rotation cannot drift again. Then redeploy. (done, incidental) `sigv4.ts` virtual-hosted mode never put the bucket in the host; fixed and pinned to the AWS reference vector, not the cause here. The mobile PUT error now includes S3's `<Code>`.
+- verify: The read-only probe returns 404 `NoSuchKey` instead of 403; an inspector's capture reaches `uploaded` and shows in the populate read with a working `viewUrl`.
+- refs: INS-002 (secret rotation) · INS-105 · INS-090
+
 ---
 
 ## High
@@ -146,6 +175,42 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - verify: Both platforms render every kit component in dark without a hardcoded light hex.
 - refs: as INS-094
 
+### INS-104 · Console serves demo data during a real outage   [HIGH]
+- status: todo
+- area: Web console
+- evidence: `apps/web/lib/api.ts:174-185` `loadOrFallback` returns the design fixtures on any network error or 5xx with no environment gate; `docs/reference/deploy-railway.md` already records one incident of the console "silently running on demo data".
+- problem: A customer hitting the console during an API incident sees plausible fake inspections, reports and pass rates.
+- fix: Fall back only when `NODE_ENV !== 'production'` (or an explicit `INSPECT_DEMO_FALLBACK=1`); otherwise render an explicit "API unreachable" state. Keep the `live` flag so the demo banner still works in dev.
+- verify: With the API down and `NODE_ENV=production`, every console screen shows an error state and no fixture row.
+- refs: [../in-progress/2026-09-22-release-readiness-review.md](../in-progress/2026-09-22-release-readiness-review.md) §5
+
+### INS-105 · Photo queue can lose or strand evidence on a real device   [HIGH]
+- status: todo
+- area: Mobile / Capture
+- evidence: `apps/mobile/src/lib/photo-queue.ts:80-87` (`saveQueue` non-atomic, failures swallowed), `:282-287` (`reconcile` deletes every unreferenced file in `captures/`), `capture-core.ts:663-686` (corrupt queue → `[]`), `:337-340` (any 4xx → `permanent`), `:558-564` (singleton built lazily by capture/review only); `capture.tsx:734-743` (custom defect has no `clientRequestId`), `:504-513` (permission dead end), `:113,375,502` (`cameraReady` never resets); `session.ts:108-113` (sign-out ignores the queue).
+- problem: A kill mid-write or disk-full turns every unsent photo into an "orphan" and erases it; offline shots never drain after an app kill until that inspection is reopened; a failed refresh marks every photo "Rejected" and reconnect never revives them; a retried custom-defect tap double-counts; `uploaded` cache records are never reconciled with the server (ghost "Saved" slots after a web-side discard); a denied camera permission with `canAskAgain=false` has no way out; the first shutter after Prev fails; the previous user's queue and bytes survive sign-out.
+- fix: write-then-rename with a checksum; adopt unreferenced captures as `failed/permanent` instead of deleting; construct + `kick()` the queue from the signed-in root layout; classify 401/403 as `auth` (transient, paused while signed out); mint `newDefectRequestId()` for custom defects; reconcile `uploaded` records against each populate fetch; `Linking.openSettings()` on the permission screen; reset `cameraReady` on unmount; namespace the queue by user and pause it on sign-out. Add `PhotoQueueManager` tests over the injectable `QueueIo`.
+- verify: Kill the app mid-upload with a truncated queue file → relaunch shows every photo still pending; shoot offline, kill, relaunch on Home → the strip drains without opening capture; expire the session mid-loop → photos stay pending, sign in → they upload.
+- refs: [../in-progress/2026-09-22-release-readiness-review.md](../in-progress/2026-09-22-release-readiness-review.md) §3 · INS-093 (the hardening this builds on)
+
+### INS-106 · Session lifecycle strands users outside the list screens   [HIGH]
+- status: todo
+- area: Mobile / api-client
+- evidence: only the tab/list screens map 401 → sign-out (`(tabs)/index.tsx:156-163`, `inspections.tsx:69-73`); `capture.tsx`, `review.tsx`, `report.tsx`, `presets/[id].tsx`, `presets/new.tsx`, `inspections/new.tsx`, every detail screen and every save/archive/invite handler do not; `session.ts:29-44` runs one `/auth/refresh` per concurrent caller; `session-context.tsx:26-30` never re-reads `/auth/me`; `packages/api-client/src/client.ts:110-120` has no timeout and no refresh-on-401.
+- problem: After the 30-day refresh TTL (or a secret rotation) a user mid-capture gets "Unauthorized" with a Retry that can never succeed; Home fires three refreshes at once against a throttled endpoint; a promoted user stays locked out of Library/Team until sign-out; a stalled socket leaves a spinner forever.
+- fix: one `handleApiFailure(e)` in `lib/errors.ts` (401 → sign out + `router.replace('/login')`), used by every screen; memoize the in-flight refresh promise; `GET /auth/me` on boot/foreground when online and on any 403; `timeoutMs` (default 20 s) via `AbortController` in `api-client` + one refresh-and-replay on 401 through the injected provider.
+- verify: Expire the refresh token on any screen → lands on login with a toast; three concurrent calls → one `/auth/refresh`; promote a user server-side, foreground the app → the Library tab appears; a hung request → `ApiError` after 20 s.
+- refs: [../in-progress/2026-09-22-release-readiness-review.md](../in-progress/2026-09-22-release-readiness-review.md) §2 · INS-107 (server side of the same story)
+
+### INS-107 · Account lifecycle: tokens never revoke, no password reset, deploys re-seed the admin   [HIGH]
+- status: todo
+- area: Auth / Infra
+- evidence: `apps/api/src/auth/auth.service.ts:89-111` (stateless 30-day refresh, no rotation, no revoke path, no `tokenVersion`); no controller exposes a password change/reset (`grep` over `src/**/*.controller.ts`); `apps/api/railway.json` `preDeployCommand` runs `prisma db seed` on every deploy with `BOOTSTRAP_ADMIN_*` set, and `Dockerfile:45` ships devDependencies (`ts-node`) into the image.
+- problem: A leaked phone token is 30 days of access with no way to cut it off; deactivating or demoting a user takes effect only when the access token expires; a customer who forgets their password needs a platform admin to delete and re-invite them; any change to the bootstrap account is reverted on the next deploy.
+- fix: persist a refresh-token family (jti + hash, rotate on use, revoke on sign-out/deactivate/role change) and add `POST /auth/logout`; `POST /auth/forgot` + tokened reset + `PATCH /auth/password`, audited; seed reference data only in the release step and unset `BOOTSTRAP_ADMIN_*` after first boot; prune devDependencies from the runtime image.
+- verify: Sign out → the old refresh token 401s; deactivate a user → their next request 401s within one access TTL; a reset e-mail round-trip works; a redeploy leaves a changed admin password intact.
+- refs: [../in-progress/2026-09-22-release-readiness-review.md](../in-progress/2026-09-22-release-readiness-review.md) §5 · INS-002
+
 ---
 
 ## Medium
@@ -159,6 +224,24 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 - fix: Decide what "signed by" means first — the QA Manager who made the binding decision is the honest answer, and `AqlResult.decidedByUserId` already records it. Either resolve that id to a name on the report read, or add `generatedByUserId` to `Report` and set it in `generate()`. Do NOT backfill onto existing rows and do NOT touch `canonicalSnapshot`/`contentHash`/`signature` — a presentation fix on top of signed data, not a change to it.
 - verify: A generated report shows a real person's name in the tamper-proof block; `GET /reports/verify/:token` still returns `valid:true` for reports signed before and after; `wire-contract.spec.ts` stays green.
 - refs: found by `apps/api/src/common/wire-contract.spec.ts` · archive: INS-038 (signature coverage), INS-039 (audit actor identity)
+
+### INS-108 · Every unpaged list silently caps at 50 rows; lists go stale   [MEDIUM]
+- status: todo
+- area: Mobile / API
+- evidence: `apps/api/src/common/list-query.ts:27-35` defaults `take` to 50; mobile calls `/companies`, `/products`, `/loop-presets`, `/users` with no `take`/`skip` (`purchase-orders/new.tsx:49-52`, `companies/[id]/index.tsx:55`, `presets/index.tsx:45`, `users.tsx:90`); `companies/index.tsx:171,259` + `products/index.tsx:137,214` hide the footer when the Archived filter empties page 1; `reports.tsx:44` hard-caps at 50; `purchase-orders.controller.ts:25-28` takes no query params; no `useFocusEffect` anywhere, so lists behind a create/archive stay stale.
+- problem: The 51st company/product/preset/member does not exist in any picker; an org whose archived rows fall past page 1 sees "No companies…" with no way to page; a just-archived row still shows behind `router.back()`.
+- fix: page pickers until a short page (or `take=100` + a "more exist" affordance); gate the footer on `hasNext` alone; `useFocusEffect` re-fetch on every list; `parseListQuery` on the PO endpoint; load-more on reports; `Number.isFinite` on GPS inputs; stable `keyOf` in `OptionPicker`.
+- verify: Seed 60 companies → all 60 selectable; archive the only archived-on-page-2 company → still reachable; archive from detail → the list behind no longer shows it.
+- refs: [../in-progress/2026-09-22-release-readiness-review.md](../in-progress/2026-09-22-release-readiness-review.md) §4
+
+### INS-109 · API hardening before a paying customer   [MEDIUM]
+- status: todo
+- area: API / Storage / Reports
+- evidence: `apps/api/src/storage/sigv4.ts:77` signs only `host` (no content-length/type); no `ValidationPipe`/DTO validation anywhere (`grep` over `src`); `reports.controller.ts:57-61` public verify has no throttle and `Report.verificationToken` is a `cuid()`; `reports.service.ts:261-262,646-651` single signing key, no `kid` in the payload; `users.service.ts:112` / `invitations.service.ts:52` password policy is length ≥ 8; `deploy-railway.md:76` runs the API with `NODE_ENV=development` (re-enables `/docs`); no helmet on the API, no `headers()` in `apps/web/next.config.ts`; `JwtAuthGuard.ts:59-62` accepts any `X-Org-Id` string; `inspections.service.ts:161-284` `create`, `users.service.ts:27-46` invite and login/refresh append no audit row (CLAUDE.md's "2 services audited" is stale — it is 13).
+- problem: A 15-minute presigned PUT accepts a multi-GB object of any MIME type; JSON columns accept unbounded payloads; verify tokens are guessable and unthrottled; rotating the signing key would invalidate every historical report; the inspection's origin is the one state change with no audit row.
+- fix: sign `content-type` + `content-length`, cap size, restrict to image types; global `ValidationPipe({ whitelist: true })` with DTO classes (or zod at the boundary); throttle verify and mint tokens with `randomUUID()`; embed `kid` in the canonical payload (v3) + a public-key ring; breached-password check + per-account backoff; remove the `NODE_ENV` override, add helmet + CSP; 404 an unknown `X-Org-Id`; audit `create`, `invite`, login/refresh.
+- verify: A presigned PUT of a 20 MB `text/html` object is rejected; `POST /companies` with an unknown field is 400; verify is rate-limited; a key rotation keeps old reports `valid:true`; `AuditLog` has a row for every `POST /inspections`.
+- refs: [../in-progress/2026-09-22-release-readiness-review.md](../in-progress/2026-09-22-release-readiness-review.md) §5 · INS-103 · INS-006 (archive)
 
 ---
 
@@ -223,8 +306,12 @@ Severity: **BLOCKER** = must clear before any real deploy · **HIGH** = core MVP
 > Nothing here is blocked on engineering. Each needs a credential or a decision only the account owner has.
 
 1. **[INS-086](BACKLOG.md) device pass** — the API is deployed and `eas.json` carries the real origins
-   ([INS-090](BACKLOG.md) done 2026-09-02); run `eas build --profile preview --platform android`
-   (`eas` is already authenticated) and walk the ledger on a phone.
+   ([INS-090](BACKLOG.md) done 2026-09-02); **the first APK exists** ([INS-102](BACKLOG.md) done
+   2026-09-24, built locally — the Mac now has JDK 17 + the Android SDK; the EAS cloud path still
+   needs `eas login` on this machine). Install it on a phone and walk the ledger. Rebuild with
+   `cd apps/mobile && EXPO_PUBLIC_INSPECT_API_URL=… EXPO_PUBLIC_INSPECT_WEB_URL=… npx expo prebuild
+   --platform android --no-install && cd android && ./gradlew assembleRelease` (JAVA_HOME =
+   `/opt/homebrew/opt/openjdk@17`, ANDROID_HOME = `/opt/homebrew/share/android-commandlinetools`).
 2. **[INS-002](BACKLOG.md)** — rotate the QCLink credentials (DB, Redis, S3, JWT secrets — the user
    has said everything will be rotated after INS-090; the remote signing key is already fresh) and
    decide on the git-history scrub.

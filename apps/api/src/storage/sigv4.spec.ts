@@ -70,3 +70,54 @@ describe('presignS3Url method generalization (INS-049)', () => {
     expect(presignS3Url(opts)).toBe(presignS3Url({ ...opts }));
   });
 });
+
+describe('virtual-hosted style (forcePathStyle: false)', () => {
+  // AWS's published SigV4 query-string example ("Authenticating Requests:
+  // Using Query Parameters"): GET examplebucket/test.txt. An independent
+  // vector — if this passes, the signer agrees with S3 byte for byte.
+  const aws: PresignOptions = {
+    endpoint: 'https://s3.amazonaws.com',
+    region: 'us-east-1',
+    bucket: 'examplebucket',
+    key: 'test.txt',
+    accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+    expiresSeconds: 86400,
+    now: new Date('2013-05-24T00:00:00.000Z'),
+    forcePathStyle: false,
+    method: 'GET',
+  };
+
+  it('matches the AWS reference presigned URL', () => {
+    expect(presignS3Url(aws)).toBe(
+      'https://examplebucket.s3.amazonaws.com/test.txt' +
+        '?X-Amz-Algorithm=AWS4-HMAC-SHA256' +
+        '&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request' +
+        '&X-Amz-Date=20130524T000000Z&X-Amz-Expires=86400&X-Amz-SignedHeaders=host' +
+        '&X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404',
+    );
+  });
+
+  it('puts the bucket in the host, not the path', () => {
+    const url = new URL(
+      presignS3Url({
+        ...base,
+        endpoint: 'https://storage.railway.app',
+        forcePathStyle: false,
+      }),
+    );
+    expect(url.host).toBe('inspect-photos.storage.railway.app');
+    expect(url.pathname).toBe('/orgs/o1/inspections/i1/photos/abc.jpg');
+  });
+
+  it('does not prefix the bucket twice when the endpoint already carries it', () => {
+    const url = new URL(
+      presignS3Url({
+        ...base,
+        endpoint: 'https://inspect-photos.storage.railway.app',
+        forcePathStyle: false,
+      }),
+    );
+    expect(url.host).toBe('inspect-photos.storage.railway.app');
+  });
+});

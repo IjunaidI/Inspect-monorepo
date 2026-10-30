@@ -153,7 +153,10 @@ export function defaultIo(): QueueIo {
         signal,
       });
       if (res.status < 200 || res.status >= 300) {
-        throw new Error(`storage PUT failed (${res.status})`);
+        // S3 explains a rejection in an XML <Code> (SignatureDoesNotMatch,
+        // AccessDenied, NoSuchBucket…); a bare status left a 403 undiagnosable.
+        const code = /<Code>([^<]+)<\/Code>/.exec(res.body ?? '')?.[1];
+        throw new Error(`storage PUT failed (${res.status}${code ? ` ${code}` : ''})`);
       }
     },
     register: (inspectionId, input) =>
