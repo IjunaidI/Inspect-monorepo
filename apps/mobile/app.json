@@ -2,16 +2,18 @@
   "expo": {
     "name": "Inspect",
     "slug": "inspect",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "inspect",
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#FDFCF8",
     "ios": {
+      "bundleIdentifier": "com.donanlumina.inspect",
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.donanlumina.inspect",
       "adaptiveIcon": {
         "backgroundColor": "#3A7D44",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

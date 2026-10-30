@@ -6,11 +6,7 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_INSPECT_API_URL": "http://192.168.18.64:3000",
-        "EXPO_PUBLIC_INSPECT_WEB_URL": "http://192.168.18.64:3001"
-      }
+      "distribution": "internal"
     },
     "preview": {
       "distribution": "internal",

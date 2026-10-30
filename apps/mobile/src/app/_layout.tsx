@@ -7,13 +7,14 @@
  * anywhere flip the guard through the session context.
  */
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { ToastProvider } from '@/components/toast';
+import { ErrorState, Screen } from '@/components/ui';
 import { SessionProvider, useSessionBoot } from '@/lib/session-context';
 import { theme } from '@/theme';
 import { FONT_SOURCES } from '@/theme/fonts';
@@ -21,6 +22,25 @@ import { FONT_SOURCES } from '@/theme/fonts';
 // `setOptions` (fade duration) is a development-build feature; Expo Go warns
 // on it, so the splash simply hides when `ready` flips.
 void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/**
+ * Route-level error boundary (INS-102). Without one, a render throw in a
+ * release build crashes the app to the launcher with nothing on screen.
+ * expo-router picks this export up for every route below the root.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <Screen>
+      <ErrorState
+        title="Something went wrong"
+        body={error.message}
+        onRetry={() => void retry()}
+        retryLabel="Try again"
+        back={false}
+      />
+    </Screen>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(FONT_SOURCES);
